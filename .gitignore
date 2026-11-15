@@ -1,0 +1,32 @@
+# Build output (see Directory.Build.props → UseArtifactsOutput)
+artifacts/
+bin/
+obj/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Local-only reverse-engineering scratch (decompiled OEM code must never be committed)
+.scratch/
+
+# AI assistant files (settings, memory, instructions, session data)
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.mcp.json
+AGENTS.md
+GEMINI.md
+.cursor/
+.cursorrules
+.cursorignore
+.windsurf/
+.windsurfrules
+.codex/
+.gemini/
+.continue/
+.aider*
+.github/copilot-instructions.md

@@ -1,0 +1,5 @@
+<Project>
+
+  <!-- Deliberately empty: stops the installer (not a .NET program) inheriting the root Directory.Build.props. -->
+
+</Project>

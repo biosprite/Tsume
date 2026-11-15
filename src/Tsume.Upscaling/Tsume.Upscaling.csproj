@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Finds games, fetches the OptiScaler nightly, installs and removes it. No dependency on the panel. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tsume.Core\Tsume.Core.csproj" />
+  </ItemGroup>
+
+</Project>

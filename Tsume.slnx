@@ -1,0 +1,24 @@
+<Solution>
+
+  <Folder Name="/src/">
+    <Project Path="src/Tsume.App/Tsume.App.csproj" />
+    <Project Path="src/Tsume.Core/Tsume.Core.csproj" />
+    <Project Path="src/Tsume.Hardware/Tsume.Hardware.csproj" />
+    <Project Path="src/Tsume.Helper/Tsume.Helper.csproj" />
+    <Project Path="src/Tsume.Upscaling/Tsume.Upscaling.csproj" />
+  </Folder>
+
+  <Folder Name="/docs/">
+    <File Path="README.md" />
+    <File Path="docs/hardware/firmware.md" />
+    <File Path="docs/hardware/controller.md" />
+    <File Path="docs/hardware/msi-center-m.md" />
+  </Folder>
+
+  <Folder Name="/tools/">
+    <File Path="tools/build.ps1" />
+    <File Path="tools/run.ps1" />
+    <File Path="tools/probe.ps1" />
+  </Folder>
+
+</Solution>

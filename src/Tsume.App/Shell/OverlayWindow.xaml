@@ -1,0 +1,123 @@
+<Window x:Class="Tsume.App.Shell.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Tsume.App.Controls"
+        xmlns:panel="clr-namespace:Tsume.App.Panel"
+        xmlns:theme="clr-namespace:Tsume.App.Theme"
+        xmlns:lang="clr-namespace:Tsume.App.Language"
+        Title="Tsume"
+        Width="448"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Ideal">
+
+  <!-- A transparent window pinned to the left edge; Stage is what slides in and out.
+       Transparency comes from Shell/SeeThrough, not AllowsTransparency. -->
+
+  <Grid x:Name="Stage" Margin="12,12,24,12">
+    <Grid.RenderTransform>
+      <TranslateTransform x:Name="Slide" />
+    </Grid.RenderTransform>
+
+    <!-- Cached as a bitmap so sliding stays cheap. -->
+    <Border x:Name="Shadow" Background="#FF0A0B0E" CornerRadius="{StaticResource Radius.Panel}">
+      <Border.Effect>
+        <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.6" Color="Black" />
+      </Border.Effect>
+      <Border.CacheMode>
+        <BitmapCache />
+      </Border.CacheMode>
+    </Border>
+
+    <Border x:Name="Body"
+            Background="{DynamicResource Panel.Fill}"
+            BorderBrush="{DynamicResource Panel.Edge}" BorderThickness="1"
+            CornerRadius="{StaticResource Radius.Panel}">
+      <Grid>
+
+        <DockPanel x:Name="Main" Margin="18,16,18,16">
+          <DockPanel.RenderTransform>
+            <TranslateTransform x:Name="MainAside" />
+          </DockPanel.RenderTransform>
+
+          <panel:HeaderView x:Name="Header" DockPanel.Dock="Top" />
+
+          <UniformGrid x:Name="Footer" DockPanel.Dock="Bottom" Columns="2" Margin="-4,8,-4,-4">
+            <controls:Tile Style="{StaticResource Tile.Row}"
+                           Glyph="{x:Static theme:Glyphs.Settings}" Label="{x:Static lang:Strings.Settings}"
+                           Command="{Binding Settings.Open}" />
+            <controls:Tile Style="{StaticResource Tile.Row}"
+                           Glyph="{x:Static theme:Glyphs.Power}" Label="{x:Static lang:Strings.Power}"
+                           Command="{Binding Power.Open}" />
+          </UniformGrid>
+
+          <!-- Sized to fit an 800-pixel-tall screen with Manual mode open; scrolls if it ever cannot. -->
+          <ScrollViewer VerticalScrollBarVisibility="Hidden" Focusable="False" Margin="0,16,0,0">
+            <StackPanel x:Name="Sections">
+              <panel:PerformanceView />
+              <panel:LevelsView Margin="0,16,0,0" />
+              <panel:ActionsView Margin="0,16,0,0" />
+            </StackPanel>
+          </ScrollViewer>
+
+        </DockPanel>
+
+        <controls:Sheet Title="{x:Static lang:Strings.PowerHeading}" IsOpen="{Binding Power.IsOpen}">
+          <panel:PowerMenu />
+        </controls:Sheet>
+
+        <controls:Screen x:Name="SettingsScreen" Margin="18,16,18,16" IsOpen="{Binding Settings.IsOpen}">
+          <panel:SettingsScreen />
+        </controls:Screen>
+
+        <!-- Opened from Settings, which steps aside for them. -->
+        <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Settings.PerformancePresets.IsOpen}">
+          <panel:PerformancePresetsScreen />
+        </controls:Screen>
+
+        <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Settings.Customization.IsOpen}">
+          <panel:CustomizationScreen />
+        </controls:Screen>
+
+        <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Lighting.IsOpen}">
+          <panel:LightingScreen />
+        </controls:Screen>
+
+        <!-- OptiScaler: a screen of games, and four more that open over it. -->
+        <controls:Screen x:Name="UpscalingScreen" Margin="18,16,18,16" IsOpen="{Binding Upscaling.IsOpen}">
+          <panel:UpscalingScreen />
+        </controls:Screen>
+
+        <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Upscaling.Game.IsOpen}">
+          <panel:UpscalingGameScreen />
+        </controls:Screen>
+
+        <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Upscaling.Build.IsOpen}">
+          <panel:UpscalingBuildScreen />
+        </controls:Screen>
+
+        <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Upscaling.Defaults.IsOpen}">
+          <panel:UpscalingDefaultsScreen />
+        </controls:Screen>
+
+        <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Upscaling.Browse.IsOpen}">
+          <panel:UpscalingBrowseScreen />
+        </controls:Screen>
+
+        <controls:Sheet Title="{x:Static lang:Strings.RestoreAllHeading}" IsOpen="{Binding Upscaling.RestoreAll.IsOpen}">
+          <panel:RestoreAllMenu />
+        </controls:Sheet>
+
+        <controls:Sheet Title="{x:Static lang:Strings.QuitHeading}" IsOpen="{Binding Quit.IsOpen}">
+          <panel:QuitMenu />
+        </controls:Sheet>
+
+      </Grid>
+    </Border>
+  </Grid>
+
+</Window>

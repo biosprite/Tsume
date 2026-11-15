@@ -1,0 +1,477 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+
+  <!--
+       Every word Tsume shows, in English.
+
+       To add a language, copy this file to Strings.<code>.resx next to it
+       (Strings.de.resx, Strings.ja.resx …) and translate the <value> lines.
+       Windows' display language picks the file; anything left untranslated
+       falls back to the English here.
+
+       Each name below has a matching line in Strings.cs.
+       {0} and {1} are filled in by Tsume; the comments say with what.
+  -->
+
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+
+  <!-- Header -->
+
+  <data name="HeaderDate" xml:space="preserve">
+    <value>dddd, MMMM d</value>
+    <comment>A date pattern, not words: dddd = weekday, MMMM = month, d = day. Reorder to suit the language.</comment>
+  </data>
+
+  <!-- Performance -->
+
+  <data name="PerformanceHeading" xml:space="preserve"><value>PERFORMANCE</value></data>
+  <data name="ModeEndurance" xml:space="preserve"><value>Endurance</value></data>
+  <data name="ModeBalanced" xml:space="preserve"><value>Balanced</value></data>
+  <data name="ModePerformance" xml:space="preserve"><value>Performance</value></data>
+  <data name="ModeManual" xml:space="preserve"><value>Manual</value></data>
+  <data name="Sustained" xml:space="preserve"><value>Sustained</value></data>
+  <data name="Boost" xml:space="preserve"><value>Boost</value></data>
+
+  <data name="Cpu" xml:space="preserve"><value>CPU</value></data>
+  <data name="Fan" xml:space="preserve"><value>Fan</value></data>
+
+  <data name="Watts" xml:space="preserve">
+    <value>{0} W</value>
+    <comment>{0} = a power limit in watts</comment>
+  </data>
+  <data name="Temperature" xml:space="preserve">
+    <value>{0} °C</value>
+    <comment>{0} = degrees Celsius</comment>
+  </data>
+  <data name="FanSpeed" xml:space="preserve">
+    <value>{0} rpm</value>
+    <comment>{0} = revolutions per minute, already grouped (e.g. 3,200)</comment>
+  </data>
+  <data name="NoReading" xml:space="preserve">
+    <value>–</value>
+    <comment>Stands in for a figure the hardware did not give</comment>
+  </data>
+  <data name="HelperOffline" xml:space="preserve">
+    <value>Helper offline. Performance modes unavailable.</value>
+    <comment>Shown in place of the temperature and fan speed; wraps to two lines</comment>
+  </data>
+  <data name="DeviceNotSupported" xml:space="preserve">
+    <value>Device not supported. Performance modes unavailable.</value>
+    <comment>Shown in the same place when the helper runs but does not know this machine; wraps to two lines</comment>
+  </data>
+  <data name="OnlineGameCaution" xml:space="preserve">
+    <value>For single-player games. In an online game OptiScaler can get an account banned, and Tsume cannot spot every anti-cheat.</value>
+    <comment>On a game's page before OptiScaler is installed in it</comment>
+  </data>
+
+  <!-- Quick actions -->
+
+  <data name="RefreshRate" xml:space="preserve"><value>Refresh rate</value></data>
+  <data name="RefreshRateValue" xml:space="preserve">
+    <value>{0} Hz</value>
+    <comment>{0} = refresh rate</comment>
+  </data>
+  <data name="Fans" xml:space="preserve"><value>Fans</value></data>
+  <data name="FanAuto" xml:space="preserve"><value>Auto</value></data>
+  <data name="FanMax" xml:space="preserve"><value>Max</value></data>
+  <data name="FanCustom" xml:space="preserve"><value>Custom</value></data>
+  <data name="FanUnavailable" xml:space="preserve"><value>Unavailable</value></data>
+  <data name="Keyboard" xml:space="preserve"><value>Keyboard</value></data>
+  <data name="Screenshot" xml:space="preserve"><value>Screenshot</value></data>
+  <data name="TaskManager" xml:space="preserve"><value>Task Manager</value></data>
+  <data name="Desktop" xml:space="preserve"><value>Desktop</value></data>
+  <data name="Controller" xml:space="preserve"><value>Controller</value></data>
+  <data name="PadGamepad" xml:space="preserve">
+    <value>Gamepad</value>
+    <comment>The built-in controller acts as an Xbox controller</comment>
+  </data>
+  <data name="PadCursor" xml:space="preserve">
+    <value>Cursor</value>
+    <comment>The built-in controller acts as a mouse: the stick moves the cursor</comment>
+  </data>
+  <data name="PadUnavailable" xml:space="preserve"><value>Unavailable</value></data>
+
+  <!-- Footer -->
+
+  <data name="Settings" xml:space="preserve"><value>Settings</value></data>
+  <data name="Power" xml:space="preserve"><value>Power</value></data>
+  <data name="Back" xml:space="preserve"><value>Back</value></data>
+
+  <!-- Power sheet -->
+
+  <data name="PowerHeading" xml:space="preserve"><value>POWER</value></data>
+  <data name="Hibernate" xml:space="preserve"><value>Hibernate</value></data>
+  <data name="Lock" xml:space="preserve"><value>Lock</value></data>
+  <data name="Restart" xml:space="preserve"><value>Restart</value></data>
+  <data name="ShutDown" xml:space="preserve"><value>Shut down</value></data>
+
+  <!-- Settings screen -->
+
+  <data name="StartupHeading" xml:space="preserve"><value>STARTING UP</value></data>
+  <data name="StartWithWindows" xml:space="preserve"><value>Start with Windows</value></data>
+  <data name="StartWithWindowsDetail" xml:space="preserve"><value>Ready in the background after you sign in</value></data>
+  <data name="ShowInStartMenu" xml:space="preserve"><value>Show in Start menu</value></data>
+  <data name="ShowInStartMenuDetail" xml:space="preserve"><value>Keeps a Tsume shortcut among your apps</value></data>
+
+  <data name="BatteryHeading" xml:space="preserve"><value>BATTERY</value></data>
+  <data name="ChargeLimit" xml:space="preserve"><value>Charge limit</value></data>
+  <data name="Percent" xml:space="preserve">
+    <value>{0} %</value>
+    <comment>{0} = a whole number of percent</comment>
+  </data>
+  <data name="ChargeLimitUnavailable" xml:space="preserve"><value>Unavailable  ·  helper not found</value></data>
+  <data name="ChargeLimitFull" xml:space="preserve"><value>Charges to full</value></data>
+  <data name="ChargeLimitStops" xml:space="preserve">
+    <value>Stops charging at {0} %</value>
+    <comment>{0} = the limit, in percent</comment>
+  </data>
+  <data name="ChargeResting" xml:space="preserve"><value>Running from the charger  ·  battery resting</value></data>
+  <data name="ChargeCharging" xml:space="preserve">
+    <value>Charging to {0} %</value>
+    <comment>{0} = the limit, in percent</comment>
+  </data>
+  <data name="ChargeDraining" xml:space="preserve"><value>Plugged in  ·  battery in use</value></data>
+  <data name="ChargeOnBattery" xml:space="preserve">
+    <value>On battery  ·  will charge to {0} %</value>
+    <comment>{0} = the limit, in percent</comment>
+  </data>
+
+  <data name="MsiCenterHeading" xml:space="preserve"><value>MSI CENTER M</value></data>
+  <data name="PauseMsiCenter" xml:space="preserve"><value>Pause MSI Center M</value></data>
+  <data name="MsiCenterPaused" xml:space="preserve"><value>Paused  ·  the M button opens Tsume</value></data>
+  <data name="MsiCenterRunning" xml:space="preserve"><value>Running  ·  it owns the M button</value></data>
+  <data name="MsiCenterNoHelper" xml:space="preserve"><value>Running  ·  helper not found</value></data>
+
+  <data name="QuitTsume" xml:space="preserve"><value>Quit Tsume</value></data>
+
+  <!-- Lighting screen -->
+
+  <data name="Lighting" xml:space="preserve"><value>Lighting</value></data>
+  <data name="EffectHeading" xml:space="preserve"><value>EFFECT</value></data>
+  <data name="EffectOff" xml:space="preserve"><value>Off</value></data>
+  <data name="EffectSteady" xml:space="preserve"><value>Steady</value></data>
+  <data name="EffectBreathe" xml:space="preserve"><value>Breathe</value></data>
+  <data name="EffectRainbow" xml:space="preserve"><value>Rainbow</value></data>
+  <data name="EffectSpin" xml:space="preserve"><value>Spin</value></data>
+  <data name="LightBrightness" xml:space="preserve"><value>Brightness</value></data>
+  <data name="LightSpeed" xml:space="preserve"><value>Speed</value></data>
+  <data name="SticksHeading" xml:space="preserve"><value>STICKS</value></data>
+  <data name="ButtonsHeading" xml:space="preserve"><value>BUTTONS</value></data>
+  <data name="StickBrightness" xml:space="preserve"><value>Stick brightness</value></data>
+  <data name="ButtonBrightness" xml:space="preserve"><value>Button brightness</value></data>
+  <data name="LeftStick" xml:space="preserve"><value>Left stick</value></data>
+  <data name="RightStick" xml:space="preserve"><value>Right stick</value></data>
+  <data name="FaceButtons" xml:space="preserve"><value>A B X Y</value></data>
+  <data name="Hue" xml:space="preserve"><value>Hue</value></data>
+  <data name="Saturation" xml:space="preserve"><value>Saturation</value></data>
+  <data name="SameOnBothSticks" xml:space="preserve"><value>Same colour on both sticks</value></data>
+  <data name="SameOnBothSticksDetail" xml:space="preserve"><value>The right stick follows the left</value></data>
+  <data name="StickLights" xml:space="preserve"><value>Stick lights</value></data>
+  <data name="StickLightsDetail" xml:space="preserve"><value>The rings around both sticks</value></data>
+  <data name="ButtonLights" xml:space="preserve"><value>A B X Y lights</value></data>
+  <data name="ButtonLightsDetail" xml:space="preserve"><value>The four face buttons</value></data>
+  <data name="ButtonsSteady" xml:space="preserve"><value>Keep steady</value></data>
+  <data name="ButtonsSteadyDetail" xml:space="preserve"><value>A B X Y hold their colour while the sticks move</value></data>
+  <data name="BothSticks" xml:space="preserve"><value>Both sticks</value></data>
+  <data name="ControllerNotFound" xml:space="preserve"><value>Controller not found</value></data>
+  <data name="ControllerNotAnswering" xml:space="preserve"><value>The controller stopped answering</value></data>
+  <data name="LightingMsiCenterRuns" xml:space="preserve"><value>MSI Center M is running and may undo these changes</value></data>
+  <data name="LightingSaved" xml:space="preserve"><value>Kept on the controller when you leave this screen</value></data>
+
+  <!-- Quit confirmation -->
+
+  <data name="QuitHeading" xml:space="preserve"><value>QUIT TSUME?</value></data>
+  <data name="QuitExplanation" xml:space="preserve"><value>The M button and shortcuts will stop opening the panel until Tsume is started again.</value></data>
+  <data name="KeepRunning" xml:space="preserve"><value>Keep running</value></data>
+
+  <!-- OptiScaler: the tile and its switch -->
+
+  <data name="PerformancePresets" xml:space="preserve"><value>Performance presets</value></data>
+  <data name="PerformancePresetsDetail" xml:space="preserve"><value>The watts behind each mode</value></data>
+  <data name="PerformancePresetsSaved" xml:space="preserve"><value>Changes apply at once and are kept.</value></data>
+  <data name="PresetsReset" xml:space="preserve"><value>Reset to defaults</value></data>
+  <data name="PresetStock" xml:space="preserve">
+    <value>Default {0} W / {1} W</value>
+    <comment>{0} = the device's own sustained limit for a mode, {1} = its boost limit, in watts</comment>
+  </data>
+  <data name="PresetLimit" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>{0} = a mode's name, {1} = "Sustained" or "Boost"</comment>
+  </data>
+
+  <data name="AppearanceHeading" xml:space="preserve"><value>APPEARANCE</value></data>
+  <data name="Customization" xml:space="preserve"><value>Customization</value></data>
+  <data name="CustomizationDetail" xml:space="preserve"><value>Colours for the whole of Tsume</value></data>
+  <data name="CustomizationSaved" xml:space="preserve"><value>Changes show at once and are kept.</value></data>
+  <data name="PresetsHeading" xml:space="preserve"><value>PRESETS</value></data>
+  <data name="ColoursHeading" xml:space="preserve"><value>YOUR OWN</value></data>
+  <data name="ColourAccent" xml:space="preserve"><value>Accent</value></data>
+  <data name="ColourBackground" xml:space="preserve"><value>Background</value></data>
+  <data name="ColourText" xml:space="preserve"><value>Text</value></data>
+  <data name="AccentBrightness" xml:space="preserve"><value>Accent brightness</value></data>
+  <data name="BackgroundBrightness" xml:space="preserve"><value>Background brightness</value></data>
+  <data name="TextBrightness" xml:space="preserve"><value>Text brightness</value></data>
+  <data name="PresetDefault" xml:space="preserve"><value>Default</value></data>
+  <data name="PresetEmber" xml:space="preserve"><value>Ember</value></data>
+  <data name="PresetLeaf" xml:space="preserve"><value>Leaf</value></data>
+  <data name="PresetViolet" xml:space="preserve"><value>Violet</value></data>
+  <data name="PresetGold" xml:space="preserve"><value>Gold</value></data>
+  <data name="PresetRose" xml:space="preserve"><value>Rose</value></data>
+  <data name="PresetMono" xml:space="preserve"><value>Mono</value></data>
+  <data name="PresetDaylight" xml:space="preserve"><value>Daylight</value></data>
+
+  <data name="OptiScaler" xml:space="preserve"><value>OptiScaler</value></data>
+  <data name="FeaturesHeading" xml:space="preserve"><value>FEATURES</value></data>
+  <data name="ShowOptiScaler" xml:space="preserve"><value>OptiScaler tile</value></data>
+  <data name="Experimental" xml:space="preserve"><value>EXPERIMENTAL</value></data>
+  <data name="ShowOptiScalerDetail" xml:space="preserve"><value>Better upscaling in your games. Nothing is downloaded until you ask.</value></data>
+  <data name="GamesWithOptiScaler" xml:space="preserve">
+    <value>{0} games</value>
+    <comment>{0} = how many games have OptiScaler installed</comment>
+  </data>
+  <data name="OneGameWithOptiScaler" xml:space="preserve"><value>1 game</value></data>
+
+  <!-- OptiScaler: the list of games -->
+
+  <data name="GamesHeading" xml:space="preserve"><value>GAMES</value></data>
+  <data name="ToolsHeading" xml:space="preserve"><value>OPTISCALER</value></data>
+  <data name="NoGamesYet" xml:space="preserve"><value>No games with DLSS, FSR or XeSS were found in Steam, Epic, GOG, Ubisoft Connect or the Xbox app. Add one by pointing at its program.</value></data>
+  <data name="LookingForGames" xml:space="preserve"><value>Looking for games…</value></data>
+  <data name="AddGame" xml:space="preserve"><value>Add a game</value></data>
+  <data name="Defaults" xml:space="preserve"><value>Defaults</value></data>
+  <data name="OptiScalerBuild" xml:space="preserve"><value>OptiScaler build</value></data>
+  <data name="OpenGameMenu" xml:space="preserve"><value>Open its menu in the game</value></data>
+  <data name="OpenGameMenuDetail" xml:space="preserve"><value>Presses Insert for the game behind the panel</value></data>
+  <data name="GameInstalled" xml:space="preserve">
+    <value>Installed · nightly of {0}</value>
+    <comment>{0} = the night the build was made, e.g. "11 November"</comment>
+  </data>
+  <data name="GameUpdateReady" xml:space="preserve"><value>Installed · a newer build is ready</value></data>
+  <data name="GameNeedsRepair" xml:space="preserve"><value>Needs repair</value></data>
+  <data name="GameCutShort" xml:space="preserve"><value>Install interrupted</value></data>
+  <data name="GameFolderGone" xml:space="preserve"><value>Its folder is gone</value></data>
+  <data name="GameNothingToRun" xml:space="preserve"><value>No program found</value></data>
+  <data name="GameNoUpscaler" xml:space="preserve"><value>No upscaler files found</value></data>
+  <data name="GameBlocked" xml:space="preserve">
+    <value>{0} — not offered</value>
+    <comment>{0} = the name of an anti-cheat</comment>
+  </data>
+
+  <!-- OptiScaler: one game -->
+
+  <data name="NotInstalled" xml:space="preserve"><value>Not installed</value></data>
+  <data name="StateInstalled" xml:space="preserve">
+    <value>Installed · nightly of {0} · loads as {1}</value>
+    <comment>{0} = a date, {1} = a file name such as dxgi.dll</comment>
+  </data>
+  <data name="StateReplaced" xml:space="preserve"><value>Needs repair. The game replaced the file OptiScaler loads as — an update or a file check does that.</value></data>
+  <data name="StateCutShort" xml:space="preserve"><value>An install was interrupted. Repair finishes it; Remove undoes it.</value></data>
+  <data name="StateFolderGone" xml:space="preserve"><value>The game's folder is gone. Nothing is left to remove; the record can be forgotten.</value></data>
+  <data name="StateBlocked" xml:space="preserve">
+    <value>{0} is part of this game. OptiScaler is not offered for games with an anti-cheat: it can get an account banned.</value>
+    <comment>{0} = the name of an anti-cheat</comment>
+  </data>
+  <data name="StateNothingToRun" xml:space="preserve"><value>No program was found in this folder.</value></data>
+  <data name="FoundUpscalers" xml:space="preserve">
+    <value>Found: {0}</value>
+    <comment>{0} = a list such as "DLSS, FSR 3"</comment>
+  </data>
+  <data name="FoundNoUpscalers" xml:space="preserve"><value>No DLSS, FSR or XeSS files found. It can still work if the game has one built in.</value></data>
+  <data name="SomeoneElsesOptiScaler" xml:space="preserve">
+    <value>OptiScaler is already here as {0}, put there by another tool. Installing replaces it; removing puts it back.</value>
+    <comment>{0} = a file name</comment>
+  </data>
+  <data name="NewerBuildReady" xml:space="preserve">
+    <value>A newer build is downloaded: nightly of {0}.</value>
+    <comment>{0} = a date</comment>
+  </data>
+  <data name="InstallOptiScaler" xml:space="preserve"><value>Install OptiScaler</value></data>
+  <data name="UpdateOptiScaler" xml:space="preserve"><value>Update to the newer build</value></data>
+  <data name="RepairOptiScaler" xml:space="preserve"><value>Repair</value></data>
+  <data name="RemoveOptiScaler" xml:space="preserve"><value>Remove OptiScaler</value></data>
+  <data name="ForgetInstall" xml:space="preserve"><value>Forget this install</value></data>
+  <data name="TakeOffList" xml:space="preserve"><value>Take off this list</value></data>
+  <data name="CheckingBuild" xml:space="preserve"><value>Asking GitHub for the newest nightly…</value></data>
+  <data name="Downloading" xml:space="preserve">
+    <value>Downloading the build… {0} %</value>
+    <comment>{0} = percent done</comment>
+  </data>
+  <data name="Unpacking" xml:space="preserve"><value>Checking and unpacking…</value></data>
+  <data name="Installing" xml:space="preserve"><value>Copying into the game's folder…</value></data>
+  <data name="Removing" xml:space="preserve"><value>Removing…</value></data>
+  <data name="InstalledDone" xml:space="preserve"><value>Installed. Start the game — Insert opens OptiScaler's menu.</value></data>
+  <data name="RemovedDone" xml:space="preserve"><value>Removed. The game's folder is as it was.</value></data>
+  <data name="RemovedButLeft" xml:space="preserve">
+    <value>Removed. {0} file(s) had been changed since and were left alone; the originals they replaced are kept in Tsume's folder.</value>
+    <comment>{0} = how many files</comment>
+  </data>
+  <data name="Forgotten" xml:space="preserve"><value>Forgotten.</value></data>
+  <data name="SettingsSaved" xml:space="preserve"><value>Saved. It takes effect the next time the game starts.</value></data>
+
+  <!-- OptiScaler: the settings -->
+
+  <data name="UpscalerHeading" xml:space="preserve"><value>UPSCALER</value></data>
+  <data name="ChoiceAuto" xml:space="preserve"><value>Auto</value></data>
+  <data name="UpscalerAutoDetail" xml:space="preserve"><value>OptiScaler decides — on Intel Arc, XeSS</value></data>
+  <data name="UpscalerXessDetail" xml:space="preserve"><value>Intel's own upscaler</value></data>
+  <data name="UpscalerFsr4Detail" xml:space="preserve"><value>AMD's FSR 4, run on Arc through its INT8 network</value></data>
+  <data name="UpscalerFsr3Detail" xml:space="preserve"><value>AMD's FSR 3.1, which runs on anything</value></data>
+  <data name="ModelAutoDetail" xml:space="preserve"><value>OptiScaler picks the network it thinks the GPU supports</value></data>
+  <data name="ModelInt8Detail" xml:space="preserve"><value>The full network — the best picture</value></data>
+  <data name="ModelLiteDetail" xml:space="preserve"><value>A smaller network — faster, a little softer</value></data>
+  <data name="FrameGenHeading" xml:space="preserve"><value>FRAME GENERATION</value></data>
+  <data name="ChoiceOff" xml:space="preserve"><value>Off</value></data>
+  <data name="SourceAny" xml:space="preserve"><value>Any game</value></data>
+  <data name="SourceAnyDetail" xml:space="preserve"><value>Built from the upscaler. Works in any game; the HUD may shimmer.</value></data>
+  <data name="SourceDlssgDetail" xml:space="preserve"><value>Uses the game's DLSS Frame Generation. Turn that on in the game.</value></data>
+  <data name="SourceFsrDetail" xml:space="preserve"><value>Uses the game's FSR Frame Generation. Turn that on in the game.</value></data>
+  <data name="InGameHeading" xml:space="preserve"><value>IN THE GAME</value></data>
+  <data name="SpoofNvidia" xml:space="preserve"><value>Pose as an Nvidia card</value></data>
+  <data name="SpoofNvidiaDetail" xml:space="preserve"><value>So the game offers DLSS for OptiScaler to take over</value></data>
+  <data name="ShowFps" xml:space="preserve"><value>Frame-rate counter</value></data>
+  <data name="ShowFpsDetail" xml:space="preserve"><value>OptiScaler's own, in a corner of the game</value></data>
+  <data name="LoadsAs" xml:space="preserve">
+    <value>Loads as {0}</value>
+    <comment>{0} = a file name such as dxgi.dll</comment>
+  </data>
+  <data name="LoadsAsAuto" xml:space="preserve"><value>Loads as: Tsume chooses</value></data>
+  <data name="LoadsAsDetail" xml:space="preserve"><value>dxgi.dll suits most games; Vulkan games need winmm.dll. Press to change.</value></data>
+
+  <!-- OptiScaler: the build -->
+
+  <data name="NightlyOf" xml:space="preserve">
+    <value>Nightly of {0}</value>
+    <comment>{0} = a date, e.g. "11 November"</comment>
+  </data>
+  <data name="NoBuildOnDisk" xml:space="preserve"><value>Nothing downloaded yet</value></data>
+  <data name="NightlyExplained" xml:space="preserve"><value>Tsume uses OptiScaler's nightly builds; the numbered releases are months behind. About 75 MB to download.</value></data>
+  <data name="GetNewestBuild" xml:space="preserve"><value>Get the newest build</value></data>
+  <data name="HaveNewest" xml:space="preserve"><value>This is the newest build.</value></data>
+  <data name="GotNewer" xml:space="preserve">
+    <value>Downloaded the nightly of {0}.</value>
+    <comment>{0} = a date</comment>
+  </data>
+  <data name="UpdateGames" xml:space="preserve">
+    <value>Update {0} games</value>
+    <comment>{0} = how many installed games are on an older build</comment>
+  </data>
+  <data name="UpdateOneGame" xml:space="preserve"><value>Update 1 game</value></data>
+  <data name="UpdateAllGames" xml:space="preserve"><value>Update all games</value></data>
+  <data name="AllGamesCurrent" xml:space="preserve"><value>Every game with OptiScaler already has this build.</value></data>
+  <data name="RemoveOldBuilds" xml:space="preserve"><value>Remove old builds</value></data>
+  <data name="RemoveOldBuildsSized" xml:space="preserve">
+    <value>Remove old builds · {0}</value>
+    <comment>{0} = how much disk space they take, e.g. "283 MB"</comment>
+  </data>
+  <data name="NoOldBuilds" xml:space="preserve"><value>No old builds to remove.</value></data>
+  <data name="RemovedOldBuilds" xml:space="preserve">
+    <value>Removed the old builds: {0} freed.</value>
+    <comment>{0} = disk space, e.g. "283 MB"</comment>
+  </data>
+  <data name="OldBuildsInUse" xml:space="preserve"><value>The old builds could not be removed: their files are in use.</value></data>
+  <data name="SizeMB" xml:space="preserve"><value>{0} MB</value></data>
+  <data name="SizeGB" xml:space="preserve"><value>{0:0.0} GB</value></data>
+  <data name="GamesUpToDate" xml:space="preserve"><value>Every game is on this build</value></data>
+  <data name="UpdatedGames" xml:space="preserve">
+    <value>Updated: {0}.</value>
+    <comment>{0} = how many games</comment>
+  </data>
+  <data name="CouldNotUpdate" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>{0} = a game's name, {1} = why it could not be updated</comment>
+  </data>
+  <data name="ExtrasHeading" xml:space="preserve"><value>EXTRAS</value></data>
+  <data name="ExtrasExplained" xml:space="preserve"><value>Files in the extras folder are copied into each game's OptiScaler folder at install, replacing the build's own.</value></data>
+  <data name="OpenExtras" xml:space="preserve"><value>Open the extras folder</value></data>
+  <data name="ExtrasEmpty" xml:space="preserve"><value>Empty</value></data>
+  <data name="ExtrasCount" xml:space="preserve">
+    <value>{0} files</value>
+    <comment>{0} = how many files are in the extras folder</comment>
+  </data>
+  <data name="ExtrasOne" xml:space="preserve"><value>1 file</value></data>
+
+  <!-- OptiScaler: defaults, and adding a game -->
+
+  <data name="DefaultsExplained" xml:space="preserve"><value>What a game starts with. A game you have changed keeps its own settings.</value></data>
+  <data name="BrowseHint" xml:space="preserve"><value>Find the game's program (.exe) and press it.</value></data>
+  <data name="BrowseUp" xml:space="preserve"><value>Up</value></data>
+  <data name="ThisPC" xml:space="preserve"><value>This PC</value></data>
+  <data name="CannotOpenFolder" xml:space="preserve"><value>That folder cannot be opened.</value></data>
+
+  <!-- OptiScaler: when something goes wrong. One per value of Tsume.Upscaling.Trouble. -->
+
+  <data name="TroubleOffline" xml:space="preserve"><value>GitHub could not be reached. Check the connection and try again.</value></data>
+  <data name="TroubleNoBuildPublished" xml:space="preserve"><value>GitHub listed no nightly build that Tsume can check.</value></data>
+  <data name="TroubleDownloadDamaged" xml:space="preserve"><value>The download did not match its published hash and was thrown away. Try again.</value></data>
+  <data name="TroubleCannotUnpack" xml:space="preserve"><value>Windows could not unpack the build.</value></data>
+  <data name="TroubleBuildIncomplete" xml:space="preserve"><value>The build is missing OptiScaler's own files.</value></data>
+  <data name="TroubleBuildDamaged" xml:space="preserve"><value>The downloaded build has been changed on disk, so Tsume set it aside. Try again and it will be downloaded afresh.</value></data>
+  <data name="TroubleNoBuild" xml:space="preserve"><value>No build is downloaded yet.</value></data>
+  <data name="TroubleGameRunning" xml:space="preserve"><value>The game is running. Close it first.</value></data>
+  <data name="TroubleFolderMissing" xml:space="preserve"><value>The game's folder is not there.</value></data>
+  <data name="TroubleNotWritable" xml:space="preserve"><value>This game's folder needs administrator rights, which the panel does not have. Not supported yet.</value></data>
+  <data name="TroubleDiskFull" xml:space="preserve"><value>Not enough room on the disk. OptiScaler needs about 300 MB in the game's folder.</value></data>
+  <data name="TroubleFileInUse" xml:space="preserve"><value>A file is in use. Close the game and its launcher, then try again.</value></data>
+  <data name="TroubleAlreadyInstalled" xml:space="preserve"><value>OptiScaler is already installed here.</value></data>
+  <data name="UpscalerXmxDetail" xml:space="preserve"><value>AMD's FSR 4 on the Arc's XMX units — the fastest way to run it. Pick FSR or DLSS in the game, not XeSS. DirectX 12 games only</value></data>
+  <data name="UpscalerXmxMissing" xml:space="preserve"><value>Needs the XMX upscaler, which Tsume has not been given: add it on the build page. Until then FSR 4 is used</value></data>
+  <data name="XmxModelAutoDetail" xml:space="preserve"><value>Whichever model is picked in OptiScaler's menu in the game</value></data>
+  <data name="XmxModelFullDetail" xml:space="preserve"><value>FSR 4.1.2's full network — the best picture</value></data>
+  <data name="XmxModelLiteDetail" xml:space="preserve"><value>FSR 4.1.2's smaller network — faster, a little softer</value></data>
+  <data name="XmxHeading" xml:space="preserve"><value>XMX UPSCALER</value></data>
+  <data name="XmxExplained" xml:space="preserve"><value>A test build that runs FSR 4.1.2 on Intel's XMX units. Tsume doesn't download it: get amd_fidelityfx_upscaler_dx12.7z from OptiScaler's Discord, save it to the Desktop or Downloads, then add it here.</value></data>
+  <data name="AddXmx" xml:space="preserve"><value>Add the XMX upscaler</value></data>
+  <data name="ReplaceXmx" xml:space="preserve"><value>Look for a newer XMX upscaler</value></data>
+  <data name="XmxNotAdded" xml:space="preserve"><value>Not added</value></data>
+  <data name="XmxHeld" xml:space="preserve">
+    <value>Version {0} · added {1}</value>
+    <comment>{0} = a version number, {1} = a date</comment>
+  </data>
+  <data name="XmxNotFound" xml:space="preserve"><value>No amd_fidelityfx_upscaler_dx12.7z on the Desktop or in Downloads.</value></data>
+  <data name="XmxAdded" xml:space="preserve"><value>XMX upscaler added. Games get it at their next install or update.</value></data>
+  <data name="XmxSame" xml:space="preserve"><value>That is the XMX upscaler Tsume already has.</value></data>
+  <data name="XmxReady" xml:space="preserve"><value>The XMX upscaler is not in this game yet: Update adds it.</value></data>
+  <data name="XmxNotInGame" xml:space="preserve"><value>The XMX upscaler is not in this game, so FSR 4 was set. Update adds it.</value></data>
+  <data name="TroubleNotXmx" xml:space="preserve"><value>That archive does not hold the XMX upscaler.</value></data>
+  <data name="TroubleNotInstalled" xml:space="preserve"><value>OptiScaler is not installed here.</value></data>
+  <data name="TroubleAntiCheat" xml:space="preserve"><value>This game has an anti-cheat. OptiScaler is not offered for it.</value></data>
+  <data name="TroubleOther" xml:space="preserve">
+    <value>That did not work: {0}</value>
+    <comment>{0} = the system's own description of the error</comment>
+  </data>
+
+  <!-- Outside the panel -->
+
+  <data name="ShortcutDescription" xml:space="preserve">
+    <value>Open the Tsume panel</value>
+    <comment>Tooltip of the Start-menu shortcut</comment>
+  </data>
+
+  <!-- The window shown while Tsume is being uninstalled -->
+
+  <data name="UninstallTitle" xml:space="preserve"><value>Uninstalling Tsume</value></data>
+  <data name="RestoreGames" xml:space="preserve"><value>Restore my games</value></data>
+  <data name="RestoreGamesDetail" xml:space="preserve">
+    <value>Removes OptiScaler from {0} games and puts their own files back.</value>
+    <comment>{0} = how many games have OptiScaler installed</comment>
+  </data>
+  <data name="RestoreOneGameDetail" xml:space="preserve"><value>Removes OptiScaler from 1 game and puts its own files back.</value></data>
+  <data name="RestoreGamesExplained" xml:space="preserve"><value>Turned off, OptiScaler stays in those games and keeps working. Installing Tsume again lets you remove it later.</value></data>
+  <data name="RestoreGamesRetry" xml:space="preserve"><value>Fix that and continue to try again, or turn the switch off to leave those games as they are.</value></data>
+  <data name="ContinueUninstall" xml:space="preserve"><value>Continue</value></data>
+
+  <!-- OptiScaler: restore all games -->
+
+  <data name="RestoreAllGames" xml:space="preserve"><value>Restore all games</value></data>
+  <data name="RestoreAllDetail" xml:space="preserve"><value>Removes OptiScaler from every game it is in</value></data>
+  <data name="RestoreAllHeading" xml:space="preserve"><value>RESTORE ALL GAMES?</value></data>
+  <data name="KeepOptiScaler" xml:space="preserve"><value>Keep OptiScaler</value></data>
+  <data name="RestoredGames" xml:space="preserve">
+    <value>Restored: {0}.</value>
+    <comment>{0} = how many games</comment>
+  </data>
+
+</root>

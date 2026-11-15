@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The elevated process that carries out hardware requests for the unelevated app.
+       Installed, it runs as a Windows service; in development it is started by hand. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\assets\Tsume.ico</ApplicationIcon>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Description>Carries out hardware requests for the Tsume panel.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.0" />
+    <ProjectReference Include="..\Tsume.Core\Tsume.Core.csproj" />
+    <ProjectReference Include="..\Tsume.Hardware\Tsume.Hardware.csproj" />
+  </ItemGroup>
+
+</Project>

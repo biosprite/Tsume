@@ -1,0 +1,9 @@
+── Write check: each register is rewritten with its own value ──
+  register                    before   write      after    verdict
+  0xD2  ShiftMode             0xC6     accepted   0xC6     ok
+  0x50  PowerLimitSustained   0x21     accepted   0x21     ok
+  0x51  PowerLimitBoost       0x24     accepted   0x24     ok
+  0x98  CoolerBoost           0x06     accepted   0x06     ok
+  0xD4  FanControl            0x0D     accepted   0x0D     ok
+
+  5 of 5 registers accepted a write.

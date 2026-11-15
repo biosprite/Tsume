@@ -1,0 +1,142 @@
+<UserControl x:Class="Tsume.App.Panel.LightingScreen"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Tsume.App.Controls"
+             xmlns:theme="clr-namespace:Tsume.App.Theme"
+             xmlns:lang="clr-namespace:Tsume.App.Language"
+             xmlns:vm="clr-namespace:Tsume.App.ViewModels"
+             Focusable="False">
+
+  <!-- Lighting for the stick rings and the face buttons. -->
+
+  <DockPanel DataContext="{Binding Lighting}">
+
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,20">
+      <controls:Tile DockPanel.Dock="Left" Style="{StaticResource Tile.Icon}"
+                     Glyph="{x:Static theme:Glyphs.Back}"
+                     AutomationProperties.Name="{x:Static lang:Strings.Back}"
+                     Command="{Binding Close}" />
+
+      <TextBlock Style="{StaticResource Text.Title}" Text="{x:Static lang:Strings.Lighting}"
+                 Margin="16,0,0,0" VerticalAlignment="Center" />
+    </DockPanel>
+
+    <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+               Text="{Binding Status}" Margin="4,12,0,0" />
+
+    <ScrollViewer x:Name="List" Focusable="False" IsEnabled="{Binding IsAvailable}"
+                  VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
+      <StackPanel>
+
+        <!-- Effect and speed are shared by both groups of lights. -->
+        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.EffectHeading}" />
+
+        <controls:SegmentedControl controls:Screen.TakesFocus="True"
+                                   AutomationProperties.Name="{x:Static lang:Strings.EffectHeading}"
+                                   Segments="{Binding Effects}" SelectedIndex="{Binding EffectIndex}" />
+
+        <controls:Reveal IsOpen="{Binding IsAnimated}">
+          <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Speed}"
+                                Label="{x:Static lang:Strings.LightSpeed}"
+                                AutomationProperties.Name="{x:Static lang:Strings.LightSpeed}"
+                                Minimum="{x:Static vm:LightingViewModel.MinSpeed}"
+                                Maximum="{x:Static vm:LightingViewModel.MaxSpeed}"
+                                LargeChange="1"
+                                Value="{Binding Speed}"
+                                Margin="0,8,0,0" />
+        </controls:Reveal>
+
+        <!-- Each group has its own switch, brightness and colour. Rainbow takes no colour. -->
+        <controls:Reveal IsOpen="{Binding IsLit}">
+          <StackPanel>
+
+            <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.SticksHeading}"
+                       Margin="4,24,0,10" />
+
+            <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0"
+                           Glyph="{x:Static theme:Glyphs.Sticks}"
+                           Label="{x:Static lang:Strings.StickLights}"
+                           Detail="{x:Static lang:Strings.StickLightsDetail}"
+                           IsOn="{Binding SticksLit}"
+                           Command="{Binding ToggleSticksLit}" />
+
+            <controls:Reveal IsOpen="{Binding SticksLit}">
+              <StackPanel>
+                <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Brightness}"
+                                      Label="{x:Static lang:Strings.LightBrightness}" Unit="%"
+                                      AutomationProperties.Name="{x:Static lang:Strings.StickBrightness}"
+                                      Minimum="{x:Static vm:LightingViewModel.MinBrightness}"
+                                      Maximum="100" LargeChange="1"
+                                      Value="{Binding StickBrightness}"
+                                      Margin="0,8,0,0" />
+
+                <controls:Reveal IsOpen="{Binding UsesColours}">
+                  <StackPanel>
+                    <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0,8,0,0"
+                                   Glyph="{x:Static theme:Glyphs.Link}"
+                                   Label="{x:Static lang:Strings.SameOnBothSticks}"
+                                   Detail="{x:Static lang:Strings.SameOnBothSticksDetail}"
+                                   IsOn="{Binding SameOnBoth}"
+                                   Command="{Binding ToggleSameOnBoth}" />
+
+                    <controls:SwatchPicker Label="{Binding LeftLabel}" Margin="0,8,0,0"
+                                           AutomationProperties.Name="{Binding LeftLabel}"
+                                           Colours="{Binding Colours}" SelectedColour="{Binding LeftColour}" />
+
+                    <controls:Reveal IsOpen="{Binding ShowsRightPicker}">
+                      <controls:SwatchPicker Label="{x:Static lang:Strings.RightStick}" Margin="0,8,0,0"
+                                             AutomationProperties.Name="{x:Static lang:Strings.RightStick}"
+                                             Colours="{Binding Colours}" SelectedColour="{Binding RightColour}" />
+                    </controls:Reveal>
+                  </StackPanel>
+                </controls:Reveal>
+              </StackPanel>
+            </controls:Reveal>
+
+            <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.ButtonsHeading}"
+                       Margin="4,24,0,10" />
+
+            <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0"
+                           Glyph="{x:Static theme:Glyphs.Buttons}"
+                           Label="{x:Static lang:Strings.ButtonLights}"
+                           Detail="{x:Static lang:Strings.ButtonLightsDetail}"
+                           IsOn="{Binding ButtonsLit}"
+                           Command="{Binding ToggleButtonsLit}" />
+
+            <controls:Reveal IsOpen="{Binding ButtonsLit}">
+              <StackPanel>
+                <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Brightness}"
+                                      Label="{x:Static lang:Strings.LightBrightness}" Unit="%"
+                                      AutomationProperties.Name="{x:Static lang:Strings.ButtonBrightness}"
+                                      Minimum="{x:Static vm:LightingViewModel.MinBrightness}"
+                                      Maximum="100" LargeChange="1"
+                                      Value="{Binding ButtonBrightness}"
+                                      Margin="0,8,0,0" />
+
+                <!-- Only for effects that would otherwise animate the buttons too. -->
+                <controls:Reveal IsOpen="{Binding ShowsButtonsSteady}">
+                  <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0,8,0,0"
+                                 Glyph="{x:Static theme:Glyphs.Steady}"
+                                 Label="{x:Static lang:Strings.ButtonsSteady}"
+                                 Detail="{x:Static lang:Strings.ButtonsSteadyDetail}"
+                                 IsOn="{Binding ButtonsSteady}"
+                                 Command="{Binding ToggleButtonsSteady}" />
+                </controls:Reveal>
+
+                <controls:Reveal IsOpen="{Binding ShowsButtonColour}">
+                  <controls:SwatchPicker Label="{x:Static lang:Strings.FaceButtons}" Margin="0,8,0,0"
+                                         AutomationProperties.Name="{x:Static lang:Strings.FaceButtons}"
+                                         Colours="{Binding Colours}" SelectedColour="{Binding ButtonsColour}" />
+                </controls:Reveal>
+              </StackPanel>
+            </controls:Reveal>
+
+          </StackPanel>
+        </controls:Reveal>
+
+      </StackPanel>
+    </ScrollViewer>
+
+  </DockPanel>
+
+</UserControl>

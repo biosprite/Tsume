@@ -1,0 +1,34 @@
+<UserControl x:Class="Tsume.App.Panel.UpscalingDefaultsScreen"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Tsume.App.Controls"
+             xmlns:theme="clr-namespace:Tsume.App.Theme"
+             xmlns:lang="clr-namespace:Tsume.App.Language"
+             xmlns:panel="clr-namespace:Tsume.App.Panel"
+             Focusable="False">
+
+  <!-- The settings a game starts with until it is given its own. -->
+
+  <DockPanel DataContext="{Binding Upscaling.Defaults}">
+
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,20">
+      <controls:Tile DockPanel.Dock="Left" Style="{StaticResource Tile.Icon}"
+                     Glyph="{x:Static theme:Glyphs.Back}"
+                     AutomationProperties.Name="{x:Static lang:Strings.Back}"
+                     Command="{Binding Close}" />
+
+      <TextBlock Style="{StaticResource Text.Title}" Text="{x:Static lang:Strings.Defaults}"
+                 Margin="16,0,0,0" VerticalAlignment="Center" />
+    </DockPanel>
+
+    <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+               Text="{x:Static lang:Strings.DefaultsExplained}" Margin="4,12,0,0" />
+
+    <ScrollViewer x:Name="List" Focusable="False"
+                  VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
+      <panel:UpscalerTuningView DataContext="{Binding Tuning}" />
+    </ScrollViewer>
+
+  </DockPanel>
+
+</UserControl>

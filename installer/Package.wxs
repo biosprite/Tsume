@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+  Copies the program to C:\Program Files\Tsume, registers and starts the "Tsume Helper" service, adds a Start menu entry.
+  Deliberately little else (no scheduled tasks or drivers, one custom action): plain table entries keep security software calm.
+-->
+
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <!-- UpgradeCode is Tsume's permanent identity to Windows Installer. Never change it. -->
+  <Package Name="Tsume"
+           Manufacturer="Tsume contributors"
+           Version="$(var.Version)"
+           UpgradeCode="F63B2D3C-3AB7-4FF8-A232-B27D2D4E3C6D"
+           Scope="perMachine"
+           Compressed="yes">
+
+    <SummaryInformation Description="Tsume — a control panel for the MSI Claw" />
+
+    <!-- Shown beside Tsume in Windows' list of installed apps. -->
+    <Icon Id="TsumeIcon" SourceFile="..\assets\Tsume.ico" />
+    <Property Id="ARPPRODUCTICON" Value="TsumeIcon" />
+
+    <!-- A newer Tsume replaces an older one in a single step. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Tsume is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <!--
+      On a real uninstall (not an upgrade, not a silent one) Tsume asks whether to take OptiScaler out of the games.
+      It runs as the signed-in user, before any file is removed, and the uninstall waits for it; its result is ignored.
+    -->
+    <CustomAction Id="AskAboutGames" FileRef="TsumeExe" ExeCommand="--uninstalling"
+                  Execute="immediate" Return="ignore" />
+
+    <!--
+      On a real uninstall, MSI Center M is let run again: left paused, nothing would keep the mode or answer the M button.
+      Runs elevated, while the helper is still on disk; harmless if MSI Center M was never paused or is not installed.
+    -->
+    <CustomAction Id="ResumeMsiCenter" FileRef="HelperExe" ExeCommand="--msi-center resume"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="AskAboutGames" After="InstallInitialize"
+              Condition='REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE AND UILevel &gt;= 3' />
+      <Custom Action="ResumeMsiCenter" Before="StopServices"
+              Condition='REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE' />
+    </InstallExecuteSequence>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Tsume" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Tsume">
+      <ComponentGroupRef Id="Program" />
+    </Feature>
+
+    <ComponentGroup Id="Program" Directory="INSTALLFOLDER">
+
+      <Component Id="Panel">
+        <File Id="TsumeExe" Source="$(var.PublishDir)\Tsume.exe" KeyPath="yes" />
+      </Component>
+
+      <!-- Windows Installer requires a shortcut's component to have a registry KeyPath; the value has no other purpose. -->
+      <Component Id="StartMenuEntry" Directory="ProgramMenuFolder">
+        <Shortcut Id="StartMenuShortcut"
+                  Name="Tsume"
+                  Description="Open the Tsume panel"
+                  Target="[INSTALLFOLDER]Tsume.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue Root="HKCU" Key="Software\Tsume" Name="StartMenuEntry"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+
+      <!-- The service name must match HelperService.Name. -->
+      <Component Id="Helper">
+        <File Id="HelperExe" Source="$(var.PublishDir)\Tsume.Helper.exe" KeyPath="yes" />
+
+        <ServiceInstall Id="HelperService"
+                        Name="TsumeHelper"
+                        DisplayName="Tsume Helper"
+                        Description="Sets performance mode, power limits and fans on behalf of the Tsume panel."
+                        Type="ownProcess"
+                        Start="auto"
+                        ErrorControl="normal"
+                        Account="LocalSystem"
+                        Arguments="--service"
+                        Vital="yes">
+          <!-- The helper reaches the firmware through WMI, so WMI starts first. -->
+          <ServiceDependency Id="Winmgmt" />
+        </ServiceInstall>
+
+        <ServiceControl Id="HelperServiceControl"
+                        Name="TsumeHelper"
+                        Start="install"
+                        Stop="both"
+                        Remove="uninstall"
+                        Wait="yes" />
+      </Component>
+
+      <!-- Everything else: libraries and the .NET runtime. -->
+      <Files Include="$(var.PublishDir)\**">
+        <Exclude Files="$(var.PublishDir)\Tsume.exe" />
+        <Exclude Files="$(var.PublishDir)\Tsume.Helper.exe" />
+        <Exclude Files="$(var.PublishDir)\**\*.pdb" />
+      </Files>
+
+    </ComponentGroup>
+
+  </Package>
+</Wix>

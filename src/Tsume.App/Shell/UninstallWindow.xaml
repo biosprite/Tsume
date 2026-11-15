@@ -1,0 +1,45 @@
+<Window x:Class="Tsume.App.Shell.UninstallWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Tsume.App.Controls"
+        xmlns:theme="clr-namespace:Tsume.App.Theme"
+        xmlns:lang="clr-namespace:Tsume.App.Language"
+        Title="Tsume"
+        Width="440"
+        SizeToContent="Height"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Background="#FF0A0B0E"
+        Topmost="True"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Ideal">
+
+  <!-- Shown by the uninstaller (see App.UninstallingSwitch) when games still have OptiScaler in them. -->
+
+  <Border Background="{DynamicResource Panel.Fill}"
+          BorderBrush="{DynamicResource Panel.Edge}" BorderThickness="1"
+          Padding="18,20,18,18">
+    <StackPanel>
+      <TextBlock Style="{StaticResource Text.Title}" Text="{x:Static lang:Strings.UninstallTitle}"
+                 Margin="4,0,0,16" />
+
+      <controls:Tile x:Name="Restore" Style="{StaticResource Tile.Switch}"
+                     Glyph="{x:Static theme:Glyphs.Upscaling}"
+                     Label="{x:Static lang:Strings.RestoreGames}"
+                     IsOn="True"
+                     Click="OnToggle" />
+
+      <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+                 Text="{x:Static lang:Strings.RestoreGamesExplained}" Margin="6,0,6,0" />
+
+      <TextBlock x:Name="Status" Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+                 Foreground="{DynamicResource Text}" Visibility="Collapsed" Margin="6,12,6,0" />
+
+      <controls:Tile x:Name="Go" Style="{StaticResource Tile.Row}" Margin="-4,16,-4,0"
+                     Glyph="{x:Static theme:Glyphs.Tick}"
+                     Label="{x:Static lang:Strings.ContinueUninstall}"
+                     Click="OnContinue" />
+    </StackPanel>
+  </Border>
+</Window>

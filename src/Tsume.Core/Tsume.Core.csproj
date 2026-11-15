@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Shared types: modes, limits, snapshots and the helper wire protocol. Touches no hardware. -->
+
+</Project>

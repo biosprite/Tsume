@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Tsume.Hardware — everything that talks to firmware: one IDevice per kind of machine.
+       Needs administrator rights at run time, so only the helper loads it. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tsume.Core\Tsume.Core.csproj" />
+    <PackageReference Include="System.Management" Version="10.0.0" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,12 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <!-- Built only by tools\publish.ps1, which passes PublishDir (the files to pack), Version and OutputPath. -->
+
+  <PropertyGroup>
+    <OutputName>Tsume-$(Version)-x64</OutputName>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <DefineConstants>PublishDir=$(PublishDir);Version=$(Version)</DefineConstants>
+    <SuppressValidation>false</SuppressValidation>
+  </PropertyGroup>
+
+</Project>

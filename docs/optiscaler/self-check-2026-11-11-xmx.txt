@@ -1,0 +1,91 @@
+Tsume — OptiScaler self-check, 2026-11-11 18:39
+
+Newest nightly
+  nightly-20261111   version 10.0.0-pre1   72.5 MB   sha256 c7cff235da733e2b…
+  already on disk: 20 files, 296 MB
+  ok    the build on disk is the newest
+
+OptiScaler.ini
+  ok    read and written back, it is byte for byte the same
+  ok    FSR 4 with the INT8 network is written as ffx / index 0 / support 2 / model 1
+  ok    XeFG at 3× is written as xefg / 2 made-up frames
+  ok    and reads back as the same settings
+  ok    without adding or dropping a line
+  ok    the defaults are FSR 4 XMX with the 4.1.2 Lite network
+  ok    written as Dx12Upscaler=xmxsr and [xmxsr] UpscalerIndex=3, with the stock FSR 4 lines left on auto
+  ok    and nothing is written to the XMX upscaler's own Run-as setting
+  ok    with it, a game's XeSS is left to the game (EnableXeSSInputs=false)
+  ok    and taken over again once another upscaler is chosen
+  ok    and read back as the same settings
+  ok    the full 4.1.2 network is UpscalerIndex=2
+  ok    a version picked in the overlay is not written over by another change in Tsume
+  ok    a file from 0.5.1, which set only Run as, reads as no version chosen
+  ok    once 4.1.2X Lite is picked in the overlay it reads as 4.1.2 Lite
+  ok    and Tsume's next write puts Run as back to the game's choice, leaving the version
+  ok    for a game without the XMX upscaler in it, plain FSR 4 stands in
+
+Games the stores report (read only)
+  (the list of installed games is left out of this copy)
+  10 games, looked through in 0.2 s
+
+A. An ordinary game
+  ok    inspected: DLSS found, no OptiScaler yet
+        installed in 0.3 s
+  ok    OptiScaler is in as dxgi.dll
+  ok    with its companion files
+  ok    and without the setup scripts
+  ok    the install reads as healthy
+  ok    its settings file carries Tsume's settings
+  ok    a change made in the overlay is read back
+  ok    changing a setting in Tsume leaves the overlay's other tuning alone
+  ok    removed, nothing reported as left alone
+  ok    the plugin added by hand is still there
+  ok    everything else is exactly as before the install
+  ok    OptiScaler's log went with it
+  ok    no record remains
+  ok    the settings file was saved
+  ok    installed again: the saved tuning is back, under the settings chosen now
+  ok    removed again: the folder is as it was found
+
+B. A game with a dxgi.dll of its own (ReShade, say)
+  ok    left to choose, Tsume took the next free name: winmm.dll
+  ok    the game's dxgi.dll was not touched
+  ok    removed: the folder is as it was found
+  ok    told to use dxgi.dll, it did
+  ok    after moving the game's own aside
+  ok    removed: the game's dxgi.dll is back, byte for byte
+
+C. A game update replaces OptiScaler's file
+  ok    the install reads as replaced
+  ok    removal left the new file alone
+  ok    and said so
+  ok    the older original was kept rather than forced back or thrown away
+  ok    everything else is as it was found
+
+D. A game that already has OptiScaler from another tool
+  ok    inspected: found it, as winmm.dll
+  ok    Tsume took over that name rather than adding a second OptiScaler
+  ok    removed: the other tool's files and settings are back as they were
+
+E. An install that fails half-way
+  ok    the install reported failure
+  ok    and undid itself: the folder is as it was found
+  ok    no record remains
+
+F. The XMX upscaler
+  ok    installed before Tsume has it: plain FSR 4 was written instead
+  ok    AMD's own upscaler, offered as the XMX one, is refused
+        version 4.0.2.1, 45.6 MB unpacked; checked and stored in 3.8 s
+  ok    added: the archive is kept as it came, zipped
+  ok    and nothing is left unpacked beside it
+  ok    the game installed earlier now reads as due an update
+  ok    installed: the XMX upscaler is at OptiScaler\custom\xmxsr\ffx\amd_fidelityfx_upscaler_dx12.dll
+  ok    with AMD's upscaler beside it as fsr-original.dll
+  ok    as a second name for the same bytes, not a second copy
+  ok    and the settings file selects it, with 4.1.2 Lite
+  ok    the install reads as up to date
+  ok    its settings read back as the defaults
+  ok    switching to XeSS changes the upscaler and leaves the XMX version be
+  ok    removed: the folder is as it was found
+
+All checks passed.

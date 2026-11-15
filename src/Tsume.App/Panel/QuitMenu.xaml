@@ -1,0 +1,25 @@
+<UserControl x:Class="Tsume.App.Panel.QuitMenu"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Tsume.App.Controls"
+             xmlns:theme="clr-namespace:Tsume.App.Theme"
+             xmlns:lang="clr-namespace:Tsume.App.Language"
+             Focusable="False">
+
+  <!-- The safe answer comes first so that it takes focus. -->
+
+  <StackPanel DataContext="{Binding Quit}">
+
+    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+               Text="{x:Static lang:Strings.QuitExplanation}" Margin="10,0,10,12" />
+
+    <controls:Tile Style="{StaticResource Tile.Row}"
+                   Glyph="{x:Static theme:Glyphs.Back}" Label="{x:Static lang:Strings.KeepRunning}"
+                   Command="{Binding Close}" />
+
+    <controls:Tile Style="{StaticResource Tile.Row}"
+                   Glyph="{x:Static theme:Glyphs.Quit}" Label="{x:Static lang:Strings.QuitTsume}"
+                   Command="{Binding Confirm}" />
+  </StackPanel>
+
+</UserControl>
