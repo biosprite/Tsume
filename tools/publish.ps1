@@ -11,15 +11,23 @@
     The version comes from Directory.Build.props. Without -Certificate the build is unsigned,
     and SmartScreen will warn on other machines.
 
+.PARAMETER Build
+    A test build's number (CI passes its run number). It becomes the fourth part of the version,
+    e.g. 1.0.100 -> 1.0.100.57. Windows Installer ignores that part, so a test build and the
+    release it came from replace each other in one step (see MajorUpgrade in installer\Package.wxs).
+
 .PARAMETER Certificate
     Thumbprint of a code-signing certificate in your certificate store.
     Needs signtool.exe (Windows SDK).
 
 .EXAMPLE
     tools\publish.ps1
+    tools\publish.ps1 -Build 57
     tools\publish.ps1 -Certificate 0123456789ABCDEF0123456789ABCDEF01234567
 #>
 param(
+    [ValidateRange(0, 65534)]
+    [int] $Build = -1,
     [string] $Certificate,
     [string] $TimestampServer = 'http://timestamp.digicert.com'
 )
@@ -36,6 +44,21 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 
 [xml] $shared = Get-Content (Join-Path $root 'Directory.Build.props')
 $version = ($shared.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+
+# Windows Installer compares only major.minor.patch (at most 255.255.65535), so a release has no fourth part.
+$parts = $version.Split('.')
+if ($parts.Count -lt 2 -or $parts.Count -gt 3 -or ($parts | Where-Object { $_ -notmatch '^\d+$' })) {
+    throw "Version '$version' in Directory.Build.props must be major.minor or major.minor.patch."
+}
+if ([int] $parts[0] -gt 255 -or [int] $parts[1] -gt 255 -or ($parts.Count -eq 3 -and [int] $parts[2] -gt 65535)) {
+    throw "Version '$version' is out of range for Windows Installer (255.255.65535)."
+}
+
+if ($Build -ge 0) {
+    # 1.0 -> 1.0.0.57: pad to three parts first, or the build number would land in the patch slot.
+    while ($parts.Count -lt 3) { $parts += '0' }
+    $version = ($parts + $Build) -join '.'
+}
 
 $files     = Join-Path $root 'artifacts\publish'
 $installer = Join-Path $root 'artifacts\installer'
@@ -66,7 +89,7 @@ foreach ($project in 'Tsume.Helper', 'Tsume.App') {
     Invoke-Step "Publishing $project" {
         & $dotnet publish (Join-Path $root "src\$project\$project.csproj") `
             --configuration Release --self-contained true --output $files --verbosity quiet `
-            --artifacts-path $scratch
+            --artifacts-path $scratch "-p:Version=$version"
     }
 }
 

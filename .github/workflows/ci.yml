@@ -1,0 +1,82 @@
+name: CI
+
+# Builds every project and the installer on each pull request and on main, so a broken build
+# or a broken .msi never reaches a release tag. Each run's installer is kept for testers:
+# it installs over the release it came from, and that release installs back over it.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+# Nothing here writes to the repository.
+permissions:
+  contents: read
+
+# A new push to the same pull request cancels the run it replaces; runs on main always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_NOLOGO: '1'
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1'
+
+jobs:
+  build:
+    name: Build
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET (version from global.json)
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore Tsume.slnx
+
+      # Warnings are errors (Directory.Build.props), so this also enforces the analyzers.
+      - name: Build
+        run: dotnet build Tsume.slnx --configuration Release --no-restore
+
+      # The run number becomes the version's fourth part (1.0.100 -> 1.0.100.57). A version part
+      # tops out at 65534, so it wraps; Windows Installer ignores that part, so wrapping is harmless.
+      - name: Build the installer
+        shell: pwsh
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: ./tools/publish.ps1 -Build ([int] $env:RUN_NUMBER % 65535)
+
+      # Uploaded as the bare .msi, not zipped; the artifact takes the file's name, e.g. Tsume-1.0.0.57-x64.msi.
+      - name: Upload the installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: artifacts/installer/*.msi
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+  lint-workflows:
+    name: Lint workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: actionlint
+        run: docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color
