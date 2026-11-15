@@ -21,8 +21,13 @@
     <Icon Id="TsumeIcon" SourceFile="..\assets\Tsume.ico" />
     <Property Id="ARPPRODUCTICON" Value="TsumeIcon" />
 
-    <!-- A newer Tsume replaces an older one in a single step. -->
-    <MajorUpgrade DowngradeErrorMessage="A newer version of Tsume is already installed." />
+    <!--
+      A newer Tsume replaces an older one in a single step. So does one of the same version: test builds are
+      major.minor.patch.build, and Windows Installer ignores the fourth part, so a test build and its release
+      replace each other either way round. An older version is still refused.
+    -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of Tsume is already installed." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <!--

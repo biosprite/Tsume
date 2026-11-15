@@ -1,0 +1,33 @@
+# Keeps the workflows' pinned actions and the NuGet packages current, one grouped pull request each a week.
+# The cooldown lets a new version settle for a few days before it is proposed.
+
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      nuget:
+        patterns: ['*']
+    ignore:
+      # WixToolset.Sdk is pinned in the installer's Sdk attribute; move major versions by hand.
+      - dependency-name: WixToolset.Sdk
+        update-types: ['version-update:semver-major']
+    commit-message:
+      prefix: deps
