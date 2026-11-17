@@ -45,6 +45,33 @@ internal static partial class User32
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetForegroundWindow(nint window);
 
+    public const uint GW_HWNDPREV = 3;
+
+    /// <summary>With <see cref="GW_HWNDPREV"/>: the next window up the stacking order, or zero at the top.</summary>
+    [LibraryImport("user32.dll")]
+    public static partial nint GetWindow(nint window, uint relation);
+
+    [LibraryImport("user32.dll", EntryPoint = "FindWindowW", StringMarshalling = StringMarshalling.Utf16)]
+    public static partial nint FindWindow(string? className, string? title);
+
+    /// <summary>Fired on the desktop window whenever top-level windows change places in the stacking order.</summary>
+    public const uint EVENT_OBJECT_REORDER = 0x8004;
+    public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+
+    public delegate void WinEventProc(nint hook, uint eventType, nint window, int objectId, int childId, uint thread, uint time);
+
+    /// <summary>
+    /// With <see cref="WINEVENT_OUTOFCONTEXT"/>, the callback runs on the calling thread as it pumps messages.
+    /// The caller keeps the delegate alive for as long as the hook lives.
+    /// </summary>
+    [DllImport("user32.dll")]
+    public static extern nint SetWinEventHook(
+        uint eventMin, uint eventMax, nint module, WinEventProc callback, uint processId, uint threadId, uint flags);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool UnhookWinEvent(nint hook);
+
     [LibraryImport("user32.dll")]
     public static partial uint GetWindowThreadProcessId(nint window, nint processId);
 

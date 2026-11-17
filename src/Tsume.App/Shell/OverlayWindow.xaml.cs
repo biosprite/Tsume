@@ -43,6 +43,9 @@ public partial class OverlayWindow
     private int _retakes;
     private int _settleTicks;
 
+    /// <summary>Watched while the panel is open, to put it back over the taskbar (see StayOverTaskbar).</summary>
+    private readonly ZOrderChanges _zOrderChanges = new();
+
     /// <summary>What had focus as each layer opened, so focus can go back there as each one closes.</summary>
     private readonly Stack<IInputElement?> _focusBeneath = new();
 
@@ -61,6 +64,7 @@ public partial class OverlayWindow
         };
         Deactivated += (_, _) => { if (!_stayOpen && !_settling.IsEnabled) _ = CloseAsync(); };
         _settling.Tick += (_, _) => HoldTheFront();
+        _zOrderChanges.Changed += StayOverTaskbar;
 
         foreach (var layer in panel.Layers) layer.PropertyChanged += OnLayerMoved;
         Controls.StepOut.LetFocusLeave(Sections);   // down to Settings and Power
@@ -102,6 +106,7 @@ public partial class OverlayWindow
         Show();
         RaiseAboveEverything();
         _tookAtOnce = ForegroundWindow.Take(this);
+        _zOrderChanges.Start();
 
         // After Show: started alongside it, this delays the window by a frame or three.
         DisplayClock.KeepAwake(OpenTrace.PaceThisTime);
@@ -187,16 +192,44 @@ public partial class OverlayWindow
         User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE);
 
     /// <summary>
+    /// Puts the panel back over the taskbar whenever the taskbar has landed on top of it. While Start or
+    /// Search is open, Windows lifts the taskbar above every ordinary window; when it lets it down again, at
+    /// once or minutes after the flyout has closed, the taskbar lands on top of the topmost windows.
+    /// </summary>
+    // Nothing a program without uiAccess makes can go above Start or Search themselves, or take the foreground from them.
+    private void StayOverTaskbar()
+    {
+        if (IsOpen && TaskbarIsAbove()) RaiseAboveEverything();
+    }
+
+    /// <summary>Whether the taskbar sits above the panel in the stacking order. Never true while it is lifted out of it.</summary>
+    private bool TaskbarIsAbove()
+    {
+        var taskbar = User32.FindWindow("Shell_TrayWnd", null);
+
+        for (var above = User32.GetWindow(new WindowInteropHelper(this).Handle, User32.GW_HWNDPREV);
+             above != 0;
+             above = User32.GetWindow(above, User32.GW_HWNDPREV))
+        {
+            if (above == taskbar) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// For the first half second after opening, losing focus does not close the panel; each tick it
-    /// re-raises itself and retakes the foreground if a full-screen program has kept or taken it back.
+    /// re-raises itself, and retakes the foreground if a full-screen program has kept or taken it back.
     /// </summary>
     // If that fails the panel stays open anyway; any retake is logged to %LOCALAPPDATA%\Tsume\focus.log.
     private void HoldTheFront()
     {
+        // Every tick, in front or not: the taskbar can land on top of a panel that has the focus (see StayOverTaskbar).
+        if (IsOpen) RaiseAboveEverything();
+
         if (IsOpen && !ForegroundWindow.Has(this))
         {
             _retakes++;
-            RaiseAboveEverything();
             ForegroundWindow.Take(this);
         }
 
@@ -283,6 +316,7 @@ public partial class OverlayWindow
                 if (!IsOpen)   // not reopened mid-flight
                 {
                     ForgetFocus();
+                    _zOrderChanges.Stop();
                     Hide();
                     DisplayClock.KeepAwake(false);
                     RightOfWay.Yield();
