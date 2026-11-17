@@ -17,6 +17,15 @@ namespace Tsume.App.Shell;
 /// </summary>
 public partial class OverlayWindow
 {
+    /// <summary>
+    /// The screen height the panel is laid out for: the Claw's 1920 × 1200 at 150 %, in WPF units.
+    /// On any other screen the panel is scaled to take up the same share of it.
+    /// </summary>
+    public const double DesignHeight = 800;
+
+    /// <summary>The window's width on a screen <see cref="DesignHeight"/> tall, Stage's margin included.</summary>
+    public const double DesignWidth = 448;
+
     /// <summary>How far each section rises as it fades in.</summary>
     private const double SectionRise = 18;
 
@@ -80,8 +89,8 @@ public partial class OverlayWindow
         PlaceOnScreen();
         _panel.OnOpening();
 
-        // Start off screen and invisible.
-        Slide.Snap(TranslateTransform.XProperty, -Width);
+        // Start off screen and invisible. Slide is inside Fit, so it moves in design units.
+        Slide.Snap(TranslateTransform.XProperty, -DesignWidth);
         Stage.Snap(OpacityProperty, 0);
         SetSectionsBack();
 
@@ -116,7 +125,7 @@ public partial class OverlayWindow
         PlaceOnScreen();
         _panel.OnOpening();
 
-        Slide.Snap(TranslateTransform.XProperty, -Width);
+        Slide.Snap(TranslateTransform.XProperty, -DesignWidth);
         Stage.Snap(OpacityProperty, 0);
         SetSectionsBack();
 
@@ -143,7 +152,30 @@ public partial class OverlayWindow
     {
         Left = 0;
         Top = 0;
-        Height = SystemParameters.PrimaryScreenHeight;
+        Height = ScreenHeight();
+        FitTo(Height);
+    }
+
+    /// <summary>
+    /// The primary screen's height in this window's units. Not SystemParameters.PrimaryScreenHeight:
+    /// that keeps using the scaling Tsume started with, and Windows' scaling may have changed since.
+    /// </summary>
+    private double ScreenHeight() =>
+        User32.GetSystemMetrics(User32.SM_CYSCREEN) / VisualTreeHelper.GetDpi(this).DpiScaleY;
+
+    /// <summary>
+    /// Scales the panel to take the same share of a screen <paramref name="height"/> units tall as it does
+    /// of the Claw's. Measured on every opening: the resolution may have changed since the last.
+    /// </summary>
+    private void FitTo(double height)
+    {
+        var factor = height / DesignHeight;
+
+        Width = DesignWidth * factor;
+        Fit.ScaleX = Fit.ScaleY = factor;
+
+        // A cached bitmap is drawn at the element's own size, then stretched by Fit; this keeps it sharp.
+        ShadowCache.RenderAtScale = factor;
     }
 
     /// <summary>
@@ -242,7 +274,7 @@ public partial class OverlayWindow
         _panel.CloseLayers();
 
         Stage.Animate(OpacityProperty, 0, Motion.Smooth, Motion.Depart);
-        Slide.Animate(TranslateTransform.XProperty, -Width / 2, Motion.Smooth, Motion.Depart, then: () =>
+        Slide.Animate(TranslateTransform.XProperty, -DesignWidth / 2, Motion.Smooth, Motion.Depart, then: () =>
         {
             // Windows flashes a hidden window's last frame when it is next shown, so wait
             // until the fully transparent frame is on screen before hiding.

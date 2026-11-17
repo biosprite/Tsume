@@ -13,9 +13,6 @@ namespace Tsume.App.Shell;
 /// </summary>
 public static class ScreenShots
 {
-    /// <summary>The Claw's screen, in the units WPF lays out in.</summary>
-    private const double ScreenHeight = 800;
-
     /// <summary>Long enough for a screen to finish gliding in.</summary>
     private static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(900);
 
@@ -33,7 +30,7 @@ public static class ScreenShots
                 WindowStartupLocation = WindowStartupLocation.Manual,
                 Left = -4000,
                 Top = 0,
-                Height = ScreenHeight,
+                Height = OverlayWindow.DesignHeight,   // the Claw's own screen, so drawn unscaled
             };
             window.Show();
 
