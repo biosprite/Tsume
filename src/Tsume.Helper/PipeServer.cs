@@ -1,4 +1,5 @@
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
@@ -68,7 +69,7 @@ public sealed class PipeServer(RequestHandler handler)
             if (line is null) return;
 
             var reply = Parse(line) is { } request
-                ? handler.Handle(request)
+                ? Answer(pipe, request)
                 : HelperReply.Failure("The request could not be understood.");
 
             using var answering = CancellationTokenSource.CreateLinkedTokenSource(stop);
@@ -81,6 +82,39 @@ public sealed class PipeServer(RequestHandler handler)
             Log.Write("A caller took too long and was dropped.");
         }
     }
+
+    /// <summary>
+    /// Answers one request. Starting the panel is handled here, not in <see cref="RequestHandler"/>: it is not a
+    /// device request (it works on a machine Tsume does not know), and it must run in the caller's own session,
+    /// which is read from the pipe — never a session a caller could name in the message.
+    /// </summary>
+    private HelperReply Answer(NamedPipeServerStream pipe, HelperRequest request)
+    {
+        if (request is StartPanel start)
+        {
+            var session = CallerSession(pipe);
+            if (session < 0) return HelperReply.Failure("Could not tell which session asked.");
+
+            return PanelStarter.StartForRequest(session, start)
+                ? new HelperReply { Ok = true }
+                : HelperReply.Failure("The panel could not be started.");
+        }
+
+        return handler.Handle(request);
+    }
+
+    /// <summary>The Windows session of whoever is on the other end of the pipe, or -1 if it cannot be read.</summary>
+    private static int CallerSession(NamedPipeServerStream pipe)
+    {
+        if (!GetNamedPipeClientProcessId(pipe.SafePipeHandle.DangerousGetHandle(), out var client)) return -1;
+        return ProcessIdToSessionId(client, out var session) ? (int)session : -1;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetNamedPipeClientProcessId(nint pipe, out uint clientProcessId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool ProcessIdToSessionId(uint processId, out uint sessionId);
 
     /// <summary>One line of at most <see cref="LongestRequest"/> characters; null if the caller sent nothing or too much.</summary>
     private static async Task<string?> ReadLineAsync(StreamReader reader, CancellationToken cancel)

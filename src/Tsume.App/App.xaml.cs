@@ -5,6 +5,7 @@ using Tsume.App.Input;
 using Tsume.App.Platform;
 using Tsume.App.Shell;
 using Tsume.App.ViewModels;
+using Tsume.Core.Ipc;
 
 namespace Tsume.App;
 
@@ -21,6 +22,10 @@ public partial class App
     private const string StayOpenSwitch = "--stay";
     private const string OpenSettingsSwitch = "--settings";
     private const string OpenLightingSwitch = "--lighting";
+
+    // Marks a copy the helper started with UIAccess, so a copy that still lacks it (the grant did not take) never
+    // turns around and asks the helper again. See the UIAccess gate in OnStartup and PanelStarter in the helper.
+    private const string RelaunchedSwitch = "--relaunched";
     private const string ControllerReadSwitch = "--controller-read";
     private const string LightingCheckSwitch = "--lighting-check";
     private const string PadModeCheckSwitch = "--pad-mode-check";
@@ -105,6 +110,17 @@ public partial class App
             return;
         }
 
+        // The panel has to sit in the UIAccess window band to show over the taskbar, Start, Search, and elevated
+        // windows. Only the helper, which runs as the system, can hand that to an unsigned program. A copy that starts
+        // without it — the Start-menu shortcut, or the sign-in entry when the helper was not yet granting it — asks the
+        // helper to start Tsume again with UIAccess and steps aside. This comes before the single-instance check so it
+        // does not hold the lock while the UIAccess copy takes over.
+        if (!UiAccess.IsGranted && !e.Args.Contains(RelaunchedSwitch) && StartAgainWithUiAccess(e.Args))
+        {
+            Shutdown();
+            return;
+        }
+
         var quietly = e.Args.Contains(BackgroundSwitch);
 
         _instance = new SingleInstance();
@@ -136,6 +152,32 @@ public partial class App
         if (e.Args.Contains(OpenSettingsSwitch)) panel.Settings.IsOpen = true;
         if (e.Args.Contains(OpenLightingSwitch)) panel.Lighting.IsOpen = true;
         if (e.Args.Contains(OpenOptiScalerSwitch)) panel.Upscaling.IsOpen = true;
+    }
+
+    /// <summary>
+    /// Asks the helper to start Tsume again with UIAccess, passing on only the start-up intentions that matter.
+    /// Returns false — and the panel carries on without UIAccess, as before — when the helper is absent or refuses.
+    /// Runs before the dispatcher, so a short blocking wait on the pipe is fine, as long as it is not on this thread.
+    /// </summary>
+    private static bool StartAgainWithUiAccess(string[] args)
+    {
+        var request = new StartPanel(
+            Background: args.Contains(BackgroundSwitch),
+            Settings: args.Contains(OpenSettingsSwitch),
+            Lighting: args.Contains(OpenLightingSwitch),
+            OptiScaler: args.Contains(OpenOptiScalerSwitch),
+            Stay: args.Contains(StayOpenSwitch));
+
+        try
+        {
+            // On the thread pool: blocking here while the client resumed on this thread's dispatcher would hang for good.
+            return Task.Run(() => new HelperClient().SendAsync(request)).GetAwaiter().GetResult().Ok;
+        }
+        catch (Exception error)
+        {
+            Errors.Write(error.ToString());
+            return false;
+        }
     }
 
     private void ListenForSummons(OverlayWindow window, PanelViewModel panel)

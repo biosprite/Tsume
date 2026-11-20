@@ -24,6 +24,7 @@ public static class HelperPipe
 [JsonDerivedType(typeof(SetPerformance), "performance.set")]
 [JsonDerivedType(typeof(SetFan),         "fan.set")]
 [JsonDerivedType(typeof(SetChargeLimit), "charge.set")]
+[JsonDerivedType(typeof(StartPanel),     "panel.start")]
 public abstract record HelperRequest;
 
 /// <summary>Read the current state without changing anything.</summary>
@@ -43,6 +44,14 @@ public sealed record SetFan(FanMode Mode) : HelperRequest;
 
 /// <summary>Stop charging the battery at this level. Only a level the machine's profile lists is accepted; 100 charges to full.</summary>
 public sealed record SetChargeLimit(int Percent) : HelperRequest;
+
+/// <summary>
+/// Start the panel again with UIAccess, the right the on-screen keyboard uses to draw over the taskbar, Start,
+/// Search, and elevated windows. Only the helper, running as the system, can hand that to an unsigned
+/// program. The flags are the panel's own start-up intentions; the helper always starts the fixed Tsume.exe beside
+/// it, in the caller's own session, so neither the program run nor the session is anything a caller can name.
+/// </summary>
+public sealed record StartPanel(bool Background, bool Settings, bool Lighting, bool OptiScaler, bool Stay) : HelperRequest;
 
 /// <summary>The helper's answer to any request.</summary>
 public sealed record HelperReply

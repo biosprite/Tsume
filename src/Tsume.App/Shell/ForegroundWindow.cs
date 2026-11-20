@@ -36,10 +36,11 @@ internal static class ForegroundWindow
             User32.AttachThreadInput(theirThread, myThread, attach: false);
         }
 
-        // 2. A tap of Alt lifts the foreground lock for the process that sent it.
+        // 2. A tap of Alt lifts the foreground lock for the process that sent it. A UIAccess panel is already free
+        //    of the lock, so it skips the tap, which a game in front would otherwise see as a key press.
         if (User32.GetForegroundWindow() != mine)
         {
-            User32.SendChord(User32.VK_MENU);
+            if (!Platform.UiAccess.IsGranted) User32.SendChord(User32.VK_MENU);
             User32.SetForegroundWindow(mine);
         }
 

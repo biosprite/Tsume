@@ -242,7 +242,8 @@ public partial class OverlayWindow
         FocusLog.Write(
             $"over {ForegroundWindow.Describe(_wasInFront)}: " +
             $"{(_tookAtOnce ? "in front at once" : "not in front at first")}, taken again {_retakes} times, " +
-            (held ? "in front in the end" : $"NOT in front in the end - {ForegroundWindow.Describe(ForegroundWindow.Current)} is"));
+            (held ? "in front in the end" : $"NOT in front in the end - {ForegroundWindow.Describe(ForegroundWindow.Current)} is") +
+            $"; uiaccess {(Platform.UiAccess.IsGranted ? "yes" : "no")}");
     }
 
     /// <summary>The panel glides in; header, sections and footer fade up one after another.</summary>
