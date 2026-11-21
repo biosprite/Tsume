@@ -610,4 +610,143 @@
     </Setter>
   </Style>
 
+  <!-- Dropdown list for keys and button actions: matches Tile surface, touch- and gamepad-friendly. -->
+  <Style TargetType="controls:KeyDropdown">
+    <Setter Property="Height" Value="42" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="SnapsToDevicePixels" Value="True" />
+    <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+    <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+    <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+    <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+    <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+    <Setter Property="ItemsPanel">
+      <Setter.Value>
+        <ItemsPanelTemplate>
+          <VirtualizingStackPanel />
+        </ItemsPanelTemplate>
+      </Setter.Value>
+    </Setter>
+    <Setter Property="ItemContainerStyle">
+      <Setter.Value>
+        <Style TargetType="ComboBoxItem">
+          <Setter Property="MinHeight" Value="38" />
+          <Setter Property="Padding" Value="14,8" />
+          <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+          <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+          <Setter Property="Template">
+            <Setter.Value>
+              <ControlTemplate TargetType="ComboBoxItem">
+                <Grid Margin="4,1">
+                  <Border x:Name="Face" Background="Transparent" CornerRadius="10" />
+                  <Border x:Name="SelectedWash" Background="{x:Static theme:Accent.Wash}" CornerRadius="10" Opacity="0" />
+                  <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center" />
+                  <Border x:Name="ItemRing" CornerRadius="10" BorderThickness="1.5"
+                          BorderBrush="{x:Static theme:Accent.Brush}" Opacity="0" IsHitTestVisible="False" />
+                </Grid>
+
+                <ControlTemplate.Triggers>
+                  <Trigger Property="IsHighlighted" Value="True">
+                    <Setter TargetName="Face" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                  </Trigger>
+                  <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Face" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                  </Trigger>
+                  <Trigger Property="IsSelected" Value="True">
+                    <Setter TargetName="SelectedWash" Property="Opacity" Value="1" />
+                  </Trigger>
+                  <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter TargetName="ItemRing" Property="Opacity" Value="1" />
+                  </Trigger>
+                </ControlTemplate.Triggers>
+              </ControlTemplate>
+            </Setter.Value>
+          </Setter>
+        </Style>
+      </Setter.Value>
+    </Setter>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="controls:KeyDropdown">
+          <Grid>
+            <ToggleButton x:Name="Toggle" Focusable="False" ClickMode="Press"
+                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+              <ToggleButton.Template>
+                <ControlTemplate TargetType="ToggleButton">
+                  <Grid>
+                    <Border x:Name="Face" Background="{DynamicResource Surface}"
+                            BorderBrush="{DynamicResource Panel.Edge}" BorderThickness="1"
+                            CornerRadius="12" />
+                    <DockPanel Margin="14,0,12,0">
+                      <TextBlock x:Name="Arrow" DockPanel.Dock="Right" Style="{StaticResource Text.Icon}"
+                                 FontSize="12" Foreground="{DynamicResource Text.Muted}"
+                                 Text="{x:Static theme:Glyphs.ChevronDown}"
+                                 RenderTransformOrigin="0.5,0.5">
+                        <TextBlock.RenderTransform>
+                          <RotateTransform Angle="0" />
+                        </TextBlock.RenderTransform>
+                      </TextBlock>
+                      <Border />
+                    </DockPanel>
+                  </Grid>
+                  <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                      <Setter TargetName="Face" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                    </Trigger>
+                    <Trigger Property="IsChecked" Value="True">
+                      <Setter TargetName="Arrow" Property="RenderTransform">
+                        <Setter.Value>
+                          <RotateTransform Angle="180" />
+                        </Setter.Value>
+                      </Setter>
+                    </Trigger>
+                  </ControlTemplate.Triggers>
+                </ControlTemplate>
+              </ToggleButton.Template>
+            </ToggleButton>
+
+            <ContentPresenter Margin="14,0,34,0" VerticalAlignment="Center" IsHitTestVisible="False"
+                              Content="{TemplateBinding SelectionBoxItem}"
+                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}" />
+
+            <Border x:Name="Ring" Style="{StaticResource Focus.Ring}" CornerRadius="12"
+                    BorderBrush="{x:Static theme:Accent.Brush}" />
+
+            <Popup x:Name="PART_Popup" Placement="Bottom" VerticalOffset="4"
+                   AllowsTransparency="True" Focusable="False" PopupAnimation="Slide"
+                   StaysOpen="False"
+                   IsOpen="{TemplateBinding IsDropDownOpen}">
+              <Border MinWidth="{TemplateBinding ActualWidth}" MaxWidth="{TemplateBinding ActualWidth}"
+                      MaxHeight="300" Margin="0,0,0,8" Padding="0,4"
+                      Background="{DynamicResource Sheet.Fill}"
+                      BorderBrush="{DynamicResource Panel.Edge}" BorderThickness="1"
+                      CornerRadius="14">
+                <Border.Effect>
+                  <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.55" Color="Black" />
+                </Border.Effect>
+                <ScrollViewer x:Name="PART_DropDownScroll" Focusable="False"
+                              CanContentScroll="True" PanningMode="VerticalOnly"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Hidden">
+                  <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
+                </ScrollViewer>
+              </Border>
+            </Popup>
+          </Grid>
+
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Trigger.EnterActions><BeginStoryboard Storyboard="{StaticResource Ring.Show}" /></Trigger.EnterActions>
+              <Trigger.ExitActions><BeginStoryboard Storyboard="{StaticResource Ring.Hide}" /></Trigger.ExitActions>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.4" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
 </ResourceDictionary>

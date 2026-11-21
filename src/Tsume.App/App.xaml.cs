@@ -50,9 +50,11 @@ public partial class App
     private Gamepad? _gamepad;
     private PadIsolation? _padIsolation;
     private ClawButtons? _buttons;
+    private GameBarButtonHook? _gameBarHook;
     private PanelViewModel? _panel;
     private OverlayWindow? _window;
     private DateTime _lastButtonPress;
+    private DateTime _lastGameBarPress;
 
     /// <summary>Whether MSI Center M was running when last looked at. Read on the button listener's thread.</summary>
     private volatile bool _msiCenterRuns;
@@ -244,6 +246,15 @@ public partial class App
             _padIsolation.SetPanelOpen(open);
         };
 
+        _gameBarHook = new GameBarButtonHook(Dispatcher);
+        _gameBarHook.IsEnabled = panel.Settings.Controls.GameBarAction != GameBarAction.Default;
+        _gameBarHook.Pressed += () => OnGameBarButton(window, panel);
+        panel.Settings.Controls.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ControlsViewModel.GameBarAction))
+                _gameBarHook.IsEnabled = panel.Settings.Controls.GameBarAction != GameBarAction.Default;
+        };
+
         _buttons = new ClawButtons();
         // The M button is Tsume's only while MSI Center M is paused (otherwise both would open).
         // Checking means walking the process list, too slow per press: act on the last answer, then re-check.
@@ -256,15 +267,21 @@ public partial class App
 
         _buttons.Pressed += button =>
         {
-            if (button != ClawButton.MsiCenter) return;
-
-            if (!_msiCenterRuns)
+            if (button == ClawButton.MsiCenter)
             {
-                OpenTrace.Summoned();
-                Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnMButton(window));
-            }
+                if (panel.Settings.Controls.MButtonOpensTsume && !_msiCenterRuns)
+                {
+                    OpenTrace.Summoned();
+                    Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnMButton(window));
+                }
 
-            _msiCenterRuns = MsiCenter.IsRunning;
+                _msiCenterRuns = MsiCenter.IsRunning;
+            }
+            else if (button == ClawButton.QuickSettings)
+            {
+                if (panel.Settings.Controls.GameBarAction != GameBarAction.Default)
+                    Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnGameBarButton(window, panel));
+            }
         };
 
         _instance!.ToggleRequested += () => Dispatcher.BeginInvoke(window.Toggle);
@@ -277,6 +294,41 @@ public partial class App
         _lastButtonPress = now;
 
         window.Toggle();
+    }
+
+    private void OnGameBarButton(OverlayWindow window, PanelViewModel panel)
+    {
+        var now = DateTime.UtcNow;
+        if (now - _lastGameBarPress < ButtonEcho) return;
+        _lastGameBarPress = now;
+
+        switch (panel.Settings.Controls.GameBarAction)
+        {
+            case GameBarAction.OpenTsume:
+                OpenTrace.Summoned();
+                window.Toggle();
+                break;
+
+            case GameBarAction.SteamBigPicture:
+                QuickActions.OpenSteamBigPicture();
+                break;
+
+            case GameBarAction.TaskManager:
+                QuickActions.TaskManager();
+                break;
+
+            case GameBarAction.TouchKeyboard:
+                QuickActions.ToggleTouchKeyboard();
+                break;
+
+            case GameBarAction.Screenshot:
+                QuickActions.Screenshot();
+                break;
+
+            case GameBarAction.ShowDesktop:
+                QuickActions.ShowDesktop();
+                break;
+        }
     }
 
     /// <summary>Trims memory once the panel has been closed for the idle interval.</summary>
@@ -321,6 +373,7 @@ public partial class App
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         _padIsolation?.Dispose();
         _panel?.Dispose();
+        _gameBarHook?.Dispose();
         _buttons?.Dispose();
         _gamepad?.Dispose();
         _hotkey?.Dispose();

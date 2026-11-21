@@ -67,8 +67,23 @@ public partial class OverlayWindow
         _zOrderChanges.Changed += StayOverTaskbar;
 
         foreach (var layer in panel.Layers) layer.PropertyChanged += OnLayerMoved;
+        panel.Settings.Controls.PropertyChanged += OnControlsChanged;
         Controls.StepOut.LetFocusLeave(Sections);   // down to Settings and Power
         Controls.SmoothScroll.Follow((System.Windows.Controls.ScrollViewer)Sections.Parent);
+    }
+
+    private bool IsRightSide => _panel.Settings.Controls.OpenOnRight;
+
+    /// <summary>Starting/ending horizontal offset in design units: off the left or right edge.</summary>
+    private double OffscreenX => IsRightSide ? DesignWidth : -DesignWidth;
+
+    private void OnControlsChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(ControlsViewModel.OpenOnRight) || !IsOpen) return;
+
+        PlaceOnScreen();
+        Slide.Snap(TranslateTransform.XProperty, OffscreenX / 2);
+        Slide.Animate(TranslateTransform.XProperty, 0, Motion.Arrive, Motion.Glide);
     }
 
     public bool IsOpen { get; private set; }
@@ -94,7 +109,7 @@ public partial class OverlayWindow
         _panel.OnOpening();
 
         // Start off screen and invisible. Slide is inside Fit, so it moves in design units.
-        Slide.Snap(TranslateTransform.XProperty, -DesignWidth);
+        Slide.Snap(TranslateTransform.XProperty, OffscreenX);
         Stage.Snap(OpacityProperty, 0);
         SetSectionsBack();
 
@@ -133,7 +148,7 @@ public partial class OverlayWindow
         PlaceOnScreen();
         _panel.OnOpening();
 
-        Slide.Snap(TranslateTransform.XProperty, -DesignWidth);
+        Slide.Snap(TranslateTransform.XProperty, OffscreenX);
         Stage.Snap(OpacityProperty, 0);
         SetSectionsBack();
 
@@ -166,15 +181,25 @@ public partial class OverlayWindow
     }
 
     /// <summary>
-    /// Spans the whole screen height, taskbar included, so Stage's margin leaves equal gaps above and below.
+    /// Spans the whole screen height, taskbar included, so Stage's margin leaves equal gaps above and below,
+    /// pinned to either the left or right edge of the primary display.
     /// </summary>
     private void PlaceOnScreen()
     {
-        Left = 0;
-        Top = 0;
         Height = ScreenHeight();
         FitTo(Height);
+
+        // Leave 24 design units on the inner edge for the drop shadow and 12 on the screen edge.
+        Stage.Margin = IsRightSide ? new Thickness(24, 12, 12, 12) : new Thickness(12, 12, 24, 12);
+        Left = IsRightSide ? Math.Max(0, ScreenWidth() - Width) : 0;
+        Top = 0;
     }
+
+    /// <summary>
+    /// The primary screen's width in this window's units, reflecting the current DPI scaling.
+    /// </summary>
+    private double ScreenWidth() =>
+        User32.GetSystemMetrics(User32.SM_CXSCREEN) / VisualTreeHelper.GetDpi(this).DpiScaleX;
 
     /// <summary>
     /// The primary screen's height in this window's units. Not SystemParameters.PrimaryScreenHeight:
@@ -323,10 +348,11 @@ public partial class OverlayWindow
         OpenChanged?.Invoke(false);
 
         // A layer left up would still be folding away during the next opening.
+        Controls.KeyDropdown.CloseIfOpen();
         _panel.CloseLayers();
 
         Stage.Animate(OpacityProperty, 0, Motion.Smooth, Motion.Depart);
-        Slide.Animate(TranslateTransform.XProperty, -DesignWidth / 2, Motion.Smooth, Motion.Depart, then: () =>
+        Slide.Animate(TranslateTransform.XProperty, OffscreenX / 2, Motion.Smooth, Motion.Depart, then: () =>
         {
             // Windows flashes a hidden window's last frame when it is next shown, so wait
             // until the fully transparent frame is on screen before hiding.
@@ -358,10 +384,16 @@ public partial class OverlayWindow
         FocusManager.SetFocusedElement(this, null);
     }
 
-    /// <summary>Back / Escape closes the top layer if there is one, otherwise the panel.</summary>
+    /// <summary>Back / Escape closes an open dropdown, or the top layer, otherwise the panel.</summary>
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         if (e.Key != Key.Escape) return;
+
+        if (Controls.KeyDropdown.CloseIfOpen())
+        {
+            e.Handled = true;
+            return;
+        }
 
         if (_panel.IsCovered) _panel.CloseTopLayer();
         else _ = CloseAsync();
@@ -385,8 +417,13 @@ public partial class OverlayWindow
             _               => Key.None,
         };
 
-        if (!IsOpen || key == Key.None || PresentationSource.FromVisual(this) is not { } source) return;
+        if (!IsOpen || key == Key.None) return;
         if (Keyboard.FocusedElement is null) FocusFirstControl();
+
+        var source = Keyboard.FocusedElement is Visual focused
+            ? PresentationSource.FromVisual(focused) ?? PresentationSource.FromVisual(this)
+            : PresentationSource.FromVisual(this);
+        if (source is null) return;
 
         Send(Keyboard.PreviewKeyDownEvent);
         Send(Keyboard.PreviewKeyUpEvent);
@@ -405,7 +442,9 @@ public partial class OverlayWindow
         if (layer.IsOpen) _focusBeneath.Push(Keyboard.FocusedElement);
 
         Main.IsEnabled = !_panel.IsCovered;
-        var onAPage = _panel.Settings.Customization.IsOpen || _panel.Settings.PerformancePresets.IsOpen;
+        var onAPage = _panel.Settings.Customization.IsOpen
+            || _panel.Settings.PerformancePresets.IsOpen
+            || _panel.Settings.Controls.IsOpen;
         SettingsScreen.IsCovered = onAPage;
         SettingsScreen.IsEnabled = !onAPage && !_panel.Quit.IsOpen;
         UpscalingScreen.IsCovered = _panel.Upscaling.HasPageOpen;

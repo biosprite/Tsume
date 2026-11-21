@@ -90,6 +90,10 @@
             <panel:CustomizationScreen />
           </controls:Screen>
 
+          <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Settings.Controls.IsOpen}">
+            <panel:ControlsScreen />
+          </controls:Screen>
+
           <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Lighting.IsOpen}">
             <panel:LightingScreen />
           </controls:Screen>

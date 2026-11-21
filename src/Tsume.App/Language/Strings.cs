@@ -421,6 +421,41 @@ public static class Strings
     public static string RtssGuru3dLink => Find();
     public static string RtssGuru3dLinkDetail => Find();
 
+    public static string ControlsHeading => Find();
+    public static string ControlsAndLayout => Find();
+    public static string ControlsAndLayoutDetail => Find();
+    public static string PanelPositionHeading => Find();
+    public static string OpenOnRight => Find();
+    public static string OpenOnRightDetail => Find();
+    public static string HardwareButtonsHeading => Find();
+    public static string GameBarButton => Find();
+    public static string GameBarDefault => Find();
+    public static string GameBarOpenTsume => Find();
+    public static string GameBarSteam => Find();
+    public static string GameBarTaskManager => Find();
+    public static string GameBarTouchKeyboard => Find();
+    public static string GameBarScreenshot => Find();
+    public static string GameBarShowDesktop => Find();
+    public static string GameBarDisabled => Find();
+    public static string GameBarDefaultDetail => Find();
+    public static string GameBarCustomDetail => Find();
+    public static string GameBarMsiCenterWarning => Find();
+    public static string MButtonOpensTsume => Find();
+    public static string MButtonOpensTsumeOn => Find();
+    public static string MButtonOpensTsumeOff => Find();
+    public static string BackButtonsHeading => Find();
+    public static string BackButtonM1 => Find();
+    public static string BackButtonM1Sub => Find();
+    public static string BackButtonM2 => Find();
+    public static string BackButtonM2Sub => Find();
+    public static string BackButtonUnbound => Find();
+    public static string BackButtonKeySlot(int number) => Fill(Find(), number);
+    public static string BackButtonAddKey => Find();
+    public static string BackButtonRemoveKey => Find();
+    public static string BackButtonMultiHint => Find();
+    public static string ControlsSaved => Find();
+    public static string ControlsMsiCenterRuns => Find();
+
     /// <summary>The string named after the calling member; a name with no entry is shown as the name itself.</summary>
     private static string Find([CallerMemberName] string name = "") =>
         Words.GetString(name, CultureInfo.CurrentUICulture) ?? name;

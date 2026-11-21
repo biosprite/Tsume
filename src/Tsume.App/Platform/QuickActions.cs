@@ -23,6 +23,9 @@ public static class QuickActions
 
     public static void TaskManager() => Launch("taskmgr.exe");
 
+    /// <summary>Opens Steam Big Picture via Steam's registered URI scheme.</summary>
+    public static void OpenSteamBigPicture() => Launch("steam://open/bigpicture");
+
     /// <summary>
     /// Presses Insert, the key OptiScaler's in-game menu opens on, for the window behind the panel.
     /// Posted to that window rather than typed, so the panel can stay open and in front.

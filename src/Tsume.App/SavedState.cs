@@ -36,6 +36,15 @@ public sealed class SavedState
     /// <summary>Tsume's own colours, chosen on the customization page. Null: the default scheme.</summary>
     public Theme.ColourScheme? Colours { get; set; }
 
+    /// <summary>True to slide the panel in from the right edge of the screen instead of the left.</summary>
+    public bool OpenOnRight { get; set; }
+
+    /// <summary>What the Claw's Game Bar / Quick Settings button opens.</summary>
+    public Platform.GameBarAction GameBarButton { get; set; } = Platform.GameBarAction.Default;
+
+    /// <summary>Whether short-pressing the M button toggles Tsume (while MSI Center M is paused).</summary>
+    public bool MButtonOpensTsume { get; set; } = true;
+
     public static SavedState Load()
     {
         try

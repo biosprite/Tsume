@@ -55,6 +55,8 @@ public static class Glyphs
     public const string Warning     = "\uE7BA";   // warning triangle
     public const string Proxy       = "";   // two arrows swapping
     public const string Chevron     = "";   // points right: this opens something
+    public const string ChevronDown = "\uE70D";   // points down: opens a dropdown
+    public const string DockRight   = "\uE90D";   // panel pinned to the right edge
 
     public const string Customize   = "";   // paintbrush
     public const string Tick        = "";

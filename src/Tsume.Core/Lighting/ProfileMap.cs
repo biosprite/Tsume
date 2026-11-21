@@ -8,6 +8,15 @@ public static class ProfileMap
 {
     public const int Length = 1478;
 
+    /// <summary>M1 (left back paddle) 8-byte basic key profile.</summary>
+    public const int M1ProfileStart = 186;
+
+    /// <summary>M2 (right back paddle) 8-byte basic key profile.</summary>
+    public const int M2ProfileStart = 355;
+
+    /// <summary>Length of a single button's basic remap profile (index, flag, turbo, map0..map4).</summary>
+    public const int BackButtonProfileLength = 8;
+
     /// <summary>First byte of the lighting block: the active animation index.</summary>
     public const int LightingStart = 586;
 

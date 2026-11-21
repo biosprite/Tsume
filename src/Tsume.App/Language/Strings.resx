@@ -585,4 +585,48 @@
   <data name="RtssGuru3dLink" xml:space="preserve"><value>Guru3D download page</value></data>
   <data name="RtssGuru3dLinkDetail" xml:space="preserve"><value>Official RTSS 7.3.7 download and updates</value></data>
 
+  <!-- Controls & layout screen -->
+
+  <data name="ControlsHeading" xml:space="preserve"><value>CONTROLS</value></data>
+  <data name="ControlsAndLayout" xml:space="preserve"><value>Controls &amp; layout</value></data>
+  <data name="ControlsAndLayoutDetail" xml:space="preserve"><value>Panel side, Game Bar button, and M1 / M2 key bindings</value></data>
+
+  <data name="PanelPositionHeading" xml:space="preserve"><value>PANEL SIDE</value></data>
+  <data name="OpenOnRight" xml:space="preserve"><value>Open from right side</value></data>
+  <data name="OpenOnRightDetail" xml:space="preserve"><value>Slide Tsume in from the right edge of the screen instead of the left</value></data>
+
+  <data name="HardwareButtonsHeading" xml:space="preserve"><value>DEDICATED BUTTONS</value></data>
+  <data name="GameBarButton" xml:space="preserve"><value>Game Bar button</value></data>
+  <data name="GameBarDefault" xml:space="preserve"><value>Xbox Game Bar (Default)</value></data>
+  <data name="GameBarOpenTsume" xml:space="preserve"><value>Open Tsume</value></data>
+  <data name="GameBarSteam" xml:space="preserve"><value>Steam Big Picture</value></data>
+  <data name="GameBarTaskManager" xml:space="preserve"><value>Task Manager</value></data>
+  <data name="GameBarTouchKeyboard" xml:space="preserve"><value>Touch Keyboard</value></data>
+  <data name="GameBarScreenshot" xml:space="preserve"><value>Screenshot</value></data>
+  <data name="GameBarShowDesktop" xml:space="preserve"><value>Show Desktop</value></data>
+  <data name="GameBarDisabled" xml:space="preserve"><value>Disabled</value></data>
+  <data name="GameBarDefaultDetail" xml:space="preserve"><value>Leaves Win+G alone so Windows opens Xbox Game Bar as normal</value></data>
+  <data name="GameBarCustomDetail" xml:space="preserve"><value>Intercepts Win+G so Xbox Game Bar does not open</value></data>
+  <data name="GameBarMsiCenterWarning" xml:space="preserve"><value>MSI Center M is running and may still open its Quick Settings widget — pause it in Settings</value></data>
+
+  <data name="MButtonOpensTsume" xml:space="preserve"><value>M button opens Tsume</value></data>
+  <data name="MButtonOpensTsumeOn" xml:space="preserve"><value>Short-press the M button to toggle Tsume (while MSI Center M is paused)</value></data>
+  <data name="MButtonOpensTsumeOff" xml:space="preserve"><value>M button is ignored by Tsume</value></data>
+
+  <data name="BackButtonsHeading" xml:space="preserve"><value>BACK BUTTONS (M1 &amp; M2)</value></data>
+  <data name="BackButtonM1" xml:space="preserve"><value>M1</value></data>
+  <data name="BackButtonM1Sub" xml:space="preserve"><value>Left back button</value></data>
+  <data name="BackButtonM2" xml:space="preserve"><value>M2</value></data>
+  <data name="BackButtonM2Sub" xml:space="preserve"><value>Right back button</value></data>
+  <data name="BackButtonUnbound" xml:space="preserve"><value>Unbound</value></data>
+  <data name="BackButtonKeySlot" xml:space="preserve">
+    <value>Key {0}</value>
+    <comment>{0} = 1, 2 or 3</comment>
+  </data>
+  <data name="BackButtonAddKey" xml:space="preserve"><value>Add simultaneous key</value></data>
+  <data name="BackButtonRemoveKey" xml:space="preserve"><value>Remove key</value></data>
+  <data name="BackButtonMultiHint" xml:space="preserve"><value>Pressed together at the same time (up to 3 keys)</value></data>
+  <data name="ControlsSaved" xml:space="preserve"><value>Panel &amp; button settings save immediately; M1 / M2 save to the controller when you leave.</value></data>
+  <data name="ControlsMsiCenterRuns" xml:space="preserve"><value>MSI Center M is running and may undo M1 / M2 bindings.</value></data>
+
 </root>

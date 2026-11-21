@@ -42,6 +42,7 @@ internal static partial class User32
     public const int VK_LBUTTON = 0x01;
     public const int VK_TAB = 0x09;
     public const int VK_RETURN = 0x0D;
+    public const int VK_SHIFT = 0x10;
     public const int VK_CONTROL = 0x11;
     public const int VK_ESCAPE = 0x1B;
     public const int VK_SPACE = 0x20;
@@ -49,7 +50,9 @@ internal static partial class User32
     public const int VK_UP = 0x26;
     public const int VK_RIGHT = 0x27;
     public const int VK_DOWN = 0x28;
+    public const int VK_G = 0x47;
     public const int VK_RWIN = 0x5C;
+    public const ushort VK_MENU_MASK = 0xE8;   // unassigned VK sent to prevent Start menu on Win release
 
     /// <summary>Negative while the key or mouse button is held, whichever window has the focus.</summary>
     [LibraryImport("user32.dll")]

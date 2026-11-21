@@ -170,6 +170,45 @@ public sealed class ClawController : IDisposable
         if (offset < ProfileMap.LightingStart || offset + data.Length > ProfileMap.LightingEnd)
             throw new ArgumentOutOfRangeException(nameof(offset), "Only the lighting block may be written.");
 
+        return await WriteProfileChunkedAsync(offset, data);
+    }
+
+    /// <summary>
+    /// Writes the 8-byte remap profile for M1 or M2 into the controller's working memory.
+    /// The binding takes effect at once; call <see cref="SaveAsync"/> to persist to flash.
+    /// </summary>
+    public Task<bool> WriteBackButtonAsync(BackButton button, ReadOnlyMemory<byte> data)
+    {
+        // Safety guard: only the exact 8-byte M1 or M2 basic remap block may be written.
+        if (data.Length != ProfileMap.BackButtonProfileLength)
+            throw new ArgumentOutOfRangeException(nameof(data), $"Back-button profile must be {ProfileMap.BackButtonProfileLength} bytes.");
+
+        var offset = button switch
+        {
+            BackButton.M1 => ProfileMap.M1ProfileStart,
+            BackButton.M2 => ProfileMap.M2ProfileStart,
+            _             => throw new ArgumentOutOfRangeException(nameof(button)),
+        };
+
+        return WriteProfileChunkedAsync(offset, data);
+    }
+
+    /// <summary>
+    /// Ensures the controller's M-key function is set to custom remap/macro mode (0) rather than
+    /// combination shortcuts (1) or disabled (2), leaving the active gamepad/cursor mode untouched.
+    /// </summary>
+    public async Task<bool> EnsureBackButtonsActiveAsync()
+    {
+        var current = await ReadModeAsync();
+        if (current is not { } now) return false;
+        if (now.MKeys == 0) return true;
+
+        var padMode = now.Mode == (byte)PadMode.Cursor ? PadMode.Cursor : PadMode.Gamepad;
+        return await SwitchModeAsync(padMode, mKeys: 0);
+    }
+
+    private async Task<bool> WriteProfileChunkedAsync(int offset, ReadOnlyMemory<byte> data)
+    {
         for (var done = 0; done < data.Length; done += MaxChunk)
         {
             var size = Math.Min(MaxChunk, data.Length - done);

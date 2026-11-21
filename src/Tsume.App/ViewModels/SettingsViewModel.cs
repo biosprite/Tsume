@@ -28,6 +28,7 @@ public sealed class SettingsViewModel : LayerViewModel
         ChargeLimit = new ChargeLimitViewModel(helper, state);
         PerformancePresets = new PerformancePresetsViewModel(performance, state);
         Customization = new CustomizationViewModel(state);
+        Controls = new ControlsViewModel(state);
 
         ToggleOptiScaler = new Command(() =>
         {
@@ -129,6 +130,8 @@ public sealed class SettingsViewModel : LayerViewModel
     public PerformancePresetsViewModel PerformancePresets { get; }
 
     public CustomizationViewModel Customization { get; }
+
+    public ControlsViewModel Controls { get; }
 
     private readonly Tsume.Core.Ipc.HelperClient _helper;
     private readonly SavedState _state;

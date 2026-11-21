@@ -82,6 +82,18 @@ public static class ScreenShots
             }
 
             panel.Settings.Customization.IsOpen = false;
+
+            panel.Settings.Controls.IsOpen = true;
+            await Shot("2e-controls");
+            if (Descendants<Panel.ControlsScreen>(window).FirstOrDefault() is { } controlsScreen
+                && Descendants<System.Windows.Controls.ScrollViewer>(controlsScreen).FirstOrDefault() is { } controlsScroll)
+            {
+                controlsScroll.ScrollToVerticalOffset(420);
+                await Shot("2e-controls-bottom");
+                controlsScroll.ScrollToTop();
+            }
+            panel.Settings.Controls.IsOpen = false;
+
             panel.Settings.IsOpen = false;
             await Shot("1b-main-after");
 

@@ -101,6 +101,15 @@
                        Detail="{x:Static lang:Strings.CustomizationDetail}"
                        Command="{Binding Customization.Open}" />
 
+        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.ControlsHeading}"
+                   Margin="4,12,0,10" />
+
+        <controls:Tile Style="{StaticResource Tile.Link}"
+                       Glyph="{x:Static theme:Glyphs.Gamepad}"
+                       Label="{x:Static lang:Strings.ControlsAndLayout}"
+                       Detail="{x:Static lang:Strings.ControlsAndLayoutDetail}"
+                       Command="{Binding Controls.Open}" />
+
         <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.FeaturesHeading}"
                    Margin="4,12,0,10" />
 
