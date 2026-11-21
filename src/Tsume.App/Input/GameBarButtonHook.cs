@@ -14,6 +14,9 @@ public sealed class GameBarButtonHook : IDisposable
     /// <summary>Tag placed on our own synthetic mask key so we never re-process it.</summary>
     private const nint MaskExtraInfo = 0x5453_554D;   // "TSUM"
 
+    /// <summary>Tag placed on intentional synthetic Win+G (e.g. M button mapped to Xbox Game Bar) so it passes through.</summary>
+    public const nint PassThroughExtraInfo = 0x5453_5550;   // "TSUP"
+
     private static readonly Journal Errors = new("errors");
     private static readonly Journal Log = new("buttons");
 
@@ -94,9 +97,9 @@ public sealed class GameBarButtonHook : IDisposable
 
         var info = Marshal.PtrToStructure<User32.KBDLLHOOKSTRUCT>(lParam);
 
-        // Ignore only our own mask key — do not skip LLKHF_INJECTED, because OEM/HID button
-        // drivers can emit Win+G with LLKHF_INJECTED set.
-        if (info.ExtraInfo == (nuint)MaskExtraInfo || info.VkCode == User32.VK_MENU_MASK)
+        // Ignore our own mask key and intentional pass-through Win+G — do not skip LLKHF_INJECTED
+        // generally, because OEM/HID button drivers can emit Win+G with LLKHF_INJECTED set.
+        if (info.ExtraInfo is (nuint)MaskExtraInfo or (nuint)PassThroughExtraInfo || info.VkCode == User32.VK_MENU_MASK)
             return User32.CallNextHookEx(_hook, code, wParam, lParam);
 
         var message = (uint)wParam;

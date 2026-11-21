@@ -609,9 +609,13 @@
   <data name="GameBarCustomDetail" xml:space="preserve"><value>Intercepts Win+G so Xbox Game Bar does not open</value></data>
   <data name="GameBarMsiCenterWarning" xml:space="preserve"><value>MSI Center M is running and may still open its Quick Settings widget — pause it in Settings</value></data>
 
-  <data name="MButtonOpensTsume" xml:space="preserve"><value>M button opens Tsume</value></data>
-  <data name="MButtonOpensTsumeOn" xml:space="preserve"><value>Short-press the M button to toggle Tsume (while MSI Center M is paused)</value></data>
-  <data name="MButtonOpensTsumeOff" xml:space="preserve"><value>M button is ignored by Tsume</value></data>
+  <data name="MButton" xml:space="preserve"><value>M button</value></data>
+  <data name="MButtonDefault" xml:space="preserve"><value>Open Tsume (Default)</value></data>
+  <data name="MButtonXboxGameBar" xml:space="preserve"><value>Xbox Game Bar</value></data>
+  <data name="MButtonDetailTsume" xml:space="preserve"><value>Short-press the M button to toggle Tsume (while MSI Center M is paused)</value></data>
+  <data name="MButtonDetailCustom" xml:space="preserve"><value>Runs this action on short-press (while MSI Center M is paused)</value></data>
+  <data name="MButtonDetailDisabled" xml:space="preserve"><value>M button is ignored by Tsume</value></data>
+  <data name="MButtonMsiCenterWarning" xml:space="preserve"><value>MSI Center M is running and owns the M button — pause it in Settings to remap</value></data>
 
   <data name="BackButtonsHeading" xml:space="preserve"><value>BACK BUTTONS (M1 &amp; M2)</value></data>
   <data name="BackButtonM1" xml:space="preserve"><value>M1</value></data>

@@ -269,10 +269,10 @@ public partial class App
         {
             if (button == ClawButton.MsiCenter)
             {
-                if (panel.Settings.Controls.MButtonOpensTsume && !_msiCenterRuns)
+                if (panel.Settings.Controls.MButtonAction != MButtonAction.Disabled && !_msiCenterRuns)
                 {
-                    OpenTrace.Summoned();
-                    Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnMButton(window));
+                    if (panel.Settings.Controls.MButtonAction == MButtonAction.OpenTsume) OpenTrace.Summoned();
+                    Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnMButton(window, panel));
                 }
 
                 _msiCenterRuns = MsiCenter.IsRunning;
@@ -287,13 +287,42 @@ public partial class App
         _instance!.ToggleRequested += () => Dispatcher.BeginInvoke(window.Toggle);
     }
 
-    private void OnMButton(OverlayWindow window)
+    private void OnMButton(OverlayWindow window, PanelViewModel panel)
     {
         var now = DateTime.UtcNow;
         if (now - _lastButtonPress < ButtonEcho) return;
         _lastButtonPress = now;
 
-        window.Toggle();
+        switch (panel.Settings.Controls.MButtonAction)
+        {
+            case MButtonAction.OpenTsume:
+                window.Toggle();
+                break;
+
+            case MButtonAction.XboxGameBar:
+                QuickActions.OpenGameBar();
+                break;
+
+            case MButtonAction.SteamBigPicture:
+                QuickActions.OpenSteamBigPicture();
+                break;
+
+            case MButtonAction.TaskManager:
+                QuickActions.TaskManager();
+                break;
+
+            case MButtonAction.TouchKeyboard:
+                QuickActions.ToggleTouchKeyboard();
+                break;
+
+            case MButtonAction.Screenshot:
+                QuickActions.Screenshot();
+                break;
+
+            case MButtonAction.ShowDesktop:
+                QuickActions.ShowDesktop();
+                break;
+        }
     }
 
     private void OnGameBarButton(OverlayWindow window, PanelViewModel panel)

@@ -50,7 +50,7 @@ internal static partial class User32
     public const int VK_UP = 0x26;
     public const int VK_RIGHT = 0x27;
     public const int VK_DOWN = 0x28;
-    public const int VK_G = 0x47;
+    public const ushort VK_G = 0x47;
     public const int VK_RWIN = 0x5C;
     public const ushort VK_MENU_MASK = 0xE8;   // unassigned VK sent to prevent Start menu on Win release
 

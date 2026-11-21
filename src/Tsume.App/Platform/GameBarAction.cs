@@ -27,3 +27,31 @@ public enum GameBarAction
     /// <summary>Suppress Game Bar and do nothing.</summary>
     Disabled = 7,
 }
+
+/// <summary>What the Claw's M button opens when pressed (while MSI Center M is paused).</summary>
+public enum MButtonAction
+{
+    /// <summary>Toggle the Tsume overlay.</summary>
+    OpenTsume = 0,
+
+    /// <summary>Toggle Xbox Game Bar via Win+G (bypassing Tsume's Game Bar hook).</summary>
+    XboxGameBar = 1,
+
+    /// <summary>Open Steam Big Picture.</summary>
+    SteamBigPicture = 2,
+
+    /// <summary>Open Task Manager.</summary>
+    TaskManager = 3,
+
+    /// <summary>Toggle the Windows touch keyboard.</summary>
+    TouchKeyboard = 4,
+
+    /// <summary>Capture a screenshot.</summary>
+    Screenshot = 5,
+
+    /// <summary>Show the desktop / exit FSE.</summary>
+    ShowDesktop = 6,
+
+    /// <summary>Do nothing (ignore the M button).</summary>
+    Disabled = 7,
+}

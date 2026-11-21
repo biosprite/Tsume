@@ -440,9 +440,13 @@ public static class Strings
     public static string GameBarDefaultDetail => Find();
     public static string GameBarCustomDetail => Find();
     public static string GameBarMsiCenterWarning => Find();
-    public static string MButtonOpensTsume => Find();
-    public static string MButtonOpensTsumeOn => Find();
-    public static string MButtonOpensTsumeOff => Find();
+    public static string MButton => Find();
+    public static string MButtonDefault => Find();
+    public static string MButtonXboxGameBar => Find();
+    public static string MButtonDetailTsume => Find();
+    public static string MButtonDetailCustom => Find();
+    public static string MButtonDetailDisabled => Find();
+    public static string MButtonMsiCenterWarning => Find();
     public static string BackButtonsHeading => Find();
     public static string BackButtonM1 => Find();
     public static string BackButtonM1Sub => Find();

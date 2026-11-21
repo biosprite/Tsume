@@ -136,12 +136,34 @@
           </StackPanel>
         </Border>
 
-        <controls:Tile Style="{StaticResource Tile.Switch}"
-                       Glyph="{x:Static theme:Glyphs.Buttons}"
-                       Label="{x:Static lang:Strings.MButtonOpensTsume}"
-                       Detail="{Binding MButtonDetail}"
-                       IsOn="{Binding MButtonOpensTsume}"
-                       Command="{Binding ToggleMButtonOpensTsume}" />
+        <Border Background="{DynamicResource Surface}" CornerRadius="{StaticResource Radius.Control}"
+                Padding="16,14,16,14" Margin="0,0,0,8">
+          <StackPanel>
+
+            <DockPanel Margin="0,0,0,10">
+              <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Icon}" FontSize="20" Width="22"
+                         TextAlignment="Center" VerticalAlignment="Center"
+                         Text="{x:Static theme:Glyphs.Buttons}" />
+
+              <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                <TextBlock Style="{StaticResource Text.Body}" Text="{x:Static lang:Strings.MButton}" />
+                <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+                           Text="{Binding MButtonDetail}" Margin="0,2,0,0" />
+              </StackPanel>
+            </DockPanel>
+
+            <controls:KeyDropdown ItemsSource="{Binding MButtonOptions}"
+                                  SelectedItem="{Binding SelectedMButtonOption, Mode=TwoWay}"
+                                  AutomationProperties.Name="{x:Static lang:Strings.MButton}">
+              <controls:KeyDropdown.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Style="{StaticResource Text.Body}" Text="{Binding Label}" VerticalAlignment="Center" />
+                </DataTemplate>
+              </controls:KeyDropdown.ItemTemplate>
+            </controls:KeyDropdown>
+
+          </StackPanel>
+        </Border>
 
         <!-- Back buttons M1 and M2 -->
         <StackPanel IsEnabled="{Binding IsControllerAvailable}">

@@ -45,16 +45,29 @@ public sealed class ControlsViewModel : LayerViewModel
             new(GameBarAction.Disabled, Strings.GameBarDisabled),
         ];
 
+        MButtonOptions =
+        [
+            new(MButtonAction.OpenTsume, Strings.MButtonDefault),
+            new(MButtonAction.XboxGameBar, Strings.MButtonXboxGameBar),
+            new(MButtonAction.SteamBigPicture, Strings.GameBarSteam),
+            new(MButtonAction.TaskManager, Strings.GameBarTaskManager),
+            new(MButtonAction.TouchKeyboard, Strings.GameBarTouchKeyboard),
+            new(MButtonAction.Screenshot, Strings.GameBarScreenshot),
+            new(MButtonAction.ShowDesktop, Strings.GameBarShowDesktop),
+            new(MButtonAction.Disabled, Strings.GameBarDisabled),
+        ];
+
         M1 = new BackButtonEditor(BackButton.M1, Strings.BackButtonM1, Strings.BackButtonM1Sub, OnBackButtonChanged);
         M2 = new BackButtonEditor(BackButton.M2, Strings.BackButtonM2, Strings.BackButtonM2Sub, OnBackButtonChanged);
 
         ToggleOpenOnRight = new Command(() => OpenOnRight = !OpenOnRight);
-        ToggleMButtonOpensTsume = new Command(() => MButtonOpensTsume = !MButtonOpensTsume);
+
+        var initialMButton = state.MButton ?? (state.MButtonOpensTsume ? MButtonAction.OpenTsume : MButtonAction.Disabled);
 
         _absorbing = true;
         OpenOnRight = state.OpenOnRight;
-        MButtonOpensTsume = state.MButtonOpensTsume;
         SelectedGameBarOption = GameBarOptions.FirstOrDefault(o => o.Action == state.GameBarButton) ?? GameBarOptions[0];
+        SelectedMButtonOption = MButtonOptions.FirstOrDefault(o => o.Action == initialMButton) ?? MButtonOptions[0];
         _absorbing = false;
     }
 
@@ -89,21 +102,16 @@ public sealed class ControlsViewModel : LayerViewModel
             var previous = _state.GameBarButton;
             _state.GameBarButton = value.Action;
 
-            // Switching the Game Bar button to open Tsume replaces the M button by default;
-            // switching away restores the M button so Tsume always keeps a hardware trigger.
-            if (value.Action == GameBarAction.OpenTsume && previous != GameBarAction.OpenTsume && MButtonOpensTsume)
+            // Switching the Game Bar button to open Tsume swaps the M button to Xbox Game Bar by default;
+            // switching back to Default restores the M button to Tsume so a hardware trigger is always kept.
+            if (value.Action == GameBarAction.OpenTsume && previous != GameBarAction.OpenTsume && MButtonAction == MButtonAction.OpenTsume)
             {
-                _absorbing = true;
-                MButtonOpensTsume = false;
-                _absorbing = false;
-                _state.MButtonOpensTsume = false;
+                SetMButtonSilently(MButtonAction.XboxGameBar);
             }
-            else if (value.Action != GameBarAction.OpenTsume && previous == GameBarAction.OpenTsume && !MButtonOpensTsume)
+            else if (value.Action == GameBarAction.Default && previous == GameBarAction.OpenTsume
+                && MButtonAction is MButtonAction.XboxGameBar or MButtonAction.Disabled)
             {
-                _absorbing = true;
-                MButtonOpensTsume = true;
-                _absorbing = false;
-                _state.MButtonOpensTsume = true;
+                SetMButtonSilently(MButtonAction.OpenTsume);
             }
 
             _state.Save();
@@ -117,23 +125,45 @@ public sealed class ControlsViewModel : LayerViewModel
         : _msiCenterRuns ? Strings.GameBarMsiCenterWarning
         : Strings.GameBarCustomDetail;
 
-    public ICommand ToggleMButtonOpensTsume { get; }
+    public IReadOnlyList<MButtonOption> MButtonOptions { get; }
 
-    public bool MButtonOpensTsume
+    public MButtonOption SelectedMButtonOption
     {
         get;
         set
         {
-            if (!Set(ref field, value)) return;
+            if (value is null || !Set(ref field, value)) return;
+
+            Notify(nameof(MButtonAction));
             Notify(nameof(MButtonDetail));
 
             if (_absorbing) return;
-            _state.MButtonOpensTsume = value;
+
+            _state.MButton = value.Action;
+            _state.MButtonOpensTsume = value.Action == MButtonAction.OpenTsume;
             _state.Save();
         }
-    } = true;
+    } = null!;
 
-    public string MButtonDetail => MButtonOpensTsume ? Strings.MButtonOpensTsumeOn : Strings.MButtonOpensTsumeOff;
+    public MButtonAction MButtonAction => SelectedMButtonOption.Action;
+
+    public string MButtonDetail =>
+        _msiCenterRuns ? Strings.MButtonMsiCenterWarning
+        : MButtonAction switch
+        {
+            MButtonAction.OpenTsume => Strings.MButtonDetailTsume,
+            MButtonAction.Disabled  => Strings.MButtonDetailDisabled,
+            _                       => Strings.MButtonDetailCustom,
+        };
+
+    private void SetMButtonSilently(MButtonAction action)
+    {
+        _absorbing = true;
+        SelectedMButtonOption = MButtonOptions.FirstOrDefault(o => o.Action == action) ?? MButtonOptions[0];
+        _absorbing = false;
+        _state.MButton = action;
+        _state.MButtonOpensTsume = action == MButtonAction.OpenTsume;
+    }
 
     public BackButtonEditor M1 { get; }
     public BackButtonEditor M2 { get; }
@@ -153,6 +183,7 @@ public sealed class ControlsViewModel : LayerViewModel
         var msiRuns = await Task.Run(() => MsiCenter.IsRunning);
         _msiCenterRuns = msiRuns;
         Notify(nameof(GameBarDetail));
+        Notify(nameof(MButtonDetail));
 
         var controller = await ConnectAsync();
         if (controller is null) return;
@@ -250,6 +281,12 @@ public sealed class ControlsViewModel : LayerViewModel
 
 /// <summary>One option in the Game Bar button dropdown.</summary>
 public sealed record GameBarOption(GameBarAction Action, string Label)
+{
+    public override string ToString() => Label;
+}
+
+/// <summary>One option in the M button dropdown.</summary>
+public sealed record MButtonOption(MButtonAction Action, string Label)
 {
     public override string ToString() => Label;
 }

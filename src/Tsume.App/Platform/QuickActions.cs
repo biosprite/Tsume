@@ -26,6 +26,9 @@ public static class QuickActions
     /// <summary>Opens Steam Big Picture via Steam's registered URI scheme.</summary>
     public static void OpenSteamBigPicture() => Launch("steam://open/bigpicture");
 
+    /// <summary>Toggles Xbox Game Bar via a tagged Win+G chord that passes through Tsume's Game Bar hook.</summary>
+    public static void OpenGameBar() => User32.SendChord(Input.GameBarButtonHook.PassThroughExtraInfo, User32.VK_LWIN, User32.VK_G);
+
     /// <summary>
     /// Presses Insert, the key OptiScaler's in-game menu opens on, for the window behind the panel.
     /// Posted to that window rather than typed, so the panel can stay open and in front.

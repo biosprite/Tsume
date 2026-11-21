@@ -42,7 +42,10 @@ public sealed class SavedState
     /// <summary>What the Claw's Game Bar / Quick Settings button opens.</summary>
     public Platform.GameBarAction GameBarButton { get; set; } = Platform.GameBarAction.Default;
 
-    /// <summary>Whether short-pressing the M button toggles Tsume (while MSI Center M is paused).</summary>
+    /// <summary>What the Claw's M button opens (while MSI Center M is paused). Null falls back to <see cref="MButtonOpensTsume"/>.</summary>
+    public Platform.MButtonAction? MButton { get; set; }
+
+    /// <summary>Legacy flag kept for older state.json files; synced with <see cref="MButton"/>.</summary>
     public bool MButtonOpensTsume { get; set; } = true;
 
     public static SavedState Load()
