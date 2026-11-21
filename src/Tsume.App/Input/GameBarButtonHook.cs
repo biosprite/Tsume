@@ -11,7 +11,11 @@ namespace Tsume.App.Input;
 /// </summary>
 public sealed class GameBarButtonHook : IDisposable
 {
+    /// <summary>Tag placed on our own synthetic mask key so we never re-process it.</summary>
+    private const nint MaskExtraInfo = 0x5453_554D;   // "TSUM"
+
     private static readonly Journal Errors = new("errors");
+    private static readonly Journal Log = new("buttons");
 
     private readonly Dispatcher _dispatcher;
     private readonly User32.LowLevelHookProc _proc;
@@ -23,7 +27,7 @@ public sealed class GameBarButtonHook : IDisposable
     private bool _swallowingG;
     private bool _disposed;
 
-    /// <summary>Raised on the UI thread whenever a physical Win+G chord is intercepted.</summary>
+    /// <summary>Raised on the UI thread whenever a Win+G chord is intercepted.</summary>
     public event Action? Pressed;
 
     public GameBarButtonHook(Dispatcher dispatcher)
@@ -39,9 +43,16 @@ public sealed class GameBarButtonHook : IDisposable
         {
             if (_disposed || _enabled == value) return;
             _enabled = value;
-            if (value) Install();
-            else Uninstall();
+            if (_dispatcher.CheckAccess()) ApplyState(value);
+            else _dispatcher.BeginInvoke(() => ApplyState(value));
         }
+    }
+
+    private void ApplyState(bool enabled)
+    {
+        if (_disposed) return;
+        if (enabled) Install();
+        else Uninstall();
     }
 
     private void Install()
@@ -52,8 +63,14 @@ public sealed class GameBarButtonHook : IDisposable
         _hook = User32.SetWindowsHookEx(User32.WH_KEYBOARD_LL, _proc, module, 0);
         if (_hook == 0)
         {
-            Errors.Write($"GameBarButtonHook could not install keyboard hook (err={Marshal.GetLastWin32Error()}).");
+            var err = Marshal.GetLastWin32Error();
+            Errors.Write($"GameBarButtonHook could not install keyboard hook (err={err}).");
+            Log.Write($"gamebar hook install FAILED err={err}");
             _enabled = false;
+        }
+        else
+        {
+            Log.Write($"gamebar hook installed (0x{_hook:X})");
         }
     }
 
@@ -63,7 +80,11 @@ public sealed class GameBarButtonHook : IDisposable
         _rWinDown = false;
         _swallowingG = false;
         var hook = Interlocked.Exchange(ref _hook, 0);
-        if (hook != 0) User32.UnhookWindowsHookEx(hook);
+        if (hook != 0)
+        {
+            User32.UnhookWindowsHookEx(hook);
+            Log.Write("gamebar hook uninstalled");
+        }
     }
 
     private nint OnKeyboardHook(int code, nint wParam, nint lParam)
@@ -73,8 +94,9 @@ public sealed class GameBarButtonHook : IDisposable
 
         var info = Marshal.PtrToStructure<User32.KBDLLHOOKSTRUCT>(lParam);
 
-        // Ignore injected keys (including our own mask key).
-        if ((info.Flags & (User32.LLKHF_INJECTED | User32.LLKHF_LOWER_IL_INJECTED)) != 0)
+        // Ignore only our own mask key — do not skip LLKHF_INJECTED, because OEM/HID button
+        // drivers can emit Win+G with LLKHF_INJECTED set.
+        if (info.ExtraInfo == (nuint)MaskExtraInfo || info.VkCode == User32.VK_MENU_MASK)
             return User32.CallNextHookEx(_hook, code, wParam, lParam);
 
         var message = (uint)wParam;
@@ -86,11 +108,13 @@ public sealed class GameBarButtonHook : IDisposable
         {
             if (isDown) _lWinDown = true;
             else if (isUp) _lWinDown = false;
+            LogAsync($"ll-kbd LWin {(isDown ? "down" : "up")} scan=0x{info.ScanCode:X2} flags=0x{info.Flags:X2}");
         }
         else if (info.VkCode == User32.VK_RWIN)
         {
             if (isDown) _rWinDown = true;
             else if (isUp) _rWinDown = false;
+            LogAsync($"ll-kbd RWin {(isDown ? "down" : "up")} scan=0x{info.ScanCode:X2} flags=0x{info.Flags:X2}");
         }
         else if (info.VkCode == User32.VK_G)
         {
@@ -108,8 +132,9 @@ public sealed class GameBarButtonHook : IDisposable
                     if (!_swallowingG)
                     {
                         _swallowingG = true;
+                        LogAsync($"ll-kbd Win+G SWALLOWED scan=0x{info.ScanCode:X2} flags=0x{info.Flags:X2}");
                         // Mask LWin so releasing it after we swallow G does not pop open the Start menu.
-                        User32.SendChord(User32.VK_MENU_MASK);
+                        User32.SendChord(MaskExtraInfo, User32.VK_MENU_MASK);
                         _dispatcher.BeginInvoke(DispatcherPriority.Send, () => Pressed?.Invoke());
                     }
                     return 1;
@@ -121,9 +146,16 @@ public sealed class GameBarButtonHook : IDisposable
                 return 1;
             }
         }
+        else if (isDown && (_lWinDown || _rWinDown || info.VkCode is >= 0x7C and <= 0x87))
+        {
+            // Log Win+<other> and F13-F24 presses so firmware chords on any BIOS can be identified.
+            LogAsync($"ll-kbd vk=0x{info.VkCode:X2} down scan=0x{info.ScanCode:X2} flags=0x{info.Flags:X2} win={_lWinDown || _rWinDown}");
+        }
 
         return User32.CallNextHookEx(_hook, code, wParam, lParam);
     }
+
+    private static void LogAsync(string message) => ThreadPool.QueueUserWorkItem(_ => Log.Write(message));
 
     public void Dispose()
     {

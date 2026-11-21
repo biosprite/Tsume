@@ -164,22 +164,25 @@ internal static partial class User32
     private static partial uint SendInput(uint count, [In] INPUT[] inputs, int size);
 
     /// <summary>Presses the keys in order, then releases them in reverse.</summary>
-    public static void SendChord(params ushort[] keys)
+    public static void SendChord(params ushort[] keys) => SendChord(extraInfo: 0, keys);
+
+    /// <summary>Presses the keys in order, then releases them in reverse, tagging each event with <paramref name="extraInfo"/>.</summary>
+    public static void SendChord(nint extraInfo, params ushort[] keys)
     {
         var inputs = new INPUT[keys.Length * 2];
 
         for (var i = 0; i < keys.Length; i++)
         {
-            inputs[i] = Key(keys[i], up: false);
-            inputs[^(i + 1)] = Key(keys[i], up: true);
+            inputs[i] = Key(keys[i], up: false, extraInfo);
+            inputs[^(i + 1)] = Key(keys[i], up: true, extraInfo);
         }
 
         SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
 
-        static INPUT Key(ushort key, bool up) => new()
+        static INPUT Key(ushort key, bool up, nint extra) => new()
         {
             Type = INPUT_KEYBOARD,
-            Keyboard = new KEYBDINPUT { VirtualKey = key, Flags = up ? KEYEVENTF_KEYUP : 0 },
+            Keyboard = new KEYBDINPUT { VirtualKey = key, Flags = up ? KEYEVENTF_KEYUP : 0, ExtraInfo = extra },
         };
     }
 
