@@ -38,9 +38,11 @@ public sealed class ClawController : IDisposable
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromMilliseconds(1000);
     private const int Attempts = 3;
 
+    /// <summary>Serialises vendor HID exchanges across all handles in this process so replies never interleave.</summary>
+    private static readonly SemaphoreSlim OneAtATime = new(1, 1);
+
     private readonly SafeFileHandle _handle;
     private readonly FileStream _stream;
-    private readonly SemaphoreSlim _oneAtATime = new(1, 1);
 
     private ClawController(SafeFileHandle handle, ushort version)
     {
@@ -80,7 +82,7 @@ public sealed class ClawController : IDisposable
         return null;
     }
 
-    private static bool IsClaw(string path)
+    internal static bool IsClaw(string path)
     {
         var lower = path.ToLowerInvariant();
         return lower.Contains($"vid_{VendorId:x4}")
@@ -142,7 +144,7 @@ public sealed class ClawController : IDisposable
             throw new ArgumentOutOfRangeException(nameof(mode), "Only gamepad and cursor mode may be asked for.");
         ArgumentOutOfRangeException.ThrowIfGreaterThan(mKeys, MaxMKeys);
 
-        await _oneAtATime.WaitAsync();
+        await OneAtATime.WaitAsync();
         try
         {
             await _stream.WriteAsync(Packet(SwitchMode, (byte)mode, mKeys));
@@ -154,7 +156,7 @@ public sealed class ClawController : IDisposable
         }
         finally
         {
-            _oneAtATime.Release();
+            OneAtATime.Release();
         }
     }
 
@@ -206,7 +208,7 @@ public sealed class ClawController : IDisposable
     /// <summary>Sends a packet and waits for the matching reply, retrying if none comes.</summary>
     private async Task<byte[]?> ExchangeAsync(byte[] packet, Func<byte[], bool> isReply)
     {
-        await _oneAtATime.WaitAsync();
+        await OneAtATime.WaitAsync();
         try
         {
             for (var attempt = 0; attempt < Attempts; attempt++)
@@ -239,7 +241,7 @@ public sealed class ClawController : IDisposable
         }
         finally
         {
-            _oneAtATime.Release();
+            OneAtATime.Release();
         }
     }
 
@@ -247,7 +249,5 @@ public sealed class ClawController : IDisposable
     {
         _stream.Dispose();
         _handle.Dispose();
-
-        // _oneAtATime is deliberately not disposed: an exchange still waiting must be able to take and release it.
     }
 }

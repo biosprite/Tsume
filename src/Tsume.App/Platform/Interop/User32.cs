@@ -28,15 +28,28 @@ internal static partial class User32
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetWindowBand(nint window, out uint band);
 
+    public const int SM_CXSCREEN = 0;
     public const int SM_CYSCREEN = 1;
+    public const int SM_XVIRTUALSCREEN = 76;
+    public const int SM_YVIRTUALSCREEN = 77;
+    public const int SM_CXVIRTUALSCREEN = 78;
+    public const int SM_CYVIRTUALSCREEN = 79;
 
     /// <summary>With <see cref="SM_CYSCREEN"/>: the primary screen's height in real pixels.</summary>
     [LibraryImport("user32.dll")]
     public static partial int GetSystemMetrics(int index);
 
     public const int VK_LBUTTON = 0x01;
+    public const int VK_TAB = 0x09;
     public const int VK_RETURN = 0x0D;
+    public const int VK_CONTROL = 0x11;
+    public const int VK_ESCAPE = 0x1B;
     public const int VK_SPACE = 0x20;
+    public const int VK_LEFT = 0x25;
+    public const int VK_UP = 0x26;
+    public const int VK_RIGHT = 0x27;
+    public const int VK_DOWN = 0x28;
+    public const int VK_RWIN = 0x5C;
 
     /// <summary>Negative while the key or mouse button is held, whichever window has the focus.</summary>
     [LibraryImport("user32.dll")]
@@ -353,4 +366,116 @@ internal static partial class User32
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern int DisplayConfigGetDeviceInfo(ref DISPLAYCONFIG_TARGET_DEVICE_NAME request);
+
+    public const int WH_KEYBOARD_LL = 13;
+    public const int WH_MOUSE_LL = 14;
+    public const int HC_ACTION = 0;
+
+    public const uint WM_INPUT = 0x00FF;
+    public const uint WM_SYSKEYDOWN = 0x0104;
+    public const uint WM_SYSKEYUP = 0x0105;
+    public const uint WM_MOUSEMOVE = 0x0200;
+    public const uint WM_LBUTTONDOWN = 0x0201;
+    public const uint WM_LBUTTONUP = 0x0202;
+    public const uint WM_RBUTTONDOWN = 0x0204;
+    public const uint WM_RBUTTONUP = 0x0205;
+    public const uint WM_MBUTTONDOWN = 0x0207;
+    public const uint WM_MBUTTONUP = 0x0208;
+    public const uint WM_MOUSEWHEEL = 0x020A;
+    public const uint WM_XBUTTONDOWN = 0x020B;
+    public const uint WM_XBUTTONUP = 0x020C;
+    public const uint WM_MOUSEHWHEEL = 0x020E;
+
+    public const uint LLMHF_INJECTED = 0x0000_0001;
+    public const uint LLMHF_LOWER_IL_INJECTED = 0x0000_0002;
+    public const uint LLKHF_INJECTED = 0x0000_0010;
+    public const uint LLKHF_ALTDOWN = 0x0000_0020;
+    public const uint LLKHF_LOWER_IL_INJECTED = 0x0000_0002;
+
+    /// <summary>Touch and pen events promoted to mouse messages carry this signature in the upper 24 bits of ExtraInfo.</summary>
+    public const ulong MI_WP_SIGNATURE = 0xFF51_5700;
+    public const ulong MI_WP_SIGNATURE_MASK = 0xFFFF_FF00;
+
+    public delegate nint LowLevelHookProc(int code, nint wParam, nint lParam);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MSLLHOOKSTRUCT
+    {
+        public POINT Pt;
+        public uint MouseData;
+        public uint Flags;
+        public uint Time;
+        public nuint ExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct KBDLLHOOKSTRUCT
+    {
+        public uint VkCode;
+        public uint ScanCode;
+        public uint Flags;
+        public uint Time;
+        public nuint ExtraInfo;
+    }
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowsHookExW", SetLastError = true)]
+    public static extern nint SetWindowsHookEx(int idHook, LowLevelHookProc callback, nint module, uint threadId);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool UnhookWindowsHookEx(nint hook);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint CallNextHookEx(nint hook, int code, nint wParam, nint lParam);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetCursorPos(out POINT point);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool SetCursorPos(int x, int y);
+
+    public const ushort HID_USAGE_PAGE_GENERIC = 0x01;
+    public const ushort HID_USAGE_GENERIC_MOUSE = 0x02;
+    public const uint RIDEV_REMOVE = 0x0000_0001;
+    public const uint RIDEV_INPUTSINK = 0x0000_0100;
+    public const uint RID_HEADER = 0x1000_0005;
+    public const uint RIM_TYPEMOUSE = 0;
+    public const uint RIDI_DEVICENAME = 0x2000_0007;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RAWINPUTDEVICE
+    {
+        public ushort UsagePage;
+        public ushort Usage;
+        public uint Flags;
+        public nint Target;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RAWINPUTHEADER
+    {
+        public uint Type;
+        public uint Size;
+        public nint Device;
+        public nint WParam;
+    }
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool RegisterRawInputDevices([In] RAWINPUTDEVICE[] devices, uint count, uint size);
+
+    [LibraryImport("user32.dll")]
+    public static partial uint GetRawInputData(nint rawInput, uint command, out RAWINPUTHEADER data, ref uint size, uint headerSize);
+
+    [DllImport("user32.dll", EntryPoint = "GetRawInputDeviceInfoW", CharSet = CharSet.Unicode)]
+    public static extern uint GetRawInputDeviceInfo(nint device, uint command, [Out] char[]? data, ref uint size);
 }

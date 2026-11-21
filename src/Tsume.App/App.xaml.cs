@@ -48,6 +48,7 @@ public partial class App
     private SingleInstance? _instance;
     private GlobalHotkey? _hotkey;
     private Gamepad? _gamepad;
+    private PadIsolation? _padIsolation;
     private ClawButtons? _buttons;
     private PanelViewModel? _panel;
     private OverlayWindow? _window;
@@ -139,10 +140,16 @@ public partial class App
             return;
         }
 
+        _padIsolation = new PadIsolation(Dispatcher);
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => _padIsolation?.RestoreSynchronously();
+        SessionEnding += (_, _) => _padIsolation?.RestoreSynchronously();
+        SystemEvents.PowerModeChanged += OnPowerModeChanged;
+
         var panel = _panel = new PanelViewModel(
             SavedState.Load(),
             dismiss: () => _window!.CloseAsync(),
-            quit: Shutdown);
+            quit: Shutdown,
+            padIsolation: _padIsolation);
         panel.StartBackgroundServices();
 
         _window = new OverlayWindow(panel, stayOpen: e.Args.Contains(StayOpenSwitch));
@@ -227,8 +234,15 @@ public partial class App
         _gamepad.Summoned += () => Dispatcher.BeginInvoke(window.Toggle);
         _gamepad.Pressed += button => Dispatcher.BeginInvoke(() => window.Press(button));
 
-        // The controller is only read closely while the panel is open.
-        window.OpenChanged += open => _gamepad.IsNavigating = open;
+        _padIsolation!.Pressed += window.Press;
+
+        // The controller is only read closely while the panel is open; on the Claw, temporarily
+        // isolate it from the game behind the panel so inputs never move both at once.
+        window.OpenChanged += open =>
+        {
+            _gamepad.IsNavigating = open;
+            _padIsolation.SetPanelOpen(open);
+        };
 
         _buttons = new ClawButtons();
         // The M button is Tsume's only while MSI Center M is paused (otherwise both would open).
@@ -297,8 +311,15 @@ public partial class App
         }
     });
 
+    private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
+    {
+        if (e.Mode == PowerModes.Suspend) _padIsolation?.RestoreSynchronously();
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
+        SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        _padIsolation?.Dispose();
         _panel?.Dispose();
         _buttons?.Dispose();
         _gamepad?.Dispose();

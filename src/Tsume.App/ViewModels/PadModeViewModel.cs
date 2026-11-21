@@ -1,5 +1,6 @@
 using System.Windows.Input;
 using System.Windows.Threading;
+using Tsume.App.Input;
 using Tsume.App.Language;
 using Tsume.App.Mvvm;
 using Tsume.App.Platform;
@@ -14,9 +15,14 @@ namespace Tsume.App.ViewModels;
 /// </summary>
 public sealed class PadModeViewModel : Observable
 {
+    private readonly PadIsolation? _isolation;
     private bool _switching;
 
-    public PadModeViewModel() => Toggle = new Command(() => _ = ToggleAsync());
+    public PadModeViewModel(PadIsolation? isolation = null)
+    {
+        _isolation = isolation;
+        Toggle = new Command(() => _ = ToggleAsync());
+    }
 
     public ICommand Toggle { get; }
 
@@ -55,7 +61,7 @@ public sealed class PadModeViewModel : Observable
     {
         if (_switching) return;
 
-        var mode = await ControllerMode.ReadAsync();
+        var mode = await ReadModeAsync();
         if (_switching) return;   // a toggle started meanwhile; its result wins
 
         Show(mode);
@@ -71,7 +77,7 @@ public sealed class PadModeViewModel : Observable
             if (!IsAvailable)
             {
                 // While unavailable, a press only re-reads the pad; it does not toggle.
-                Show(await ControllerMode.ReadAsync());
+                Show(await ReadModeAsync());
                 return;
             }
 
@@ -80,11 +86,11 @@ public sealed class PadModeViewModel : Observable
 
             Mode = wanted;   // update the tile at once; the pad follows in ~30 ms
 
-            if (!await ControllerMode.SetAsync(wanted))
+            if (!await SetModeAsync(wanted))
             {
                 // The set failed: show what the pad reports now, or the previous mode if it does not answer.
                 Mode = before;
-                Show(await ControllerMode.ReadAsync());
+                Show(await ReadModeAsync());
             }
 
             // Stay deaf until the press that asked for this is let go, or it toggles straight back.
@@ -98,6 +104,12 @@ public sealed class PadModeViewModel : Observable
             _switching = false;
         }
     }
+
+    private Task<PadMode?> ReadModeAsync() =>
+        _isolation is not null ? _isolation.ReadLogicalModeAsync() : ControllerMode.ReadAsync();
+
+    private Task<bool> SetModeAsync(PadMode wanted) =>
+        _isolation is not null ? _isolation.SetLogicalModeAsync(wanted) : ControllerMode.SetAsync(wanted);
 
     private void Show(PadMode? mode)
     {

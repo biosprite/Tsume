@@ -1,4 +1,5 @@
 using System.Windows.Threading;
+using Tsume.App.Input;
 using Tsume.App.Platform.Rtss;
 using Tsume.Core.Ipc;
 
@@ -15,7 +16,7 @@ public sealed class PanelViewModel : IDisposable
 
     /// <param name="dismiss">Closes the panel and completes once it is fully off screen.</param>
     /// <param name="quit">Exits Tsume.</param>
-    public PanelViewModel(SavedState state, Func<Task> dismiss, Action quit)
+    public PanelViewModel(SavedState state, Func<Task> dismiss, Action quit, PadIsolation? padIsolation = null)
     {
         var helper = new HelperClient();
 
@@ -33,7 +34,7 @@ public sealed class PanelViewModel : IDisposable
 
         Settings = new SettingsViewModel(helper, state, Performance, dismiss, _rtssService.SetFeatureEnabled);
         Lighting = new LightingViewModel();
-        PadMode = new PadModeViewModel();
+        PadMode = new PadModeViewModel(padIsolation);
         Upscaling = new UpscalingViewModel(dismiss);
         Rtss = new RtssViewModel(_rtssService, dismiss);
         Quit = new QuitViewModel(quit);
