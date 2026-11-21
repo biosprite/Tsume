@@ -51,6 +51,25 @@ internal static class PanelStarter
     /// <summary>The session shown on the device's own screen; -1 if there is none.</summary>
     public static int ScreenSession => unchecked((int)WTSGetActiveConsoleSessionId());
 
+    /// <summary>Returns the Windows user SID signed into <paramref name="session"/>, or null if unavailable.</summary>
+    internal static string? UserSidForSession(int session)
+    {
+        if (session < 0 || !WTSQueryUserToken((uint)session, out var person)) return null;
+        try
+        {
+            using var identity = new WindowsIdentity(person);
+            return identity.User?.Value;
+        }
+        catch (Exception error) when (error is Win32Exception or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return null;
+        }
+        finally
+        {
+            CloseHandle(person);
+        }
+    }
+
     /// <param name="occasion">Why now — "sign-in", "start-up", "unlock" — for the log.</param>
     public static void StartFor(int session, string occasion)
     {

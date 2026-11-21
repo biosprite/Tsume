@@ -404,6 +404,8 @@ public static class Strings
     public static string RtssClosed => Find();
     public static string RtssCloseFailed => Find();
     public static string RtssOpenMenuFailed => Find();
+    public static string RtssStartWithWindowsDetail => Find();
+    public static string RtssStartWithWindowsFailed => Find();
     public static string RtssSkipAntiCheat => Find();
     public static string RtssSkipAntiCheatOn(int count) => count == 1 ? Find("RtssSkipAntiCheatOne") : Fill(Find(), count);
     public static string RtssSkipAntiCheatNone => Find();

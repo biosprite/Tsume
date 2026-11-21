@@ -30,6 +30,7 @@ public sealed class RtssViewModel : LayerViewModel
     private bool _launching;
     private bool _closing;
     private bool _syncingExclusions;
+    private bool _togglingStartup;
     private int? _excludedGamesCount;
     private string? _downloadedInstaller;
 
@@ -61,6 +62,7 @@ public sealed class RtssViewModel : LayerViewModel
         CheckAgain = new Command(() =>
         {
             RefreshState();
+            if (IsInstalled) _ = RefreshStartWithWindowsAsync();
             Status = IsInstalled ? DefaultStatus() : Strings.RtssStillNotFound;
             Settled?.Invoke();
         });
@@ -88,6 +90,7 @@ public sealed class RtssViewModel : LayerViewModel
         StartRtss = new Command(async () => await StartRtssAsync());
         OpenRtssMenu = new Command(async () => await OpenRtssMenuAsync());
         CloseRtss = new Command(async () => await CloseRtssAsync());
+        ToggleStartWithWindows = new Command(async () => await ToggleStartWithWindowsAsync());
         ToggleSkipAntiCheat = new Command(async () => await ToggleSkipAntiCheatAsync());
 
         SyncFromService();
@@ -104,6 +107,7 @@ public sealed class RtssViewModel : LayerViewModel
     public ICommand StartRtss { get; }
     public ICommand OpenRtssMenu { get; }
     public ICommand CloseRtss { get; }
+    public ICommand ToggleStartWithWindows { get; }
     public ICommand ToggleSkipAntiCheat { get; }
 
     public IReadOnlyList<string> Levels { get; } =
@@ -162,6 +166,8 @@ public sealed class RtssViewModel : LayerViewModel
     }
 
     public bool IsNotRunning => IsInstalled && !IsRunning;
+
+    public bool StartsWithWindows { get; private set => Set(ref field, value); }
 
     public bool SkipAntiCheatGames
     {
@@ -398,8 +404,12 @@ public sealed class RtssViewModel : LayerViewModel
     {
         RefreshState();
         Status = DefaultStatus();
-        if (IsInstalled && SkipAntiCheatGames && _excludedGamesCount is null)
-            _ = SyncAntiCheatAsync();
+        if (IsInstalled)
+        {
+            _ = RefreshStartWithWindowsAsync();
+            if (SkipAntiCheatGames && _excludedGamesCount is null)
+                _ = SyncAntiCheatAsync();
+        }
     }
 
     private void RefreshState()
@@ -569,6 +579,39 @@ public sealed class RtssViewModel : LayerViewModel
         }
     }
 
+    private async Task RefreshStartWithWindowsAsync()
+    {
+        if (!IsInstalled) return;
+        var enabled = await _service.GetStartWithWindowsAsync();
+        if (enabled is { } value && !_togglingStartup)
+            StartsWithWindows = value;
+    }
+
+    private async Task ToggleStartWithWindowsAsync()
+    {
+        if (_togglingStartup || !IsInstalled) return;
+        _togglingStartup = true;
+        var target = !StartsWithWindows;
+
+        try
+        {
+            var result = await _service.SetStartWithWindowsAsync(target);
+            if (result is { } actual)
+            {
+                StartsWithWindows = actual;
+                Status = DefaultStatus();
+            }
+            else
+            {
+                Status = Strings.RtssStartWithWindowsFailed;
+            }
+        }
+        finally
+        {
+            _togglingStartup = false;
+        }
+    }
+
     private async Task ToggleSkipAntiCheatAsync()
     {
         var next = _service.Settings with { SkipAntiCheatGames = !SkipAntiCheatGames };
@@ -612,6 +655,7 @@ public sealed class RtssViewModel : LayerViewModel
         IsInstalled = true;
         InstalledVersion = "7.3.7";
         IsRunning = isRunning;
+        StartsWithWindows = isRunning;
         UseTsumeOverlay = useTsumeOverlay;
         SkipAntiCheatGames = true;
         _excludedGamesCount = 2;

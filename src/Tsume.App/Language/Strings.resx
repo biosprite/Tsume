@@ -553,6 +553,8 @@
   <data name="RtssClosed" xml:space="preserve"><value>RTSS ended.</value></data>
   <data name="RtssCloseFailed" xml:space="preserve"><value>Could not end RTSS. Close it from the system tray.</value></data>
   <data name="RtssOpenMenuFailed" xml:space="preserve"><value>Could not open the RTSS window. Open it from the system tray.</value></data>
+  <data name="RtssStartWithWindowsDetail" xml:space="preserve"><value>Launches RTSS minimized after you sign in</value></data>
+  <data name="RtssStartWithWindowsFailed" xml:space="preserve"><value>Could not update RTSS startup. Make sure the helper service is running.</value></data>
   <data name="RtssSkipAntiCheat" xml:space="preserve"><value>Skip anti-cheat games</value></data>
   <data name="RtssSkipAntiCheatOn" xml:space="preserve">
     <value>On · {0} anti-cheat games excluded from RTSS hooking</value>

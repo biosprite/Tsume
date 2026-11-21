@@ -29,6 +29,8 @@ public static class HelperPipe
 [JsonDerivedType(typeof(SetRtssProfile),    "rtss.profile.set")]
 [JsonDerivedType(typeof(SetRtssExclusions), "rtss.exclusions.set")]
 [JsonDerivedType(typeof(StopRtss),          "rtss.stop")]
+[JsonDerivedType(typeof(GetRtssStartup),    "rtss.startup.get")]
+[JsonDerivedType(typeof(SetRtssStartup),    "rtss.startup.set")]
 public abstract record HelperRequest;
 
 /// <summary>Read the current state without changing anything.</summary>
@@ -82,6 +84,12 @@ public sealed record SetRtssExclusions(IReadOnlyList<string> Executables) : Help
 /// <summary>Stops the running RTSS process (and its companion executables inside RTSS's install folder).</summary>
 public sealed record StopRtss : HelperRequest;
 
+/// <summary>Checks whether RTSS is configured to start automatically with Windows.</summary>
+public sealed record GetRtssStartup : HelperRequest;
+
+/// <summary>Enables or disables RTSS starting automatically with Windows (via Task Scheduler and RTSS config).</summary>
+public sealed record SetRtssStartup(bool Enabled) : HelperRequest;
+
 /// <summary>The helper's answer to any request.</summary>
 public sealed record HelperReply
 {
@@ -100,6 +108,9 @@ public sealed record HelperReply
 
     /// <summary>Sent only with the answer to <see cref="GetLog"/>.</summary>
     public string? Log { get; init; }
+
+    /// <summary>Sent with answers to <see cref="GetRtssStartup"/> and <see cref="SetRtssStartup"/>.</summary>
+    public bool? RtssStartsWithWindows { get; init; }
 
     public static HelperReply Success(HardwareSnapshot snapshot) => new() { Ok = true, Snapshot = snapshot };
     public static HelperReply Success(LiveReadings readings) => new() { Ok = true, Readings = readings };

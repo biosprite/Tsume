@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Xml;
+using System.Xml.Linq;
 using Microsoft.Win32;
 using Tsume.Core.Ipc;
 
@@ -24,6 +26,14 @@ internal static class RtssProfileWriter
     private const int MaxExclusions = 512;
 
     private const string TsumeMarker = "; Created by Tsume";
+    private const string RtssTaskName = @"\RTSS";
+    private const string RtssRunValueName = "RTSS";
+    private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string RunKeyWow64Path = @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run";
+    private const string StartupApprovedPath = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+    private const string StartupApproved32Path = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run32";
+    private const string AdministratorsSid = "S-1-5-32-544";
+    private const int SchtasksTimeoutMs = 2500;
 
     private static readonly string[] RtssProcessNames =
     [
@@ -184,6 +194,298 @@ internal static class RtssProfileWriter
         {
             Log.Write($"Could not stop RTSS: {error.Message}");
             return HelperReply.Failure(error.Message);
+        }
+    }
+
+    public static HelperReply GetStartup(string? userSid)
+    {
+        try
+        {
+            var enabled = IsScheduledTaskEnabled() || HasEnabledRunEntry(userSid);
+            return new HelperReply { Ok = true, RtssStartsWithWindows = enabled };
+        }
+        catch (Exception error)
+        {
+            Log.Write($"Could not check RTSS startup state: {error.Message}");
+            return HelperReply.Failure(error.Message);
+        }
+    }
+
+    public static HelperReply SetStartup(bool enabled, string? userSid)
+    {
+        var installDir = FindRtssInstallDir();
+        if (installDir is null)
+            return HelperReply.Failure("RTSS is not installed.");
+
+        var rtssExe = Path.Combine(installDir, "RTSS.exe");
+
+        try
+        {
+            if (enabled)
+            {
+                if (!CreateScheduledTask(rtssExe, installDir, userSid, out var error))
+                {
+                    Log.Write($"Could not create RTSS startup task: {error}");
+                    return HelperReply.Failure(error ?? "Could not create RTSS startup task.");
+                }
+
+                // Clear any legacy Run-key entry so Windows does not double-launch RTSS (or show a UAC prompt).
+                RemoveRunEntries(userSid);
+            }
+            else
+            {
+                var (exitCode, _, stderr) = RunSchtasks("/Delete", "/TN", RtssTaskName, "/F");
+                if (exitCode != 0 && IsScheduledTaskEnabled())
+                {
+                    var detail = string.IsNullOrWhiteSpace(stderr) ? $"schtasks exited with {exitCode}" : stderr.Trim();
+                    Log.Write($"Could not delete RTSS startup task: {detail}");
+                    return HelperReply.Failure(detail);
+                }
+
+                RemoveRunEntries(userSid);
+            }
+
+            UpdateConfigStartWithWindows(installDir, enabled);
+            return new HelperReply { Ok = true, RtssStartsWithWindows = enabled };
+        }
+        catch (Exception error)
+        {
+            Log.Write($"Could not update RTSS startup ({enabled}): {error.Message}");
+            return HelperReply.Failure(error.Message);
+        }
+    }
+
+    private static bool CreateScheduledTask(string rtssExe, string installDir, string? userSid, out string? error)
+    {
+        var tempXml = Path.Combine(Path.GetTempPath(), $"tsume-rtss-task-{Guid.NewGuid():N}.xml");
+        try
+        {
+            var doc = BuildTaskDocument(rtssExe, installDir, userSid);
+            var settings = new XmlWriterSettings
+            {
+                Encoding = new UnicodeEncoding(bigEndian: false, byteOrderMark: true),
+                Indent = true,
+            };
+            using (var writer = XmlWriter.Create(tempXml, settings))
+                doc.Save(writer);
+
+            var (exitCode, stdout, stderr) = RunSchtasks("/Create", "/TN", RtssTaskName, "/XML", tempXml, "/F");
+            if (exitCode == 0)
+            {
+                error = null;
+                return true;
+            }
+
+            error = !string.IsNullOrWhiteSpace(stderr) ? stderr.Trim()
+                : !string.IsNullOrWhiteSpace(stdout) ? stdout.Trim()
+                : $"schtasks exited with {exitCode}";
+            return false;
+        }
+        finally
+        {
+            try { File.Delete(tempXml); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    private static XDocument BuildTaskDocument(string rtssExe, string installDir, string? userSid)
+    {
+        XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
+
+        var trigger = new XElement(ns + "LogonTrigger",
+            new XElement(ns + "Enabled", "true"));
+        if (!string.IsNullOrWhiteSpace(userSid))
+            trigger.Add(new XElement(ns + "UserId", userSid));
+
+        var principal = new XElement(ns + "Principal", new XAttribute("id", "Author"));
+        if (!string.IsNullOrWhiteSpace(userSid))
+        {
+            principal.Add(new XElement(ns + "UserId", userSid));
+            principal.Add(new XElement(ns + "LogonType", "InteractiveToken"));
+        }
+        else
+        {
+            principal.Add(new XElement(ns + "GroupId", AdministratorsSid));
+        }
+        principal.Add(new XElement(ns + "RunLevel", "HighestAvailable"));
+
+        return new XDocument(
+            new XDeclaration("1.0", "UTF-16", null),
+            new XElement(ns + "Task",
+                new XAttribute("version", "1.2"),
+                new XElement(ns + "RegistrationInfo",
+                    new XElement(ns + "Description", "RivaTuner Statistics Server")),
+                new XElement(ns + "Triggers", trigger),
+                new XElement(ns + "Principals", principal),
+                new XElement(ns + "Settings",
+                    new XElement(ns + "MultipleInstancesPolicy", "IgnoreNew"),
+                    new XElement(ns + "DisallowStartIfOnBatteries", "false"),
+                    new XElement(ns + "StopIfGoingOnBatteries", "false"),
+                    new XElement(ns + "AllowHardTerminate", "true"),
+                    new XElement(ns + "StartWhenAvailable", "true"),
+                    new XElement(ns + "RunOnlyIfNetworkAvailable", "false"),
+                    new XElement(ns + "IdleSettings",
+                        new XElement(ns + "StopOnIdleEnd", "false"),
+                        new XElement(ns + "RestartOnIdle", "false")),
+                    new XElement(ns + "AllowStartOnDemand", "true"),
+                    new XElement(ns + "Enabled", "true"),
+                    new XElement(ns + "Hidden", "false"),
+                    new XElement(ns + "RunOnlyIfIdle", "false"),
+                    new XElement(ns + "WakeToRun", "false"),
+                    new XElement(ns + "ExecutionTimeLimit", "PT0S"),
+                    new XElement(ns + "Priority", "7")),
+                new XElement(ns + "Actions",
+                    new XAttribute("Context", "Author"),
+                    new XElement(ns + "Exec",
+                        new XElement(ns + "Command", rtssExe),
+                        new XElement(ns + "Arguments", "/s"),
+                        new XElement(ns + "WorkingDirectory", installDir)))));
+    }
+
+    private static bool IsScheduledTaskEnabled()
+    {
+        var (exitCode, stdout, _) = RunSchtasks("/Query", "/TN", RtssTaskName, "/XML");
+        if (exitCode != 0 || string.IsNullOrWhiteSpace(stdout)) return false;
+
+        try
+        {
+            var doc = XDocument.Parse(stdout);
+            var root = doc.Root;
+            if (root is null) return false;
+
+            var ns = root.GetDefaultNamespace();
+            var settingsEnabled = root.Element(ns + "Settings")?.Element(ns + "Enabled")?.Value;
+            if (string.Equals(settingsEnabled, "false", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            var triggers = root.Element(ns + "Triggers")?.Elements().ToList();
+            if (triggers is { Count: > 0 }
+                && triggers.All(t => string.Equals(t.Element(ns + "Enabled")?.Value, "false", StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+
+            return true;
+        }
+        catch (XmlException)
+        {
+            return true;
+        }
+    }
+
+    private static (int ExitCode, string Stdout, string Stderr) RunSchtasks(params string[] args)
+    {
+        var exe = Path.Combine(Environment.SystemDirectory, "schtasks.exe");
+        var psi = new ProcessStartInfo(exe)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+
+        using var process = Process.Start(psi);
+        if (process is null) return (-1, "", "Could not start schtasks.exe");
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+
+        if (!process.WaitForExit(SchtasksTimeoutMs))
+        {
+            try { process.Kill(entireProcessTree: true); }
+            catch (Exception error) when (error is Win32Exception or InvalidOperationException) { }
+            return (-1, "", "schtasks.exe timed out");
+        }
+
+        return (process.ExitCode, stdoutTask.GetAwaiter().GetResult(), stderrTask.GetAwaiter().GetResult());
+    }
+
+    private static bool HasEnabledRunEntry(string? userSid)
+    {
+        if (!string.IsNullOrWhiteSpace(userSid))
+        {
+            try
+            {
+                using var hive = Registry.Users.OpenSubKey(userSid);
+                if (hive is not null && HasApprovedRunValue(hive, RunKeyPath, StartupApprovedPath))
+                    return true;
+            }
+            catch (Exception error) when (error is System.Security.SecurityException or UnauthorizedAccessException) { }
+        }
+
+        try
+        {
+            if (HasApprovedRunValue(Registry.LocalMachine, RunKeyPath, StartupApprovedPath)) return true;
+            if (HasApprovedRunValue(Registry.LocalMachine, RunKeyWow64Path, StartupApproved32Path)) return true;
+        }
+        catch (Exception error) when (error is System.Security.SecurityException or UnauthorizedAccessException) { }
+
+        return false;
+    }
+
+    private static bool HasApprovedRunValue(RegistryKey root, string runSubKey, string approvedSubKey)
+    {
+        using var run = root.OpenSubKey(runSubKey);
+        if (run?.GetValue(RtssRunValueName) is not string { Length: > 0 }) return false;
+
+        // Task Manager → Startup apps keeps its switch here: an odd first byte means disabled.
+        using var approved = root.OpenSubKey(approvedSubKey);
+        return approved?.GetValue(RtssRunValueName) is not byte[] { Length: > 0 } state || (state[0] & 1) == 0;
+    }
+
+    private static void RemoveRunEntries(string? userSid)
+    {
+        if (!string.IsNullOrWhiteSpace(userSid))
+        {
+            try
+            {
+                using var run = Registry.Users.OpenSubKey($@"{userSid}\{RunKeyPath}", writable: true);
+                run?.DeleteValue(RtssRunValueName, throwOnMissingValue: false);
+            }
+            catch (Exception error) when (error is System.Security.SecurityException or UnauthorizedAccessException) { }
+        }
+
+        foreach (var path in new[] { RunKeyPath, RunKeyWow64Path })
+        {
+            try
+            {
+                using var run = Registry.LocalMachine.OpenSubKey(path, writable: true);
+                run?.DeleteValue(RtssRunValueName, throwOnMissingValue: false);
+            }
+            catch (Exception error) when (error is System.Security.SecurityException or UnauthorizedAccessException) { }
+        }
+    }
+
+    private static void UpdateConfigStartWithWindows(string installDir, bool enabled)
+    {
+        var profilesDir = Path.Combine(installDir, "Profiles");
+        var configFile = Path.Combine(profilesDir, "Config");
+        var templateFile = Path.Combine(installDir, "ProfileTemplates", "Config");
+
+        try
+        {
+            lock (FileGate)
+            {
+                Directory.CreateDirectory(profilesDir);
+
+                var lines = File.Exists(configFile)
+                    ? File.ReadAllLines(configFile, Encoding.UTF8).ToList()
+                    : File.Exists(templateFile)
+                        ? File.ReadAllLines(templateFile, Encoding.UTF8).ToList()
+                        : [];
+
+                SetKey(lines, "Settings", "StartWithWindows", enabled ? "1" : "0");
+
+                var tempFile = configFile + ".tsume-tmp";
+                File.WriteAllLines(tempFile, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                File.Move(tempFile, configFile, overwrite: true);
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            Log.Write($"Could not update RTSS Config StartWithWindows: {error.Message}");
         }
     }
 

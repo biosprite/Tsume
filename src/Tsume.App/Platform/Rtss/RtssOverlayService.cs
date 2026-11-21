@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using Microsoft.Win32;
 using Tsume.Core.Diagnostics;
 using Tsume.Core.Ipc;
 using Tsume.Upscaling.Games;
@@ -148,6 +149,62 @@ public sealed class RtssOverlayService : IDisposable
         }
 
         return !IsRunning;
+    }
+
+    private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string StartupApprovedPath = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+    private const string RtssRunValueName = "RTSS";
+
+    /// <summary>Checks whether RTSS is configured to start automatically at sign-in.</summary>
+    public async Task<bool?> GetStartWithWindowsAsync()
+    {
+        var reply = await _helper.SendAsync(new GetRtssStartup()).ConfigureAwait(false);
+        if (reply.Ok && reply.RtssStartsWithWindows is { } enabled)
+            return enabled || HasCurrentUserRunEntry();
+
+        Log.Write($"helper rtss.startup.get failed ({reply.Error ?? "offline"})");
+        return HasCurrentUserRunEntry();
+    }
+
+    /// <summary>Enables or disables RTSS starting automatically at sign-in via the elevated helper.</summary>
+    public async Task<bool?> SetStartWithWindowsAsync(bool enabled)
+    {
+        var reply = await _helper.SendAsync(new SetRtssStartup(enabled)).ConfigureAwait(false);
+        if (!reply.Ok)
+        {
+            Log.Write($"helper rtss.startup.set({enabled}) failed ({reply.Error ?? "offline"})");
+            return null;
+        }
+
+        // Clean up any legacy per-user Run-key entry in our own HKCU hive as well.
+        RemoveCurrentUserRunEntry();
+        return reply.RtssStartsWithWindows ?? enabled;
+    }
+
+    private static bool HasCurrentUserRunEntry()
+    {
+        try
+        {
+            using var run = Registry.CurrentUser.OpenSubKey(RunKeyPath);
+            if (run?.GetValue(RtssRunValueName) is not string { Length: > 0 }) return false;
+
+            using var approved = Registry.CurrentUser.OpenSubKey(StartupApprovedPath);
+            return approved?.GetValue(RtssRunValueName) is not byte[] { Length: > 0 } state || (state[0] & 1) == 0;
+        }
+        catch (Exception error) when (error is System.Security.SecurityException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static void RemoveCurrentUserRunEntry()
+    {
+        try
+        {
+            using var run = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: true);
+            run?.DeleteValue(RtssRunValueName, throwOnMissingValue: false);
+        }
+        catch (Exception error) when (error is System.Security.SecurityException or UnauthorizedAccessException) { }
     }
 
     /// <summary>

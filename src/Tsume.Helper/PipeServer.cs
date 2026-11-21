@@ -112,6 +112,12 @@ public sealed class PipeServer(RequestHandler handler)
         if (request is StopRtss)
             return RtssProfileWriter.Stop();
 
+        if (request is GetRtssStartup)
+            return RtssProfileWriter.GetStartup(CallerUserSid(pipe));
+
+        if (request is SetRtssStartup startup)
+            return RtssProfileWriter.SetStartup(startup.Enabled, CallerUserSid(pipe));
+
         return handler.Handle(request);
     }
 
@@ -120,6 +126,22 @@ public sealed class PipeServer(RequestHandler handler)
     {
         if (!GetNamedPipeClientProcessId(pipe.SafePipeHandle.DangerousGetHandle(), out var client)) return -1;
         return ProcessIdToSessionId(client, out var session) ? (int)session : -1;
+    }
+
+    /// <summary>The Windows user SID of whoever is on the other end of the pipe, or null if it cannot be read.</summary>
+    private static string? CallerUserSid(NamedPipeServerStream pipe)
+    {
+        string? sid = null;
+        try
+        {
+            pipe.RunAsClient(() => sid = WindowsIdentity.GetCurrent().User?.Value);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception) { }
+
+        if (sid is not null) return sid;
+
+        var session = CallerSession(pipe);
+        return session >= 0 ? PanelStarter.UserSidForSession(session) : null;
     }
 
     [DllImport("kernel32.dll", SetLastError = true)]

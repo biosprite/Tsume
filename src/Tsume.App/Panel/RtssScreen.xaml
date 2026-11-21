@@ -181,6 +181,13 @@
                      Margin="4,18,0,10" />
 
           <controls:Tile Style="{StaticResource Tile.Switch}"
+                         Glyph="{x:Static theme:Glyphs.Startup}"
+                         Label="{x:Static lang:Strings.StartWithWindows}"
+                         Detail="{x:Static lang:Strings.RtssStartWithWindowsDetail}"
+                         IsOn="{Binding StartsWithWindows}"
+                         Command="{Binding ToggleStartWithWindows}" />
+
+          <controls:Tile Style="{StaticResource Tile.Switch}"
                          Glyph="{x:Static theme:Glyphs.Shield}"
                          Label="{x:Static lang:Strings.RtssSkipAntiCheat}"
                          Detail="{Binding SkipAntiCheatDetail}"
