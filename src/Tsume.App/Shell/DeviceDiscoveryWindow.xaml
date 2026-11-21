@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:theme="clr-namespace:Tsume.App.Theme"
         xmlns:lang="clr-namespace:Tsume.App.Language"
-        Title="Tsume — Hardware Discovery"
+        Title="Tsume Hardware Discovery"
         Width="980"
         Height="700"
         MinWidth="760"
@@ -113,7 +113,22 @@
 
       <!-- Top Header -->
       <DockPanel DockPanel.Dock="Top" Margin="0,0,0,14">
-        <StackPanel DockPanel.Dock="Left">
+        <!-- Mode tabs -->
+        <Border DockPanel.Dock="Right" Background="{DynamicResource Surface}" CornerRadius="12" Padding="4"
+                VerticalAlignment="Center" Margin="16,0,0,0">
+          <StackPanel Orientation="Horizontal">
+            <RadioButton Style="{StaticResource Dev.TabButton}" GroupName="ModeTabs" Content="Quick Scan"
+                         IsChecked="{Binding IsQuickScanTab, Mode=OneWay}" Click="OnSelectQuickScan" />
+            <RadioButton Style="{StaticResource Dev.TabButton}" GroupName="ModeTabs" Content="Guided Capture"
+                         IsChecked="{Binding IsGuidedTab, Mode=OneWay}" Click="OnSelectGuided" />
+            <RadioButton Style="{StaticResource Dev.TabButton}" GroupName="ModeTabs" Content="Live Watch"
+                         IsChecked="{Binding IsWatchTab, Mode=OneWay}" Click="OnSelectWatch" />
+            <RadioButton Style="{StaticResource Dev.TabButton}" GroupName="ModeTabs" Content="Report Preview"
+                         IsChecked="{Binding IsPreviewTab, Mode=OneWay}" Click="OnSelectPreview" />
+          </StackPanel>
+        </Border>
+
+        <StackPanel VerticalAlignment="Center">
           <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
             <TextBlock Style="{StaticResource Text.Icon}" Text="{x:Static theme:Glyphs.Developer}"
                        Foreground="{x:Static theme:Accent.Brush}" FontSize="20" Margin="0,0,10,0" />
@@ -127,21 +142,6 @@
           <TextBlock Style="{StaticResource Text.Caption}" Text="{x:Static lang:Strings.HardwareDiscoverySubtitle}"
                      Margin="0,4,0,0" />
         </StackPanel>
-
-        <!-- Mode tabs -->
-        <Border DockPanel.Dock="Right" Background="{DynamicResource Surface}" CornerRadius="12" Padding="4"
-                VerticalAlignment="Center" HorizontalAlignment="Right">
-          <StackPanel Orientation="Horizontal">
-            <RadioButton Style="{StaticResource Dev.TabButton}" GroupName="ModeTabs" Content="Quick Scan"
-                         IsChecked="{Binding IsQuickScanTab, Mode=OneWay}" Click="OnSelectQuickScan" />
-            <RadioButton Style="{StaticResource Dev.TabButton}" GroupName="ModeTabs" Content="Guided Capture"
-                         IsChecked="{Binding IsGuidedTab, Mode=OneWay}" Click="OnSelectGuided" />
-            <RadioButton Style="{StaticResource Dev.TabButton}" GroupName="ModeTabs" Content="Live Watch"
-                         IsChecked="{Binding IsWatchTab, Mode=OneWay}" Click="OnSelectWatch" />
-            <RadioButton Style="{StaticResource Dev.TabButton}" GroupName="ModeTabs" Content="Report Preview"
-                         IsChecked="{Binding IsPreviewTab, Mode=OneWay}" Click="OnSelectPreview" />
-          </StackPanel>
-        </Border>
       </DockPanel>
 
       <!-- Status strip -->
@@ -158,17 +158,17 @@
       <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Surface.Divider}" BorderThickness="0,1,0,0"
               Padding="0,12,0,0" Margin="0,12,0,0">
         <DockPanel>
-          <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center">
-            <TextBlock Style="{StaticResource Text.Body}" Text="{Binding SummaryPill}" FontSize="12.5" />
-            <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding ExportMessage}"
-                       Foreground="{StaticResource Signal.Good}" Margin="0,2,0,0" />
-          </StackPanel>
-
-          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center">
             <Button Style="{StaticResource Dev.Button}" Content="Environment Check" Margin="0,0,8,0"
                     IsEnabled="{Binding IsNotBusy}" Command="{Binding RunEnvCheckCommand}" />
             <Button Style="{StaticResource Dev.PrimaryButton}" Content="Export Support Bundle (.zip)"
                     IsEnabled="{Binding IsNotBusy}" Command="{Binding ExportBundleCommand}" />
+          </StackPanel>
+
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Style="{StaticResource Text.Body}" Text="{Binding SummaryPill}" FontSize="12.5" />
+            <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding ExportMessage}"
+                       Foreground="{StaticResource Signal.Good}" Margin="0,2,0,0" />
           </StackPanel>
         </DockPanel>
       </Border>
@@ -182,20 +182,20 @@
           <StackPanel>
             <Border Style="{StaticResource Dev.Card}">
               <DockPanel>
-                <StackPanel DockPanel.Dock="Left" MaxWidth="620">
+                <Button DockPanel.Dock="Right" Style="{StaticResource Dev.PrimaryButton}"
+                        Content="Run Quick Scan" Padding="20,12" Margin="16,0,0,0" VerticalAlignment="Center"
+                        IsEnabled="{Binding IsNotBusy}" Command="{Binding RunQuickScanCommand}" />
+                <StackPanel>
                   <TextBlock Style="{StaticResource Text.Body}" Text="Hands-Free Automatic Discovery (~10 seconds)" FontSize="15" />
                   <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,4,0,10"
                              Text="Captures SMBIOS/CPU/GPU identity, display timings, Windows power plan &amp; boost mode, vendor WMI classes + MOF schemas, safe OEM firmware reads, a 3-second live-telemetry load delta, full HID/XInput/LampArray/controller topology, and OEM software footprint." />
-                  <StackPanel Orientation="Horizontal">
+                  <WrapPanel Orientation="Horizontal">
                     <CheckBox Content="Include 3-second CPU load delta (identifies live temp/fan/power bytes)"
-                              IsChecked="{Binding IncludeTimedLoad}" Foreground="{DynamicResource Text}" Margin="0,0,18,0" />
+                              IsChecked="{Binding IncludeTimedLoad}" Foreground="{DynamicResource Text}" Margin="0,0,18,4" />
                     <CheckBox Content="Allow UAC fallback if Helper service is offline"
-                              IsChecked="{Binding AllowUacFallback}" Foreground="{DynamicResource Text}" />
-                  </StackPanel>
+                              IsChecked="{Binding AllowUacFallback}" Foreground="{DynamicResource Text}" Margin="0,0,0,4" />
+                  </WrapPanel>
                 </StackPanel>
-                <Button DockPanel.Dock="Right" Style="{StaticResource Dev.PrimaryButton}"
-                        Content="Run Quick Scan" Padding="20,12" VerticalAlignment="Center"
-                        IsEnabled="{Binding IsNotBusy}" Command="{Binding RunQuickScanCommand}" />
               </DockPanel>
             </Border>
 
@@ -303,11 +303,11 @@
                   </Border>
 
                   <!-- Button capture step controls -->
-                  <StackPanel Visibility="{Binding IsButtonStepSelected, Converter={StaticResource BoolToVis}}">
+                  <StackPanel Visibility="{Binding IsButtonStepSelected, Converter={StaticResource BoolToVis}}" Margin="0,0,0,12">
                     <DockPanel Margin="0,4,0,8">
                       <Button DockPanel.Dock="Right" Style="{StaticResource Dev.PrimaryButton}"
                               Content="{Binding ButtonListenLabel}" Margin="10,0,0,0"
-                              Command="{Binding ToggleButtonListeningCommand}" />
+                              IsEnabled="{Binding IsNotBusy}" Command="{Binding ToggleButtonListeningCommand}" />
                       <TextBlock Style="{StaticResource Text.Heading}" Text="SELECT WHICH BUTTON YOU ARE PRESSING"
                                  VerticalAlignment="Center" Margin="0" />
                     </DockPanel>
@@ -359,7 +359,7 @@
                     </Border>
                   </StackPanel>
 
-                  <!-- Optional note + capture buttons (for non-button steps) -->
+                  <!-- Optional note (for non-button steps) -->
                   <StackPanel>
                     <StackPanel.Style>
                       <Style TargetType="StackPanel">
@@ -376,17 +376,28 @@
                     <TextBox Text="{Binding StepUserNote, UpdateSourceTrigger=PropertyChanged}"
                              Background="#FF0B0D12" Foreground="#FFE6ECF5" CaretBrush="#FFE6ECF5"
                              BorderBrush="{DynamicResource Panel.Edge}" Padding="10,7" Margin="0,0,0,12" FontSize="13" />
+                  </StackPanel>
 
-                    <StackPanel Orientation="Horizontal">
-                      <Button Style="{StaticResource Dev.PrimaryButton}" Content="Capture Step" Margin="0,0,8,0"
-                              IsEnabled="{Binding IsNotBusy}" Command="{Binding CaptureStepCommand}" />
-                      <Button Style="{StaticResource Dev.Button}" Content="Skip Step" Margin="0,0,8,0"
-                              IsEnabled="{Binding IsNotBusy}" Command="{Binding SkipStepCommand}" />
-                      <Button Style="{StaticResource Dev.Button}" Content="Previous" Margin="0,0,8,0"
-                              IsEnabled="{Binding CanGoPrevious}" Command="{Binding PreviousStepCommand}" />
-                      <Button Style="{StaticResource Dev.Button}" Content="Next"
-                              IsEnabled="{Binding CanGoNext}" Command="{Binding NextStepCommand}" />
-                    </StackPanel>
+                  <StackPanel Orientation="Horizontal">
+                    <Button Content="Capture Step" Margin="0,0,8,0"
+                            IsEnabled="{Binding IsNotBusy}" Command="{Binding CaptureStepCommand}">
+                      <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource Dev.PrimaryButton}">
+                          <Setter Property="Visibility" Value="Visible" />
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsButtonStepSelected}" Value="True">
+                              <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </Button.Style>
+                    </Button>
+                    <Button Style="{StaticResource Dev.Button}" Content="Skip Step" Margin="0,0,8,0"
+                            IsEnabled="{Binding IsNotBusy}" Command="{Binding SkipStepCommand}" />
+                    <Button Style="{StaticResource Dev.Button}" Content="Previous" Margin="0,0,8,0"
+                            IsEnabled="{Binding CanGoPrevious}" Command="{Binding PreviousStepCommand}" />
+                    <Button Style="{StaticResource Dev.Button}" Content="Next"
+                            IsEnabled="{Binding CanGoNext}" Command="{Binding NextStepCommand}" />
                   </StackPanel>
                 </StackPanel>
               </Border>
@@ -408,13 +419,13 @@
         <DockPanel Visibility="{Binding IsWatchTab, Converter={StaticResource BoolToVis}}">
           <Border DockPanel.Dock="Top" Style="{StaticResource Dev.Card}">
             <DockPanel>
-              <StackPanel DockPanel.Dock="Left" MaxWidth="620">
+              <Button DockPanel.Dock="Right" Style="{StaticResource Dev.PrimaryButton}"
+                      Content="{Binding WatchButtonLabel}" Padding="20,12" Margin="16,0,0,0" VerticalAlignment="Center"
+                      IsEnabled="{Binding IsNotBusy}" Command="{Binding ToggleWatchModeCommand}" />
+              <StackPanel>
                 <TextBlock Style="{StaticResource Text.Body}" Text="Live Watch Mode (Free-Form Recorder)" FontSize="15" />
                 <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding WatchStatusText}" TextWrapping="Wrap" Margin="0,4,0,0" />
               </StackPanel>
-              <Button DockPanel.Dock="Right" Style="{StaticResource Dev.PrimaryButton}"
-                      Content="{Binding WatchButtonLabel}" Padding="20,12" VerticalAlignment="Center"
-                      IsEnabled="{Binding IsNotBusy}" Command="{Binding ToggleWatchModeCommand}" />
             </DockPanel>
           </Border>
 

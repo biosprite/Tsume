@@ -9,8 +9,11 @@ internal static partial class DwmApi
     public const uint DWM_BB_BLURREGION = 0x2;
 
     public const uint DWMWA_NCRENDERING_POLICY = 2;
+    public const uint DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
     public const uint DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     public const uint DWMWA_BORDER_COLOR = 34;
+    public const uint DWMWA_CAPTION_COLOR = 35;
+    public const uint DWMWA_TEXT_COLOR = 36;
 
     public const int DWMNCRP_DISABLED = 1;
     public const int DWMWCP_DONOTROUND = 1;

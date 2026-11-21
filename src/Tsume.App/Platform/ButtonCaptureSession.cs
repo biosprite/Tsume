@@ -33,6 +33,9 @@ public sealed class ButtonCaptureSession : IDisposable
     private readonly nint _hwnd;
     private readonly List<ManagementEventWatcher> _wmiWatchers = [];
     private readonly List<User32.RAWINPUTDEVICE> _registeredRawDevices = [];
+    private readonly Dictionary<nint, string> _rawDevicePaths = [];
+    private readonly Dictionary<nint, string> _lastRawHidPayload = [];
+    private readonly Dictionary<nint, (long WindowStartMs, int WindowCount, long LastEmitMs)> _rawRate = [];
     private readonly User32.LowLevelHookProc _kbdProc;
     private readonly DispatcherTimer _xinputTimer;
     private readonly ushort[] _lastXInputButtons = new ushort[XInput.MaxControllers];
@@ -47,7 +50,7 @@ public sealed class ButtonCaptureSession : IDisposable
     public ButtonCaptureSession(
         Dispatcher dispatcher,
         nint windowHandle,
-        IEnumerable<string>? discoveredWmiEventClasses = null,
+        IEnumerable<(string Namespace, string ClassName)>? discoveredWmiEventClasses = null,
         IEnumerable<ushort>? discoveredVendorUsagePages = null)
     {
         _dispatcher = dispatcher;
@@ -55,13 +58,28 @@ public sealed class ButtonCaptureSession : IDisposable
         _kbdProc = OnKeyboardHook;
 
         // 1. WMI event watchers (best effort; non-existent classes are silently skipped).
-        var eventClasses = new HashSet<string>(DefaultEventClasses, StringComparer.OrdinalIgnoreCase);
-        if (discoveredWmiEventClasses is not null)
-            foreach (var cls in discoveredWmiEventClasses)
-                if (!string.IsNullOrWhiteSpace(cls)) eventClasses.Add(cls);
+        var seenWmi = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var eventTargets = new List<(string Namespace, string ClassName)>();
 
-        foreach (var cls in eventClasses)
-            TryWatchWmiEvent(cls);
+        foreach (var cls in DefaultEventClasses)
+        {
+            if (seenWmi.Add($@"root\WMI|{cls}"))
+                eventTargets.Add((@"root\WMI", cls));
+        }
+
+        if (discoveredWmiEventClasses is not null)
+        {
+            foreach (var (ns, cls) in discoveredWmiEventClasses)
+            {
+                if (string.IsNullOrWhiteSpace(cls)) continue;
+                var effectiveNs = string.IsNullOrWhiteSpace(ns) ? @"root\WMI" : ns;
+                if (seenWmi.Add($"{effectiveNs}|{cls}"))
+                    eventTargets.Add((effectiveNs, cls));
+            }
+        }
+
+        foreach (var (ns, cls) in eventTargets)
+            TryWatchWmiEvent(ns, cls);
 
         // 2. Passive low-level keyboard hook.
         var module = Kernel32.GetModuleHandle(null);
@@ -98,49 +116,65 @@ public sealed class ButtonCaptureSession : IDisposable
 
     private long ElapsedMs => (long)Stopwatch.GetElapsedTime(_startTimestamp).TotalMilliseconds;
 
-    private void TryWatchWmiEvent(string className)
+    private void TryWatchWmiEvent(string wmiNamespace, string className)
     {
+        ManagementEventWatcher? watcher = null;
         try
         {
-            var watcher = new ManagementEventWatcher(@"root\WMI", $"SELECT * FROM {className}");
-            watcher.EventArrived += (_, e) => OnWmiEvent(className, e.NewEvent);
+            watcher = new ManagementEventWatcher(wmiNamespace, $"SELECT * FROM {className}");
+            watcher.EventArrived += (_, e) => OnWmiEvent(wmiNamespace, className, e.NewEvent);
             watcher.Start();
             _wmiWatchers.Add(watcher);
+            watcher = null;
         }
         catch (Exception error) when (error is ManagementException or COMException or UnauthorizedAccessException)
         {
         }
+        finally
+        {
+            watcher?.Dispose();
+        }
     }
 
-    private void OnWmiEvent(string className, ManagementBaseObject ev)
+    private void OnWmiEvent(string wmiNamespace, string className, ManagementBaseObject ev)
     {
-        if (_disposed) return;
-
-        var fields = new Dictionary<string, string>(StringComparer.Ordinal);
-        var parts = new List<string>();
-
-        foreach (PropertyData prop in ev.Properties)
+        using (ev)
         {
-            if (prop.Name.StartsWith("__", StringComparison.Ordinal)) continue;
-            if (prop.Name.Equals("SECURITY_DESCRIPTOR", StringComparison.OrdinalIgnoreCase)) continue;
+            if (_disposed) return;
 
-            var valueStr = prop.Value switch
+            var fields = new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                null => "null",
-                byte b => $"0x{b:X2} ({b})",
-                ushort u16 => $"0x{u16:X4} ({u16})",
-                uint u32 => $"0x{u32:X8} (low=0x{u32 & 0xFF:X2})",
-                int i32 => $"0x{i32:X8} (low=0x{i32 & 0xFF:X2})",
-                byte[] bytes => Convert.ToHexString(bytes.AsSpan(0, Math.Min(32, bytes.Length))),
-                _ => $"{prop.Value}",
+                ["namespace"] = wmiNamespace,
+                ["class"] = className,
             };
+            var parts = new List<string>();
 
-            fields[prop.Name] = valueStr;
-            if (!prop.Name.Equals("TIME_CREATED", StringComparison.OrdinalIgnoreCase))
-                parts.Add($"{prop.Name}={valueStr}");
+            foreach (PropertyData prop in ev.Properties)
+            {
+                if (prop.Name.StartsWith("__", StringComparison.Ordinal)) continue;
+                if (prop.Name.Equals("SECURITY_DESCRIPTOR", StringComparison.OrdinalIgnoreCase)) continue;
+
+                var valueStr = prop.Value switch
+                {
+                    null => "null",
+                    byte b => $"0x{b:X2} ({b})",
+                    ushort u16 => $"0x{u16:X4} ({u16})",
+                    uint u32 => $"0x{u32:X8} (low=0x{u32 & 0xFF:X2})",
+                    int i32 => $"0x{i32:X8} (low=0x{i32 & 0xFF:X2})",
+                    byte[] bytes => Convert.ToHexString(bytes.AsSpan(0, Math.Min(32, bytes.Length))),
+                    ushort[] u16Arr => "[" + string.Join(", ", u16Arr.Take(16).Select(v => $"0x{v:X4}")) + "]",
+                    uint[] u32Arr => "[" + string.Join(", ", u32Arr.Take(16).Select(v => $"0x{v:X8}")) + "]",
+                    int[] i32Arr => "[" + string.Join(", ", i32Arr.Take(16).Select(v => $"0x{v:X8}")) + "]",
+                    _ => $"{prop.Value}",
+                };
+
+                fields[prop.Name] = valueStr;
+                if (!prop.Name.Equals("TIME_CREATED", StringComparison.OrdinalIgnoreCase))
+                    parts.Add($"{prop.Name}={valueStr}");
+            }
+
+            Emit("wmi", $"{className}: {string.Join(", ", parts)}", fields);
         }
-
-        Emit("wmi", $"{className}: {string.Join(", ", parts)}", fields);
     }
 
     private nint OnKeyboardHook(int code, nint wParam, nint lParam)
@@ -241,22 +275,50 @@ public sealed class ButtonCaptureSession : IDisposable
         if (User32.GetRawInputData(rawInputHandle, User32.RID_INPUT, buffer, ref size, headerSize) != size)
             return;
 
-        var type = BitConverter.ToUInt32(buffer, 0);
-        if (type != User32.RIM_TYPEHID) return;
+        if (buffer.Length < (int)headerSize + 8) return;
 
-        // RAWINPUTHEADER is 24 bytes on x64; RAWHID starts at offset 24: dwSizeHid (4), dwCount (4), bRawData[...].
+        var header = MemoryMarshal.Read<User32.RAWINPUTHEADER>(buffer);
+        if (header.Type != User32.RIM_TYPEHID) return;
+
+        // RAWHID starts immediately after RAWINPUTHEADER: dwSizeHid (4), dwCount (4), bRawData[...].
         var offset = (int)headerSize;
-        if (buffer.Length < offset + 8) return;
-
         var reportSize = BitConverter.ToInt32(buffer, offset);
         var count = BitConverter.ToInt32(buffer, offset + 4);
+        if (reportSize <= 0 || count <= 0) return;
+
         var dataOffset = offset + 8;
-        var avail = Math.Min(buffer.Length - dataOffset, Math.Min(64, Math.Max(0, reportSize * count)));
+        var totalBytes = Math.Min((long)reportSize * count, 64L);
+        var avail = (int)Math.Min(buffer.Length - dataOffset, totalBytes);
         if (avail <= 0) return;
 
-        var deviceHandle = (nint)BitConverter.ToInt64(buffer, 8);
-        var devPath = GetRawDevicePath(deviceHandle);
+        var deviceHandle = header.Device;
         var hex = Convert.ToHexString(buffer, dataOffset, avail);
+
+        // Suppress unchanged repeat reports (e.g. idle 125-500 Hz gamepad polling).
+        if (_lastRawHidPayload.TryGetValue(deviceHandle, out var previousHex)
+            && string.Equals(previousHex, hex, StringComparison.Ordinal))
+            return;
+        _lastRawHidPayload[deviceHandle] = hex;
+
+        // Throttle continuously streaming devices (e.g. IMU/gyro/noisy analog axes) so they cannot starve
+        // the UI or bury real button press/release transitions.
+        var nowMs = ElapsedMs;
+        if (_rawRate.TryGetValue(deviceHandle, out var rate))
+        {
+            if (nowMs - rate.WindowStartMs >= 1000)
+                rate = (nowMs, 1, nowMs);
+            else if (rate.WindowCount >= 10 && nowMs - rate.LastEmitMs < 100)
+                return;
+            else
+                rate = (rate.WindowStartMs, rate.WindowCount + 1, nowMs);
+        }
+        else
+        {
+            rate = (nowMs, 1, nowMs);
+        }
+        _rawRate[deviceHandle] = rate;
+
+        var devPath = GetCachedRawDevicePath(deviceHandle);
 
         var fields = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -267,6 +329,15 @@ public sealed class ButtonCaptureSession : IDisposable
         };
 
         Emit("raw_hid", $"HID {devPath} ({reportSize}B): {hex}", fields);
+    }
+
+    private string GetCachedRawDevicePath(nint device)
+    {
+        if (_rawDevicePaths.TryGetValue(device, out var cached)) return cached;
+
+        var path = GetRawDevicePath(device);
+        _rawDevicePaths[device] = path;
+        return path;
     }
 
     private static string GetRawDevicePath(nint device)

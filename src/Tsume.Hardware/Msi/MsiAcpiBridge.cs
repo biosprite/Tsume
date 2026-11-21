@@ -18,8 +18,10 @@ public sealed class MsiAcpiBridge(Board machine, MsiBoard? verified) : IMsiFirmw
     private const string PackageClass = "Package_32";
     private const int PackageSize = 32;
 
+    /// <summary>Serialises all <c>MSI_ACPI</c> WMI calls process-wide so device control and read-only discovery never overlap.</summary>
+    internal static readonly Lock AcpiCallGate = new();
+
     private readonly ManagementObject _acpi = new(Scope, Instance, null);
-    private readonly Lock _oneCallAtATime = new();
 
     /// <summary>Opens the bridge on this machine, verified or not: reads are allowed anywhere so the probe can learn a new board.</summary>
     public static MsiAcpiBridge Open()
@@ -59,7 +61,7 @@ public sealed class MsiAcpiBridge(Board machine, MsiBoard? verified) : IMsiFirmw
 
     private FirmwareReply Invoke(string method, byte[]? package)
     {
-        lock (_oneCallAtATime)
+        lock (AcpiCallGate)
         {
             using var output = package is null
                 ? _acpi.InvokeMethod(method, null, null)

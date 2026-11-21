@@ -456,8 +456,8 @@ public static class DiscoveryDiffEngine
         List<ValueChange> metaChanges,
         List<ProfileByteDiff> profileChanges)
     {
-        var mapBefore = (before?.VendorControllers ?? []).ToDictionary(c => $"{c.Protocol}:{c.VendorId:X4}:{c.ProductId:X4}", StringComparer.OrdinalIgnoreCase);
-        var mapAfter = (after?.VendorControllers ?? []).ToDictionary(c => $"{c.Protocol}:{c.VendorId:X4}:{c.ProductId:X4}", StringComparer.OrdinalIgnoreCase);
+        var mapBefore = IndexControllers(before?.VendorControllers);
+        var mapAfter = IndexControllers(after?.VendorControllers);
 
         foreach (var key in mapBefore.Keys.Union(mapAfter.Keys, StringComparer.OrdinalIgnoreCase))
         {
@@ -489,6 +489,23 @@ public static class DiscoveryDiffEngine
                 }
             }
         }
+    }
+
+    private static Dictionary<string, VendorControllerSnapshot> IndexControllers(IReadOnlyList<VendorControllerSnapshot>? list)
+    {
+        var map = new Dictionary<string, VendorControllerSnapshot>(StringComparer.OrdinalIgnoreCase);
+        if (list is null) return map;
+
+        foreach (var c in list)
+        {
+            var baseKey = $"{c.Protocol}:{c.VendorId:X4}:{c.ProductId:X4}";
+            var key = baseKey;
+            for (var n = 2; map.ContainsKey(key); n++)
+                key = $"{baseKey}#{n}";
+            map[key] = c;
+        }
+
+        return map;
     }
 
     private static string? FormatByte(byte? b) => b is { } v ? $"0x{v:X2} ({v})" : null;

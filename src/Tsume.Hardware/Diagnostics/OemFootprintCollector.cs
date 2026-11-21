@@ -173,7 +173,7 @@ public static class OemFootprintCollector
                         version = info.FileVersion;
                     }
                 }
-                catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException or UnauthorizedAccessException)
+                catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException or UnauthorizedAccessException or IOException)
                 {
                 }
 
@@ -248,8 +248,8 @@ public static class OemFootprintCollector
                     };
 
                     results.Add(new OemScheduledTaskInfo(
-                        taskPath,
-                        name,
+                        PrivacyScrubber.ScrubText(taskPath),
+                        PrivacyScrubber.ScrubText(name),
                         state,
                         PrivacyScrubber.ScrubText(actions)));
                 }
@@ -268,8 +268,18 @@ public static class OemFootprintCollector
         var parts = new List<string>();
         foreach (var act in actions)
         {
-            var exe = act["Execute"]?.ToString();
-            if (!string.IsNullOrWhiteSpace(exe)) parts.Add(exe);
+            using (act)
+            {
+                var exe = WmiProps.TryGetString(act, "Execute");
+                if (!string.IsNullOrWhiteSpace(exe))
+                {
+                    parts.Add(exe);
+                }
+                else if (WmiProps.TryGetString(act, "ClassId") is { Length: > 0 } clsid)
+                {
+                    parts.Add($"COM:{clsid}");
+                }
+            }
         }
 
         return string.Join("; ", parts);

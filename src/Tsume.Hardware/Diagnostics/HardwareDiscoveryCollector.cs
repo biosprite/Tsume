@@ -304,6 +304,8 @@ public static class HardwareDiscoveryCollector
 
         foreach (var ns in OemWmiNamespaces)
         {
+            if (results.Count >= 120) break;
+
             try
             {
                 var scope = new ManagementScope(ns);
@@ -325,8 +327,10 @@ public static class HardwareDiscoveryCollector
                         var methods = new List<WmiMethodInfo>();
                         foreach (MethodData m in cls.Methods)
                         {
-                            var inParams = m.InParameters?.Properties.Cast<PropertyData>().Select(p => $"{p.Type} {p.Name}").ToList() ?? [];
-                            var outParams = m.OutParameters?.Properties.Cast<PropertyData>().Select(p => $"{p.Type} {p.Name}").ToList() ?? [];
+                            using var inObj = m.InParameters;
+                            using var outObj = m.OutParameters;
+                            var inParams = inObj?.Properties.Cast<PropertyData>().Select(p => $"{p.Type} {p.Name}").ToList() ?? [];
+                            var outParams = outObj?.Properties.Cast<PropertyData>().Select(p => $"{p.Type} {p.Name}").ToList() ?? [];
                             methods.Add(new WmiMethodInfo(m.Name, inParams, outParams));
                         }
 
@@ -345,7 +349,7 @@ public static class HardwareDiscoveryCollector
                                 {
                                     using (inst)
                                     {
-                                        var instName = inst["InstanceName"]?.ToString() ?? inst.Path?.RelativePath ?? "default";
+                                        var instName = WmiProps.TryGetString(inst, "InstanceName") ?? inst.Path?.RelativePath ?? "default";
                                         instances.Add(PrivacyScrubber.ScrubDevicePath(instName));
                                         if (instances.Count >= 12) break;
                                     }
@@ -494,11 +498,13 @@ public static class HardwareDiscoveryCollector
         var energySamples = new List<EnergyMeterSample>();
         foreach (var name in em1.Keys.Union(emLoadEnd.Keys, StringComparer.OrdinalIgnoreCase).Order())
         {
-            em1.TryGetValue(name, out var r1);
-            em2.TryGetValue(name, out var r2);
-            emLoadStart.TryGetValue(name, out var r3);
-            emLoadEnd.TryGetValue(name, out var r4);
-            energySamples.Add(new EnergyMeterSample(name, ComputeWatts(r1, r2), ComputeWatts(r3, r4)));
+            var idleWatts = em1.TryGetValue(name, out var r1) && em2.TryGetValue(name, out var r2)
+                ? ComputeWatts(r1, r2)
+                : null;
+            var loadWatts = emLoadStart.TryGetValue(name, out var r3) && emLoadEnd.TryGetValue(name, out var r4)
+                ? ComputeWatts(r3, r4)
+                : null;
+            energySamples.Add(new EnergyMeterSample(name, idleWatts, loadWatts));
         }
 
         return new TimedDeltaSnapshot
@@ -618,7 +624,8 @@ public static class HardwareDiscoveryCollector
         }
     }
 
-    private static string Str(ManagementBaseObject row, string prop) => $"{row[prop]}".Trim();
+    private static string Str(ManagementBaseObject row, string prop) =>
+        (WmiProps.TryGet(row, prop, out var val) ? $"{val}" : "").Trim();
 
     private static string WindowsDescription()
     {

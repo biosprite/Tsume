@@ -75,6 +75,7 @@ public static class DeviceSupportExporter
     {
         var deadline = DateTime.UtcNow + maxWait;
         var reply = await helper.SendAsync(start, cancel);
+        var transientErrors = 0;
 
         while (reply.Ok && reply.Pending)
         {
@@ -83,6 +84,17 @@ public static class DeviceSupportExporter
 
             await Task.Delay(250, cancel);
             reply = await helper.SendAsync(poll, cancel);
+
+            // The helper serves one pipe connection at a time; under 100% CPU load or panel polling
+            // a single poll connect can transiently time out even while the scan is still running.
+            if (!reply.Ok && !reply.Unsupported && transientErrors < 3 && DateTime.UtcNow < deadline && !cancel.IsCancellationRequested)
+            {
+                transientErrors++;
+                reply = new HelperReply { Ok = true, Pending = true };
+                continue;
+            }
+
+            transientErrors = 0;
         }
 
         return reply;
@@ -256,12 +268,17 @@ public static class DeviceSupportExporter
             // 3. Separate MOF definitions per vendor WMI class
             if (bundle.Inventory?.WmiClasses is { Count: > 0 } classes)
             {
+                var usedMofEntries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var cls in classes)
                 {
                     if (string.IsNullOrWhiteSpace(cls.MofText)) continue;
                     var safeNs = SanitizeFileToken(cls.Namespace.Replace('\\', '_'));
                     var safeCls = SanitizeFileToken(cls.Name);
-                    AddText(archive, $"wmi-mof/{safeNs}__{safeCls}.mof", cls.MofText);
+                    var basePath = $"wmi-mof/{safeNs}__{safeCls}";
+                    var entryName = $"{basePath}.mof";
+                    for (var n = 2; !usedMofEntries.Add(entryName); n++)
+                        entryName = $"{basePath}-{n}.mof";
+                    AddText(archive, entryName, cls.MofText);
                 }
             }
 
@@ -385,11 +402,10 @@ public static class DeviceSupportExporter
                 Verb = "runas",
                 WindowStyle = ProcessWindowStyle.Hidden,
             });
-            if (proc is null) return null;
-            proc.WaitForExit(35_000);
+            if (proc is null || !proc.WaitForExit(35_000)) return null;
             return proc.ExitCode == 0 && File.Exists(tempFile) ? File.ReadAllText(tempFile) : null;
         }
-        catch (Exception error) when (error is Win32Exception or IOException or UnauthorizedAccessException)
+        catch (Exception error) when (error is Win32Exception or IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             return null;
         }

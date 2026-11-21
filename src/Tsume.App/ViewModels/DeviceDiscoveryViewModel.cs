@@ -34,8 +34,11 @@ public sealed class GuidedStepItem : Observable
 /// </summary>
 public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 {
+    private const int MaxButtonEvents = 5000;
+
     private readonly HelperClient _helper;
     private readonly Dispatcher _dispatcher;
+    private readonly CancellationTokenSource _lifetimeCts = new();
     private Func<nint> _getWindowHandle = () => 0;
 
     private ElevatedInventory? _inventory;
@@ -250,25 +253,29 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 
     public async Task RunQuickScanAsync()
     {
-        if (IsBusy) return;
+        if (IsBusy || _disposed) return;
+        if (IsWatching) StopWatchMode();
         IsBusy = true;
         ExportMessage = "";
         StatusBanner = IncludeTimedLoad
             ? "Scanning hardware, WMI/MOF, HID bus, OEM footprint and 3-second load delta (read-only)…"
             : "Scanning hardware, WMI/MOF, HID bus and OEM footprint (read-only)…";
 
+        var cancel = _lifetimeCts.Token;
         try
         {
-            var invTask = DeviceSupportExporter.CollectInventoryAsync(_helper, IncludeTimedLoad, AllowUacFallback);
-            var hidTask = Task.Run(() => HidInventory.CaptureAsync(readVendorProfiles: true));
+            var invTask = DeviceSupportExporter.CollectInventoryAsync(_helper, IncludeTimedLoad, AllowUacFallback, cancel);
+            var hidTask = Task.Run(() => HidInventory.CaptureAsync(readVendorProfiles: true), cancel);
             var display = DisplayInventory.Capture();
 
             await Task.WhenAll(invTask, hidTask);
+            if (_disposed) return;
 
             _inventory = await invTask;
             _hid = await hidTask;
             _display = display;
-            _envCheck = await DeviceSupportExporter.RunEnvironmentCheckAsync(_helper, _inventory, _hid);
+            _envCheck = await DeviceSupportExporter.RunEnvironmentCheckAsync(_helper, _inventory, _hid, cancel);
+            if (_disposed) return;
 
             AbsorbVolatileMask(_inventory);
 
@@ -278,10 +285,11 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
                 _baseline = new CombinedStateSnapshot
                 {
                     CapturedAtUtc = DateTimeOffset.UtcNow,
-                    Elevated = await DeviceSupportExporter.CollectFastStateAsync(_helper),
+                    Elevated = await DeviceSupportExporter.CollectFastStateAsync(_helper, cancel),
                     Hid = _hid,
                     CurrentRefreshHz = _display.CurrentRefreshHz,
                 };
+                if (_disposed) return;
             }
 
             PopulateQuickSummary();
@@ -290,64 +298,83 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
                 ? "Quick scan complete (elevated firmware + full HID/WMI/OEM capture)."
                 : "Quick scan complete (unelevated fallback — start TsumeHelper service for full EC/WMI reads).";
         }
+        catch (OperationCanceledException) when (_disposed)
+        {
+        }
         catch (Exception error)
         {
-            StatusBanner = $"Quick scan failed: {error.Message}";
+            if (!_disposed) StatusBanner = $"Quick scan failed: {error.Message}";
         }
         finally
         {
-            IsBusy = false;
-            UpdateSummaryPill();
-            RefreshPreview();
+            if (!_disposed)
+            {
+                IsBusy = false;
+                UpdateSummaryPill();
+                RefreshPreview();
+            }
         }
     }
 
     private async Task RunEnvCheckOnlyAsync()
     {
-        if (IsBusy) return;
+        if (IsBusy || _disposed) return;
+        if (IsWatching) StopWatchMode();
         IsBusy = true;
         StatusBanner = "Checking helper, CPU boost mode, OEM software, and live read-back…";
         try
         {
-            _envCheck = await DeviceSupportExporter.RunEnvironmentCheckAsync(_helper);
+            _envCheck = await DeviceSupportExporter.RunEnvironmentCheckAsync(_helper, cancel: _lifetimeCts.Token);
+            if (_disposed) return;
             StatusBanner = $"Environment check complete ({_envCheck.Findings.Count} checks). See Report Preview for details.";
             RefreshPreview();
             ActiveTabIndex = 3;
         }
+        catch (OperationCanceledException) when (_disposed)
+        {
+        }
         catch (Exception error)
         {
-            StatusBanner = $"Environment check failed: {error.Message}";
+            if (!_disposed) StatusBanner = $"Environment check failed: {error.Message}";
         }
         finally
         {
-            IsBusy = false;
-            UpdateSummaryPill();
+            if (!_disposed)
+            {
+                IsBusy = false;
+                UpdateSummaryPill();
+            }
         }
     }
 
     private async Task CaptureCurrentStepAsync()
     {
-        if (IsBusy || SelectedStep.IsButtonCaptureStep) return;
+        if (IsBusy || _disposed || SelectedStep.IsButtonCaptureStep) return;
+        if (IsWatching) StopWatchMode();
         IsBusy = true;
 
         var step = SelectedStep;
         var note = string.IsNullOrWhiteSpace(StepUserNote) ? null : StepUserNote.Trim();
         StatusBanner = $"Capturing {step.Title} (read-only)…";
 
+        var cancel = _lifetimeCts.Token;
         try
         {
             // Ensure full inventory ran at least once so volatile bytes & WMI classes are known.
             if (_inventory is null)
             {
-                _inventory = await DeviceSupportExporter.CollectInventoryAsync(_helper, includeTimedLoad: true, allowUacFallback: AllowUacFallback);
+                _inventory = await DeviceSupportExporter.CollectInventoryAsync(_helper, includeTimedLoad: true, allowUacFallback: AllowUacFallback, cancel);
+                if (_disposed) return;
                 AbsorbVolatileMask(_inventory);
                 _display ??= DisplayInventory.Capture();
-                _hid ??= await Task.Run(() => HidInventory.CaptureAsync(readVendorProfiles: true));
+                _hid ??= await Task.Run(() => HidInventory.CaptureAsync(readVendorProfiles: true), cancel);
+                if (_disposed) return;
                 PopulateQuickSummary();
                 HasQuickScan = true;
             }
 
-            var current = await DeviceSupportExporter.CaptureCombinedStateAsync(_helper, readVendorProfiles: true);
+            var current = await DeviceSupportExporter.CaptureCombinedStateAsync(_helper, readVendorProfiles: true, cancel);
+            if (_disposed) return;
             _hid = current.Hid ?? _hid;
 
             if (step.IsBaselineStep || _baseline is null)
@@ -391,14 +418,20 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 
             Notify(nameof(SelectedStepDiffPreview));
         }
+        catch (OperationCanceledException) when (_disposed)
+        {
+        }
         catch (Exception error)
         {
-            StatusBanner = $"Capture failed: {error.Message}";
+            if (!_disposed) StatusBanner = $"Capture failed: {error.Message}";
         }
         finally
         {
-            IsBusy = false;
-            UpdateSummaryPill();
+            if (!_disposed)
+            {
+                IsBusy = false;
+                UpdateSummaryPill();
+            }
         }
     }
 
@@ -432,6 +465,8 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 
     private void ToggleButtonListening()
     {
+        if (_disposed) return;
+        if (IsWatching) StopWatchMode();
         if (IsButtonListening) StopButtonListening();
         else StartButtonListening(SelectedButtonPrompt.Id);
     }
@@ -440,7 +475,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
     {
         StopButtonListening();
 
-        var wmiEvents = _inventory?.WmiClasses.Where(c => c.IsEvent).Select(c => c.Name);
+        var wmiEvents = _inventory?.WmiClasses.Where(c => c.IsEvent).Select(c => (c.Namespace, c.Name));
         var vendorPages = _hid?.Collections.Where(c => c.UsagePage >= 0xFF00).Select(c => c.UsagePage);
 
         _buttonSession = new ButtonCaptureSession(_dispatcher, _getWindowHandle(), wmiEvents, vendorPages)
@@ -467,6 +502,8 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         {
             if (_disposed) return;
 
+            if (_buttonEvents.Count >= MaxButtonEvents)
+                _buttonEvents.RemoveAt(0);
             _buttonEvents.Add(ev);
             var line = $"[+{ev.ElapsedMs,6} ms] [{ev.PromptId}] [{ev.Source}] {ev.Summary}";
 
@@ -493,6 +530,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 
     private async Task ToggleWatchModeAsync()
     {
+        if (_disposed) return;
         if (IsWatching)
         {
             StopWatchMode();
@@ -503,24 +541,28 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         IsBusy = true;
         WatchStatusText = "Preparing watch baseline…";
 
+        var cancel = _lifetimeCts.Token;
         try
         {
             if (_inventory is null)
             {
-                _inventory = await DeviceSupportExporter.CollectInventoryAsync(_helper, includeTimedLoad: true, allowUacFallback: AllowUacFallback);
+                _inventory = await DeviceSupportExporter.CollectInventoryAsync(_helper, includeTimedLoad: true, allowUacFallback: AllowUacFallback, cancel);
+                if (_disposed) return;
                 AbsorbVolatileMask(_inventory);
                 _display ??= DisplayInventory.Capture();
-                _hid ??= await Task.Run(() => HidInventory.CaptureAsync(readVendorProfiles: true));
+                _hid ??= await Task.Run(() => HidInventory.CaptureAsync(readVendorProfiles: true), cancel);
+                if (_disposed) return;
                 PopulateQuickSummary();
                 HasQuickScan = true;
             }
 
-            _watchPrevious = await DeviceSupportExporter.CaptureCombinedStateAsync(_helper, readVendorProfiles: true);
+            _watchPrevious = await DeviceSupportExporter.CaptureCombinedStateAsync(_helper, readVendorProfiles: true, cancel);
+            if (_disposed) return;
             _baseline ??= _watchPrevious;
 
             StartButtonListening("live_watch");
 
-            _watchCts = new CancellationTokenSource();
+            _watchCts = CancellationTokenSource.CreateLinkedTokenSource(cancel);
             IsWatching = true;
             WatchStatusText = "Watching live (polling read-only state every 600 ms + capturing all buttons)…";
             StatusBanner = "Live Watch Mode active. Toggle modes/fans/charge/RGB in your OEM app or press hardware buttons.";
@@ -529,10 +571,16 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             IsBusy = false;
             _ = WatchLoopAsync(_watchCts.Token);
         }
+        catch (OperationCanceledException) when (_disposed)
+        {
+        }
         catch (Exception error)
         {
-            IsBusy = false;
-            WatchStatusText = $"Could not start Watch Mode: {error.Message}";
+            if (!_disposed)
+            {
+                IsBusy = false;
+                WatchStatusText = $"Could not start Watch Mode: {error.Message}";
+            }
         }
     }
 
@@ -544,6 +592,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             {
                 await Task.Delay(600, cancel);
                 var current = await DeviceSupportExporter.CaptureCombinedStateAsync(_helper, readVendorProfiles: true, cancel);
+                if (cancel.IsCancellationRequested || _disposed) break;
 
                 if (_watchPrevious is not null)
                 {
@@ -563,12 +612,13 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
                         _watchPrevious = current;
 
                         var summary = FormatSingleLineDiff(diff);
-                        _dispatcher.Invoke(() =>
+                        await _dispatcher.InvokeAsync(() =>
                         {
+                            if (_disposed) return;
                             LiveFeed.Insert(0, $"[{DateTime.Now:HH:mm:ss}] STATE DIFF: {summary}");
                             if (LiveFeed.Count > 300) LiveFeed.RemoveAt(LiveFeed.Count - 1);
                             UpdateSummaryPill();
-                        });
+                        }, DispatcherPriority.Normal, cancel);
                     }
                 }
             }
@@ -585,11 +635,16 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 
     private void StopWatchMode()
     {
+        var wasWatching = IsWatching || _watchCts is not null;
         _watchCts?.Cancel();
         _watchCts?.Dispose();
         _watchCts = null;
+        if (!wasWatching) return;
+
         StopButtonListening();
         IsWatching = false;
+        if (_disposed) return;
+
         WatchStatusText = $"Stopped. Recorded {_watchDiffs.Count} state diff(s) and {_buttonEvents.Count} button event(s).";
         StatusBanner = "Live Watch Mode stopped. Ready to export support bundle.";
         LiveFeed.Insert(0, $"[{DateTime.Now:HH:mm:ss}] Watch Mode stopped.");
@@ -604,29 +659,34 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 
     private async Task ExportBundleAsync()
     {
-        if (IsBusy) return;
+        if (IsBusy || _disposed) return;
         if (IsWatching) StopWatchMode();
         if (IsButtonListening) StopButtonListening();
 
         IsBusy = true;
         ExportMessage = "Packaging privacy-scrubbed support bundle…";
 
+        var cancel = _lifetimeCts.Token;
         try
         {
             if (_inventory is null)
             {
-                _inventory = await DeviceSupportExporter.CollectInventoryAsync(_helper, includeTimedLoad: true, allowUacFallback: AllowUacFallback);
+                _inventory = await DeviceSupportExporter.CollectInventoryAsync(_helper, includeTimedLoad: true, allowUacFallback: AllowUacFallback, cancel);
+                if (_disposed) return;
                 AbsorbVolatileMask(_inventory);
                 PopulateQuickSummary();
                 HasQuickScan = true;
             }
 
-            _hid ??= await Task.Run(() => HidInventory.CaptureAsync(readVendorProfiles: true));
+            _hid ??= await Task.Run(() => HidInventory.CaptureAsync(readVendorProfiles: true), cancel);
+            if (_disposed) return;
             _display ??= DisplayInventory.Capture();
-            _envCheck ??= await DeviceSupportExporter.RunEnvironmentCheckAsync(_helper, _inventory, _hid);
+            _envCheck ??= await DeviceSupportExporter.RunEnvironmentCheckAsync(_helper, _inventory, _hid, cancel);
+            if (_disposed) return;
 
             var bundle = BuildCurrentBundle();
-            var zipPath = await DeviceSupportExporter.ExportBundleAsync(_helper, bundle);
+            var zipPath = await DeviceSupportExporter.ExportBundleAsync(_helper, bundle, cancel);
+            if (_disposed) return;
 
             LogBundle.CopyFileToClipboard(zipPath);
             LogBundle.RevealInExplorer(zipPath);
@@ -635,15 +695,24 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             StatusBanner = $"Exported: {zipPath}";
             RefreshPreview();
         }
+        catch (OperationCanceledException) when (_disposed)
+        {
+        }
         catch (Exception error)
         {
-            ExportMessage = $"Export failed: {error.Message}";
-            StatusBanner = ExportMessage;
+            if (!_disposed)
+            {
+                ExportMessage = $"Export failed: {error.Message}";
+                StatusBanner = ExportMessage;
+            }
         }
         finally
         {
-            IsBusy = false;
-            UpdateSummaryPill();
+            if (!_disposed)
+            {
+                IsBusy = false;
+                UpdateSummaryPill();
+            }
         }
     }
 
@@ -882,8 +951,10 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _lifetimeCts.Cancel();
         StopWatchMode();
         StopButtonListening();
+        _lifetimeCts.Dispose();
     }
 }
 

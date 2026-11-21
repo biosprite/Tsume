@@ -2,8 +2,39 @@ using System.Globalization;
 using System.Management;
 using System.Text;
 using Tsume.Core.Diagnostics;
+using Tsume.Hardware.Msi;
 
 namespace Tsume.Hardware.Diagnostics;
+
+/// <summary>Safe property lookup for <see cref="ManagementBaseObject"/> (its indexer throws <see cref="ManagementException"/> when a property is absent).</summary>
+internal static class WmiProps
+{
+    public static bool TryGet(ManagementBaseObject? obj, string name, out object? value)
+    {
+        value = null;
+        if (obj is null) return false;
+
+        try
+        {
+            foreach (PropertyData prop in obj.Properties)
+            {
+                if (prop.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = prop.Value;
+                    return true;
+                }
+            }
+        }
+        catch (Exception error) when (error is ManagementException or System.Runtime.InteropServices.COMException)
+        {
+        }
+
+        return false;
+    }
+
+    public static string? TryGetString(ManagementBaseObject? obj, string name) =>
+        TryGet(obj, name, out var val) ? val?.ToString() : null;
+}
 
 /// <summary>
 /// Strictly read-only OEM firmware inspector. Implementations must NEVER invoke write/setter WMI methods
@@ -64,7 +95,7 @@ internal sealed class MsiReadProber : IFirmwareReadProber
             using var results = search.Get();
             foreach (ManagementObject obj in results)
             {
-                var name = obj["InstanceName"]?.ToString() ?? obj.Path?.RelativePath ?? "MSI_ACPI";
+                var name = WmiProps.TryGetString(obj, "InstanceName") ?? obj.Path?.RelativePath ?? "MSI_ACPI";
                 return new MsiReadProber(obj, name);
             }
         }
@@ -87,8 +118,11 @@ internal sealed class MsiReadProber : IFirmwareReadProber
         var ec = Call("Get_EC", selector: null);
         if (ec.Ok)
         {
-            fwText = Encoding.ASCII.GetString(ec.Data, 1, Math.Min(28, ec.Data.Length - 1)).TrimEnd('\0', ' ');
-            values["Get_EC"] = fwText;
+            if (ec.Data.Length > 1)
+            {
+                fwText = Encoding.ASCII.GetString(ec.Data, 1, Math.Min(28, ec.Data.Length - 1)).TrimEnd('\0', ' ');
+                values["Get_EC"] = fwText;
+            }
             tables["Get_EC_raw"] = Hex(ec.Data, 31);
         }
 
@@ -174,12 +208,18 @@ internal sealed class MsiReadProber : IFirmwareReadProber
     {
         try
         {
-            using var output = selector is null
-                ? _acpi.InvokeMethod(method, null, null)
-                : InvokeWithPackage(method, selector.Value);
+            lock (MsiAcpiBridge.AcpiCallGate)
+            {
+                using var output = selector is null
+                    ? _acpi.InvokeMethod(method, null, null)
+                    : InvokeWithPackage(method, selector.Value);
 
-            if (output?["Data"] is ManagementBaseObject { } data && data["Bytes"] is byte[] { Length: > 1 } bytes)
-                return (bytes[0] != 0, bytes[1..]);
+                if (WmiProps.TryGet(output, "Data", out var dataObj)
+                    && dataObj is ManagementBaseObject data
+                    && WmiProps.TryGet(data, "Bytes", out var bytesObj)
+                    && bytesObj is byte[] { Length: > 1 } bytes)
+                    return (bytes[0] != 0, bytes[1..]);
+            }
         }
         catch (Exception error) when (error is ManagementException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException)
         {
@@ -259,7 +299,7 @@ internal sealed class AsusReadProber : IFirmwareReadProber
                 using var results = search.Get();
                 foreach (ManagementObject obj in results)
                 {
-                    var name = obj["InstanceName"]?.ToString() ?? className;
+                    var name = WmiProps.TryGetString(obj, "InstanceName") ?? obj.Path?.RelativePath ?? className;
                     return new AsusReadProber(obj, $"{className}:{name}");
                 }
             }
@@ -304,9 +344,16 @@ internal sealed class AsusReadProber : IFirmwareReadProber
             using var input = _acpi.GetMethodParameters("DSTS");
             input["Device_ID"] = deviceId;
             using var output = _acpi.InvokeMethod("DSTS", input, null);
-            if (output?["device_status"] is uint status) return status;
-            if (output?["device_status"] is int signed) return unchecked((uint)signed);
-            if (output?["Return"] is uint ret) return ret;
+            if (WmiProps.TryGet(output, "device_status", out var devStatus))
+            {
+                if (devStatus is uint status) return status;
+                if (devStatus is int signed) return unchecked((uint)signed);
+            }
+            if (WmiProps.TryGet(output, "Return", out var retVal))
+            {
+                if (retVal is uint ret) return ret;
+                if (retVal is int retSigned) return unchecked((uint)retSigned);
+            }
         }
         catch (Exception error) when (error is ManagementException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException)
         {
@@ -359,7 +406,11 @@ internal sealed class LenovoReadProber : IFirmwareReadProber
         var other = FirstInstance("LENOVO_OTHER_METHOD");
         if (gz is null && other is null) return null;
 
-        var name = gz?["InstanceName"]?.ToString() ?? other?["InstanceName"]?.ToString() ?? "LENOVO_WMI";
+        var name = WmiProps.TryGetString(gz, "InstanceName")
+            ?? WmiProps.TryGetString(other, "InstanceName")
+            ?? gz?.Path?.RelativePath
+            ?? other?.Path?.RelativePath
+            ?? "LENOVO_WMI";
         return new LenovoReadProber(gz, other, name);
     }
 
@@ -413,7 +464,20 @@ internal sealed class LenovoReadProber : IFirmwareReadProber
             {
                 using var output = _gameZone.InvokeMethod(method, null, null);
                 if (output is null) continue;
-                var val = output["Data"] ?? output["ReturnValue"];
+                object? val = null;
+                if (!WmiProps.TryGet(output, "Data", out val) || val is null)
+                    WmiProps.TryGet(output, "ReturnValue", out val);
+                if (val is null)
+                {
+                    foreach (PropertyData prop in output.Properties)
+                    {
+                        if (!prop.Name.StartsWith("__", StringComparison.Ordinal) && prop.Value is not null)
+                        {
+                            val = prop.Value;
+                            break;
+                        }
+                    }
+                }
                 if (val is not null) values[$"GameZone.{method}"] = $"{val}";
             }
             catch (Exception error) when (error is ManagementException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException)
@@ -486,8 +550,11 @@ internal sealed class LenovoReadProber : IFirmwareReadProber
             using var input = _otherMethod.GetMethodParameters("GetFeatureValue");
             input["IDs"] = id;
             using var output = _otherMethod.InvokeMethod("GetFeatureValue", input, null);
-            if (output?["Value"] is uint value) return value;
-            if (output?["Value"] is int signed) return unchecked((uint)signed);
+            if (WmiProps.TryGet(output, "Value", out var valObj))
+            {
+                if (valObj is uint value) return value;
+                if (valObj is int signed) return unchecked((uint)signed);
+            }
         }
         catch (Exception error) when (error is ManagementException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException)
         {

@@ -40,7 +40,7 @@ internal static unsafe partial class Hid
         // The list can grow between asking its size and reading it; try again if so.
         for (var attempt = 0; attempt < 3; attempt++)
         {
-            if (CM_Get_Device_Interface_List_Size(out var length, interfaceGuid, 0, CM_GET_DEVICE_INTERFACE_LIST_PRESENT) != CR_SUCCESS)
+            if (CM_Get_Device_Interface_List_Size(out var length, interfaceGuid, 0, CM_GET_DEVICE_INTERFACE_LIST_PRESENT) != CR_SUCCESS || length <= 1)
                 return [];
 
             var buffer = new char[length];

@@ -67,10 +67,15 @@ public static partial class PrivacyScrubber
             return string.Join('#', parts);
         }
 
-        // PNP ID: PCI\VEN_8086&DEV_64A0&SUBSYS_1T911462&REV_04\3&11583659&0&10
+        // ACPI device/WMI instance IDs (e.g. ACPI\PNP0C14\0_0, ACPI\ThermalZone\TZ00_0, ACPI\INTC10D5\SEN2)
+        // are static DSDT/firmware identifiers, never per-unit serials — keep them intact so thermal zones
+        // and WMI bridges remain distinguishable.
         var slashParts = cleaned.Split('\\');
         if (slashParts.Length >= 3)
         {
+            if (slashParts[0].Equals("ACPI", StringComparison.OrdinalIgnoreCase))
+                return ScrubText(cleaned);
+
             slashParts[2] = "<INSTANCE>";
             return string.Join('\\', slashParts);
         }
@@ -106,6 +111,6 @@ public static partial class PrivacyScrubber
         return false;
     }
 
-    [GeneratedRegex(@"([A-Za-z]:\\Users\\)([^\\/\r\n]+)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"([A-Za-z]:\\Users\\)([^\\/\r\n""'<>|]+)", RegexOptions.IgnoreCase)]
     private static partial Regex UsersPathRegex();
 }

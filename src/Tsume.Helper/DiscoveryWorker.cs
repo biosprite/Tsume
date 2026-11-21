@@ -45,8 +45,11 @@ internal static class DiscoveryWorker
                 if (_running)
                     return new HelperReply { Ok = true, Pending = true };
 
-                if (_payload is not null && DateTime.UtcNow - _completedUtc > ResultLifetime)
+                if ((_payload is not null || _error is not null) && DateTime.UtcNow - _completedUtc > ResultLifetime)
+                {
                     _payload = null;
+                    _error = null;
+                }
 
                 if (pollOnly)
                 {
