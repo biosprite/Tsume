@@ -12,6 +12,9 @@ namespace Tsume.App.ViewModels;
 /// </summary>
 public sealed class ChargeLimitViewModel : Observable
 {
+    /// <summary>MSI's EC resumes charging ten points below the chosen charge limit.</summary>
+    private const int ResumeGap = 10;
+
     private readonly HelperClient _helper;
 
     /// <summary>Counts choices made here, so a reply requested before a choice cannot undo it.</summary>
@@ -39,6 +42,7 @@ public sealed class ChargeLimitViewModel : Observable
             Notify();
             Notify(nameof(Segments));
             Notify(nameof(Card));
+            NotifyStatus();
         }
     }
 
@@ -55,7 +59,7 @@ public sealed class ChargeLimitViewModel : Observable
         set
         {
             if (!Set(ref field, value)) return;
-            Notify(nameof(Detail));
+            NotifyStatus();
 
             if (_absorbing || value < 0 || value >= Choices.Count) return;
 
@@ -72,7 +76,7 @@ public sealed class ChargeLimitViewModel : Observable
         get;
         private set
         {
-            if (Set(ref field, value)) Notify(nameof(Detail));
+            if (Set(ref field, value)) NotifyStatus();
         }
     }
 
@@ -96,11 +100,23 @@ public sealed class ChargeLimitViewModel : Observable
         }
     }
 
+    /// <summary>True while plugged in with the battery resting, to explain the firmware's 10-point resume rule.</summary>
+    public bool ShowRestingHint => IsAvailable && _battery is { PluggedIn: true, Flow: Battery.Flow.Resting };
+
+    public string RestingHint => Strings.ChargeRestingHint(Math.Max(Limit - ResumeGap, 0));
+
     /// <summary>Re-reads the battery. Cheap; called once a second while Settings is open.</summary>
     public void RefreshStatus()
     {
         _battery = Battery.Read();
+        NotifyStatus();
+    }
+
+    private void NotifyStatus()
+    {
         Notify(nameof(Detail));
+        Notify(nameof(ShowRestingHint));
+        Notify(nameof(RestingHint));
     }
 
     /// <summary>Reads the limit in force. Called each time Settings opens.</summary>

@@ -570,6 +570,14 @@
     <Setter Property="Margin" Value="0,0,0,10" />
   </Style>
 
+  <!-- Compact info banner: takes no focus. Set live accent Background/BorderBrush on the element. -->
+  <Style x:Key="Card.Info" TargetType="Border">
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="14" />
+    <Setter Property="Padding" Value="14,8,14,8" />
+    <Setter Property="Margin" Value="0,0,0,8" />
+  </Style>
+
   <!-- Icon button: round, icon only, sized for touch. -->
   <Style x:Key="Tile.Icon" TargetType="controls:Tile">
     <Setter Property="Width" Value="46" />

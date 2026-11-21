@@ -122,20 +122,24 @@
     <value>{0} %</value>
     <comment>{0} = a whole number of percent</comment>
   </data>
-  <data name="ChargeLimitUnavailable" xml:space="preserve"><value>Unavailable  ·  helper not found</value></data>
+  <data name="ChargeLimitUnavailable" xml:space="preserve"><value>Helper not found</value></data>
   <data name="ChargeLimitFull" xml:space="preserve"><value>Charges to full</value></data>
   <data name="ChargeLimitStops" xml:space="preserve">
-    <value>Stops charging at {0} %</value>
+    <value>Stops charging at {0}%</value>
     <comment>{0} = the limit, in percent</comment>
   </data>
-  <data name="ChargeResting" xml:space="preserve"><value>Running from the charger  ·  battery resting</value></data>
+  <data name="ChargeResting" xml:space="preserve"><value>Running on charger</value></data>
+  <data name="ChargeRestingHint" xml:space="preserve">
+    <value>Battery resting. Charging resumes below {0}%.</value>
+    <comment>{0} = the firmware's resume threshold (10 points below the charge limit)</comment>
+  </data>
   <data name="ChargeCharging" xml:space="preserve">
-    <value>Charging to {0} %</value>
+    <value>Charging to {0}%</value>
     <comment>{0} = the limit, in percent</comment>
   </data>
-  <data name="ChargeDraining" xml:space="preserve"><value>Plugged in  ·  battery in use</value></data>
+  <data name="ChargeDraining" xml:space="preserve"><value>Plugged in, using battery</value></data>
   <data name="ChargeOnBattery" xml:space="preserve">
-    <value>On battery  ·  will charge to {0} %</value>
+    <value>On battery, charges to {0}%</value>
     <comment>{0} = the limit, in percent</comment>
   </data>
 

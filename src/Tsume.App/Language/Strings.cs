@@ -83,6 +83,7 @@ public static class Strings
     public static string ChargeLimitFull => Find();
     public static string ChargeLimitStops(int percent) => Fill(Find(), percent);
     public static string ChargeResting => Find();
+    public static string ChargeRestingHint(int resumeBelow) => Fill(Find(), resumeBelow);
     public static string ChargeCharging(int percent) => Fill(Find(), percent);
     public static string ChargeDraining => Find();
     public static string ChargeOnBattery(int percent) => Fill(Find(), percent);

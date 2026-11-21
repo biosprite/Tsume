@@ -76,6 +76,22 @@
             </StackPanel>
           </Border>
 
+          <!-- Compact info banner explaining why a plugged-in battery rests until 10% below the limit. -->
+          <controls:Reveal IsOpen="{Binding ShowRestingHint}">
+            <Border Style="{StaticResource Card.Info}"
+                    Background="{x:Static theme:Accent.Tint}"
+                    BorderBrush="{x:Static theme:Accent.Wash}">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Icon}" FontSize="14"
+                           Foreground="{x:Static theme:Accent.Brush}" VerticalAlignment="Center" Margin="0,0,10,0"
+                           Text="{x:Static theme:Glyphs.Info}" />
+                <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
+                           TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center"
+                           Text="{Binding RestingHint}" />
+              </DockPanel>
+            </Border>
+          </controls:Reveal>
+
         </StackPanel>
 
         <!-- Hidden on a machine whose power limits cannot be set. -->

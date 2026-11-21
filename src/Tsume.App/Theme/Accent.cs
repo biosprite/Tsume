@@ -12,14 +12,20 @@ public static class Accent
     /// <summary>The accent at low opacity: slider fills and tinted surfaces.</summary>
     public static SolidColorBrush Wash { get; } = new(Faded(ColourScheme.Default.AccentColour));
 
+    /// <summary>The accent at subtle opacity: compact info banners.</summary>
+    public static SolidColorBrush Tint { get; } = new(Tinted(ColourScheme.Default.AccentColour));
+
     /// <summary>Recolours every accented element, instantly or by a cross-fade.</summary>
     public static void MoveTo(Color colour, bool animate)
     {
         Brush.BeginAnimation(SolidColorBrush.ColorProperty, Fade(colour, animate));
         Wash.BeginAnimation(SolidColorBrush.ColorProperty, Fade(Faded(colour), animate));
+        Tint.BeginAnimation(SolidColorBrush.ColorProperty, Fade(Tinted(colour), animate));
     }
 
     private static Color Faded(Color colour) => Color.FromArgb(0x52, colour.R, colour.G, colour.B);
+
+    private static Color Tinted(Color colour) => Color.FromArgb(0x18, colour.R, colour.G, colour.B);
 
     private static ColorAnimation Fade(Color to, bool animate) =>
         new(to, animate ? Motion.Smooth : TimeSpan.Zero) { EasingFunction = Motion.Settle };
