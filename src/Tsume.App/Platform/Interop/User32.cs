@@ -24,6 +24,10 @@ internal static partial class User32
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
 
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetWindowBand(nint window, out uint band);
+
     public const int SM_CYSCREEN = 1;
 
     /// <summary>With <see cref="SM_CYSCREEN"/>: the primary screen's height in real pixels.</summary>
@@ -117,6 +121,7 @@ internal static partial class User32
     public const ushort VK_INSERT = 0x2D;
     public const ushort VK_LWIN = 0x5B;
     public const ushort VK_D = 0x44;
+    public const ushort VK_F11 = 0x7A;
 
     private const uint INPUT_KEYBOARD = 1;
     private const uint KEYEVENTF_KEYUP = 0x0002;

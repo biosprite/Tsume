@@ -103,6 +103,8 @@ public partial class OverlayWindow
         _retakes = _settleTicks = 0;
         _settling.Start();
 
+        // Always activate on a real open, even if an early-boot WarmUp() has not finished hiding yet.
+        ShowActivated = true;
         Show();
         RaiseAboveEverything();
         _tookAtOnce = ForegroundWindow.Take(this);
@@ -126,6 +128,7 @@ public partial class OverlayWindow
     public void WarmUp()
     {
         if (IsOpen || IsVisible) return;
+        if (ScreenHeight() <= 0) return;   // display not ready yet (e.g. early logon)
 
         PlaceOnScreen();
         _panel.OnOpening();
@@ -140,14 +143,26 @@ public partial class OverlayWindow
         // Run the entrance animation too, with the stage left transparent.
         Motion.AfterFrames(2, () => { if (!IsOpen) MoveIn(); });
 
-        Motion.AfterFrames(8, () =>
+        var finished = false;
+        var fallback = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+
+        void Finish()
         {
+            if (finished) return;
+            finished = true;
+            fallback.Stop();
+
             ShowActivated = true;
             if (IsOpen) return;   // opened for real in the meantime
 
             Hide();
             _panel.OnClosed();
-        });
+        }
+
+        // During early FSE/logon transitions CompositionTarget.Rendering may not tick yet; the fallback guarantees cleanup.
+        fallback.Tick += (_, _) => Finish();
+        fallback.Start();
+        Motion.AfterFrames(8, Finish);
     }
 
     /// <summary>
@@ -174,6 +189,8 @@ public partial class OverlayWindow
     /// </summary>
     private void FitTo(double height)
     {
+        if (height <= 0) return;
+
         var factor = height / DesignHeight;
 
         Width = DesignWidth * factor;
@@ -239,11 +256,12 @@ public partial class OverlayWindow
         if (!IsOpen || (_tookAtOnce && _retakes == 0)) return;
 
         var held = ForegroundWindow.Has(this);
+        var band = User32.GetWindowBand(new WindowInteropHelper(this).Handle, out var zbid) ? zbid.ToString() : "?";
         FocusLog.Write(
             $"over {ForegroundWindow.Describe(_wasInFront)}: " +
             $"{(_tookAtOnce ? "in front at once" : "not in front at first")}, taken again {_retakes} times, " +
             (held ? "in front in the end" : $"NOT in front in the end - {ForegroundWindow.Describe(ForegroundWindow.Current)} is") +
-            $"; uiaccess {(Platform.UiAccess.IsGranted ? "yes" : "no")}");
+            $"; uiaccess {(Platform.UiAccess.IsGranted ? "yes" : "no")}, band {band}, fse {(Platform.FullScreenExperience.IsActive ? "yes" : "no")}");
     }
 
     /// <summary>The panel glides in; header, sections and footer fade up one after another.</summary>
@@ -368,6 +386,7 @@ public partial class OverlayWindow
         };
 
         if (!IsOpen || key == Key.None || PresentationSource.FromVisual(this) is not { } source) return;
+        if (Keyboard.FocusedElement is null) FocusFirstControl();
 
         Send(Keyboard.PreviewKeyDownEvent);
         Send(Keyboard.PreviewKeyUpEvent);

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
+using Microsoft.Win32;
 using Tsume.App.Input;
 using Tsume.App.Platform;
 using Tsume.App.Shell;
@@ -58,6 +59,10 @@ public partial class App
         base.OnStartup(e);
 
         // An unhandled fault must not kill the panel: log it to %LOCALAPPDATA%\Tsume\errors.log and carry on.
+        AppDomain.CurrentDomain.UnhandledException += (_, fault) =>
+        {
+            if (fault.ExceptionObject is not null) Errors.Write(fault.ExceptionObject.ToString()!);
+        };
         DispatcherUnhandledException += (_, fault) =>
         {
             Errors.Write(fault.Exception.ToString());
@@ -158,6 +163,8 @@ public partial class App
     /// Asks the helper to start Tsume again with UIAccess, passing on only the start-up intentions that matter.
     /// Returns false — and the panel carries on without UIAccess, as before — when the helper is absent or refuses.
     /// Runs before the dispatcher, so a short blocking wait on the pipe is fine, as long as it is not on this thread.
+    /// On a background sign-in launch (e.g. Explorer's Run entry during Xbox FSE boot) while the helper service is
+    /// installed, waits briefly for the service's pipe to come up so Tsume does not settle for a non-UIAccess copy.
     /// </summary>
     private static bool StartAgainWithUiAccess(string[] args)
     {
@@ -168,14 +175,40 @@ public partial class App
             OptiScaler: args.Contains(OpenOptiScalerSwitch),
             Stay: args.Contains(StayOpenSwitch));
 
+        var attempts = request.Background && HelperServiceInstalled() ? 20 : 1;
+
         try
         {
             // On the thread pool: blocking here while the client resumed on this thread's dispatcher would hang for good.
-            return Task.Run(() => new HelperClient().SendAsync(request)).GetAwaiter().GetResult().Ok;
+            return Task.Run(async () =>
+            {
+                var client = new HelperClient();
+                for (var attempt = 1; attempt <= attempts; attempt++)
+                {
+                    var reply = await client.SendAsync(request);
+                    if (reply.Ok) return true;
+                    if (attempt < attempts) await Task.Delay(500);
+                }
+
+                return false;
+            }).GetAwaiter().GetResult();
         }
         catch (Exception error)
         {
             Errors.Write(error.ToString());
+            return false;
+        }
+    }
+
+    private static bool HelperServiceInstalled()
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\TsumeHelper");
+            return key is not null;
+        }
+        catch (Exception error) when (error is System.Security.SecurityException or UnauthorizedAccessException)
+        {
             return false;
         }
     }

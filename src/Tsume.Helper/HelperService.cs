@@ -49,13 +49,20 @@ public sealed class HelperService : ServiceBase
         Task.Run(() => PanelStarter.StartFor(PanelStarter.ScreenSession, "start-up"));
     }
 
-    /// <summary>Starts the panel as someone signs in, ahead of Windows' own start-up apps.</summary>
+    /// <summary>Starts the panel as someone signs in or unlocks, ahead of Windows' own start-up apps.</summary>
     protected override void OnSessionChange(SessionChangeDescription change)
     {
-        if (change.Reason != SessionChangeReason.SessionLogon) return;
+        var occasion = change.Reason switch
+        {
+            SessionChangeReason.SessionLogon => "sign-in",
+            SessionChangeReason.SessionUnlock => "unlock",
+            SessionChangeReason.ConsoleConnect => "console",
+            _ => null,
+        };
+        if (occasion is null) return;
 
         var session = change.SessionId;
-        Task.Run(() => PanelStarter.StartFor(session, "sign-in"));
+        Task.Run(() => PanelStarter.StartFor(session, occasion));
     }
 
     protected override void OnStop() => StopServing();

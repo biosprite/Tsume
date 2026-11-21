@@ -11,8 +11,15 @@ public static class QuickActions
     /// <summary>Full-screen capture into Pictures\Screenshots (Win + PrtSc).</summary>
     public static void Screenshot() => User32.SendChord(User32.VK_LWIN, User32.VK_SNAPSHOT);
 
-    /// <summary>Minimise or restore every window (Win + D).</summary>
-    public static void ShowDesktop() => User32.SendChord(User32.VK_LWIN, User32.VK_D);
+    /// <summary>
+    /// Minimise or restore every window (Win + D), or exit Xbox Full Screen Experience to the desktop (Win + F11)
+    /// when FSE is active and there is no desktop raised behind the current app.
+    /// </summary>
+    public static void ShowDesktop()
+    {
+        if (FullScreenExperience.IsActive) User32.SendChord(User32.VK_LWIN, User32.VK_F11);
+        else User32.SendChord(User32.VK_LWIN, User32.VK_D);
+    }
 
     public static void TaskManager() => Launch("taskmgr.exe");
 

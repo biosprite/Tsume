@@ -27,6 +27,7 @@
       replace each other either way round. An older version is still refused.
     -->
     <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  Schedule="afterInstallInitialize"
                   DowngradeErrorMessage="A newer version of Tsume is already installed." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 

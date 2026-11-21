@@ -64,6 +64,12 @@ public sealed class Gamepad : IDisposable
     /// <summary>Buttons held on any connected controller, with the left stick folded into the d-pad.</summary>
     private static PadButton ReadButtons()
     {
+        var buttons = ReadXInput();
+        return buttons != PadButton.None ? buttons : ReadWinMm();
+    }
+
+    private static PadButton ReadXInput()
+    {
         var buttons = PadButton.None;
 
         for (uint user = 0; user < XInput.MaxControllers; user++)
@@ -76,6 +82,45 @@ public sealed class Gamepad : IDisposable
             if (state.ThumbLY < -StickThreshold) buttons |= PadButton.Down;
             if (state.ThumbLX < -StickThreshold) buttons |= PadButton.Left;
             if (state.ThumbLX > StickThreshold) buttons |= PadButton.Right;
+        }
+
+        return buttons;
+    }
+
+    /// <summary>
+    /// Fallback when <c>xinput1_4.dll</c> returns empty state (for example under Xbox FSE's <c>InputHost</c>
+    /// gamepad interception). Reads the controller's standard HID gamepad interface via <c>winmm.dll</c>.
+    /// </summary>
+    private static PadButton ReadWinMm()
+    {
+        const uint center = 32_767;
+        const uint threshold = 16_000;
+
+        var buttons = PadButton.None;
+        var info = WinMm.JOYINFOEX.Create();
+
+        for (uint id = 0; id < WinMm.MaxControllers; id++)
+        {
+            if (WinMm.joyGetPosEx(id, ref info) != WinMm.JOYERR_NOERROR) continue;
+
+            if ((info.Buttons & WinMm.ButtonA) != 0) buttons |= PadButton.A;
+            if ((info.Buttons & WinMm.ButtonB) != 0) buttons |= PadButton.B;
+            if ((info.Buttons & WinMm.ButtonView) != 0) buttons |= PadButton.View;
+            if ((info.Buttons & WinMm.ButtonMenu) != 0) buttons |= PadButton.Menu;
+
+            if (info.Pov < WinMm.JOY_POVCENTERED)
+            {
+                if (info.Pov <= 4500 || info.Pov >= 31500) buttons |= PadButton.Up;
+                if (info.Pov is >= 4500 and <= 13500) buttons |= PadButton.Right;
+                if (info.Pov is >= 13500 and <= 22500) buttons |= PadButton.Down;
+                if (info.Pov is >= 22500 and <= 31500) buttons |= PadButton.Left;
+            }
+
+            // HID Y axis has 0 at top and 65535 at bottom.
+            if (info.Y < center - threshold) buttons |= PadButton.Up;
+            if (info.Y > center + threshold) buttons |= PadButton.Down;
+            if (info.X < center - threshold) buttons |= PadButton.Left;
+            if (info.X > center + threshold) buttons |= PadButton.Right;
         }
 
         return buttons;

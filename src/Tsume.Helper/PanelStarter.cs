@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
@@ -35,10 +36,21 @@ internal static class PanelStarter
     private const int SettingsAttempts = 40;
     private static readonly TimeSpan SettingsPause = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>Wait up to 15 s for the session compositor/shell on cold boot (especially straight into Xbox FSE).</summary>
+    private const int DesktopAttempts = 60;
+    private static readonly TimeSpan DesktopPause = TimeSpan.FromMilliseconds(250);
+
+    private const int LaunchAttempts = 3;
+    private const uint VerifyAliveMs = 3000;
+    private static readonly TimeSpan RetryPause = TimeSpan.FromSeconds(3);
+
+    /// <summary>Serialises boot/logon/unlock start attempts so overlapping session events never double-launch.</summary>
+    private static readonly Lock LaunchGate = new();
+
     /// <summary>The session shown on the device's own screen; -1 if there is none.</summary>
     public static int ScreenSession => unchecked((int)WTSGetActiveConsoleSessionId());
 
-    /// <param name="occasion">Why now — "sign-in", "start-up" — for the log.</param>
+    /// <param name="occasion">Why now — "sign-in", "start-up", "unlock" — for the log.</param>
     public static void StartFor(int session, string occasion)
     {
         if (session < 0 || !WTSQueryUserToken((uint)session, out var person)) return;   // nobody signed in there
@@ -52,8 +64,29 @@ internal static class PanelStarter
 
             if (!File.Exists(path) || !Wants(person, command)) return;
 
-            var granted = Start(person, path, command);
-            Log.Write($"Started the panel{(granted ? " with UIAccess" : "")} for session {session} on {occasion}.");
+            lock (LaunchGate)
+            {
+                if (IsRunningIn(session)) return;
+
+                WaitForDesktop(session);
+                if (IsRunningIn(session)) return;
+
+                for (var attempt = 1; attempt <= LaunchAttempts; attempt++)
+                {
+                    var granted = Start(person, path, command, VerifyAliveMs, out var exitedCode);
+                    if (exitedCode is null)
+                    {
+                        Log.Write($"Started the panel{(granted ? " with UIAccess" : "")} for session {session} on {occasion}.");
+                        return;
+                    }
+
+                    // Another copy (e.g. Explorer's Run entry) may have won the single-instance lock while we started.
+                    if (IsRunningIn(session)) return;
+
+                    Log.Write($"Panel exited early (code {exitedCode}) on {occasion}, attempt {attempt}/{LaunchAttempts}.");
+                    if (attempt < LaunchAttempts) Thread.Sleep(RetryPause);
+                }
+            }
         }
         catch (Exception error) when (error is Win32Exception or IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
@@ -80,7 +113,7 @@ internal static class PanelStarter
             var path = Path.Combine(AppContext.BaseDirectory, Panel);
             if (!File.Exists(path)) return false;
 
-            var granted = Start(person, path, BuildCommand(path, request));
+            var granted = Start(person, path, BuildCommand(path, request), verifyAliveMs: 0, out _);
             Log.Write($"Started the panel{(granted ? " with UIAccess" : "")} for session {session} on request.");
             return true;
         }
@@ -136,10 +169,47 @@ internal static class PanelStarter
         return false;
     }
 
+    /// <summary>Whether Tsume is already running in <paramref name="session"/>.</summary>
+    private static bool IsRunningIn(int session) => AnyProcessIn(session, "Tsume");
+
+    /// <summary>
+    /// Waits briefly for the interactive session's compositor or shell host to appear before launching WPF.
+    /// On a cold boot straight into Xbox FSE, SessionLogon can fire before DWM/shell have finished setting up
+    /// the desktop; returning immediately when the session is already up adds zero delay.
+    /// </summary>
+    private static void WaitForDesktop(int session)
+    {
+        for (var attempt = 0; attempt < DesktopAttempts; attempt++)
+        {
+            if (AnyProcessIn(session, "sihost") || AnyProcessIn(session, "dwm")) return;
+            Thread.Sleep(DesktopPause);
+        }
+    }
+
+    private static bool AnyProcessIn(int session, string name)
+    {
+        var found = false;
+        var processes = Process.GetProcessesByName(name);
+        foreach (var process in processes)
+        {
+            using (process)
+            {
+                try
+                {
+                    if (process.SessionId == session) found = true;
+                }
+                catch (Exception error) when (error is InvalidOperationException or Win32Exception) { }
+            }
+        }
+
+        return found;
+    }
+
     // Every copy the helper starts carries --relaunched, whether or not UIAccess took, so a grant that quietly
     // failed can never send the copy back to ask again and set off a loop of launches.
-    private static bool Start(nint person, string path, string command)
+    private static bool Start(nint person, string path, string command, uint verifyAliveMs, out int? exitedCode)
     {
+        exitedCode = null;
         command = $"{command} {Relaunched}";
 
         var uiAccess = GrantUiAccess(person);
@@ -159,8 +229,17 @@ internal static class PanelStarter
                     throw new Win32Exception();
                 }
 
-                CloseHandle(started.Thread);
-                CloseHandle(started.Process);
+                try
+                {
+                    if (verifyAliveMs > 0 && WaitForSingleObject(started.Process, verifyAliveMs) == WaitObject0)
+                        exitedCode = GetExitCodeProcess(started.Process, out var code) ? unchecked((int)code) : -1;
+                }
+                finally
+                {
+                    CloseHandle(started.Thread);
+                    CloseHandle(started.Process);
+                }
+
                 return uiAccess != 0;
             }
             finally
@@ -229,6 +308,7 @@ internal static class PanelStarter
     }
 
     private const uint UnicodeEnvironment = 0x0400;   // CREATE_UNICODE_ENVIRONMENT
+    private const uint WaitObject0 = 0x0000_0000;     // WAIT_OBJECT_0
 
     private const int TokenUIAccess = 26;             // TOKEN_INFORMATION_CLASS.TokenUIAccess
     private const int TokenPrimary = 1;               // TOKEN_TYPE.TokenPrimary
@@ -304,6 +384,12 @@ internal static class PanelStarter
 
     [DllImport("kernel32.dll")]
     private static extern nint GetCurrentProcess();
+
+    [DllImport("kernel32.dll")]
+    private static extern uint WaitForSingleObject(nint handle, uint milliseconds);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetExitCodeProcess(nint process, out uint exitCode);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool CloseHandle(nint handle);
