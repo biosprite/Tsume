@@ -628,6 +628,9 @@
     <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
     <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
     <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+    <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+    <Setter Property="VirtualizingPanel.CacheLength" Value="2,2" />
+    <Setter Property="VirtualizingPanel.CacheLengthUnit" Value="Page" />
     <Setter Property="ItemsPanel">
       <Setter.Value>
         <ItemsPanelTemplate>
@@ -638,7 +641,7 @@
     <Setter Property="ItemContainerStyle">
       <Setter.Value>
         <Style TargetType="ComboBoxItem">
-          <Setter Property="MinHeight" Value="38" />
+          <Setter Property="Height" Value="40" />
           <Setter Property="Padding" Value="14,8" />
           <Setter Property="FocusVisualStyle" Value="{x:Null}" />
           <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -721,25 +724,32 @@
             <Border x:Name="Ring" Style="{StaticResource Focus.Ring}" CornerRadius="12"
                     BorderBrush="{x:Static theme:Accent.Brush}" />
 
-            <Popup x:Name="PART_Popup" Placement="Bottom" VerticalOffset="4"
-                   AllowsTransparency="True" Focusable="False" PopupAnimation="Slide"
+            <Popup x:Name="PART_Popup" Placement="Bottom" HorizontalOffset="-14" VerticalOffset="-2"
+                   AllowsTransparency="True" Focusable="False" PopupAnimation="None"
                    StaysOpen="False"
                    IsOpen="{TemplateBinding IsDropDownOpen}">
-              <Border MinWidth="{TemplateBinding ActualWidth}" MaxWidth="{TemplateBinding ActualWidth}"
-                      MaxHeight="300" Margin="0,0,0,8" Padding="0,4"
-                      Background="{DynamicResource Sheet.Fill}"
-                      BorderBrush="{DynamicResource Panel.Edge}" BorderThickness="1"
-                      CornerRadius="14">
-                <Border.Effect>
-                  <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.55" Color="Black" />
-                </Border.Effect>
-                <ScrollViewer x:Name="PART_DropDownScroll" Focusable="False"
-                              CanContentScroll="True" PanningMode="VerticalOnly"
-                              HorizontalScrollBarVisibility="Disabled"
-                              VerticalScrollBarVisibility="Hidden">
-                  <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
-                </ScrollViewer>
-              </Border>
+              <Grid Margin="14,6,14,18">
+                <Border Background="#FF0A0B0E" CornerRadius="14">
+                  <Border.Effect>
+                    <DropShadowEffect BlurRadius="14" ShadowDepth="4" Opacity="0.55" Color="Black" />
+                  </Border.Effect>
+                  <Border.CacheMode>
+                    <BitmapCache />
+                  </Border.CacheMode>
+                </Border>
+                <Border MinWidth="{TemplateBinding ActualWidth}" MaxWidth="{TemplateBinding ActualWidth}"
+                        MaxHeight="300" Padding="0,4"
+                        Background="{DynamicResource Sheet.Fill}"
+                        BorderBrush="{DynamicResource Panel.Edge}" BorderThickness="1"
+                        CornerRadius="14">
+                  <ScrollViewer x:Name="PART_DropDownScroll" Focusable="False"
+                                CanContentScroll="True" PanningMode="VerticalOnly"
+                                HorizontalScrollBarVisibility="Disabled"
+                                VerticalScrollBarVisibility="Hidden">
+                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
+                  </ScrollViewer>
+                </Border>
+              </Grid>
             </Popup>
           </Grid>
 

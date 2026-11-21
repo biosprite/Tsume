@@ -7,7 +7,7 @@
              xmlns:core="clr-namespace:Tsume.Core.Controller;assembly=Tsume.Core"
              Focusable="False">
 
-  <!-- Panel side, Game Bar / M button assignments, and M1 / M2 key rebinding. Opened from Settings. -->
+  <!-- Panel side, dedicated hardware buttons, and verified rear-paddle key rebinding. Opened from Settings. -->
 
   <UserControl.Resources>
     <DataTemplate x:Key="KeyOptionTemplate" DataType="{x:Type core:BackButtonKey}">
@@ -39,7 +39,7 @@
             </StackPanel>
           </DockPanel>
 
-          <ItemsControl ItemsSource="{Binding Slots}" Focusable="False">
+          <ItemsControl x:Name="SlotsList" ItemsSource="{Binding Slots}" Focusable="False">
             <ItemsControl.ItemTemplate>
               <DataTemplate>
                 <DockPanel Margin="0,0,0,8">
@@ -48,13 +48,14 @@
                                  Glyph="{x:Static theme:Glyphs.Quit}"
                                  AutomationProperties.Name="{x:Static lang:Strings.BackButtonRemoveKey}"
                                  Visibility="{Binding RemoveVisibility}"
+                                 Click="OnRemoveKeyClick"
                                  Command="{Binding Remove}" />
 
                   <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Caption}"
                              Width="42" VerticalAlignment="Center"
                              Text="{Binding SlotLabel}" />
 
-                  <controls:KeyDropdown ItemsSource="{x:Static core:BackButtonKey.All}"
+                  <controls:KeyDropdown ItemsSource="{Binding AvailableKeys}"
                                         SelectedItem="{Binding SelectedKey, Mode=TwoWay}"
                                         ItemTemplate="{StaticResource KeyOptionTemplate}"
                                         AutomationProperties.Name="{Binding SlotLabel}" />
@@ -67,6 +68,7 @@
                          Glyph="{x:Static theme:Glyphs.Add}"
                          Label="{x:Static lang:Strings.BackButtonAddKey}"
                          Visibility="{Binding AddKeyVisibility}"
+                         Click="OnAddKeyClick"
                          Command="{Binding AddKey}" />
 
         </StackPanel>
@@ -103,78 +105,83 @@
                        IsOn="{Binding OpenOnRight}"
                        Command="{Binding ToggleOpenOnRight}" />
 
-        <!-- Dedicated hardware buttons: Game Bar & M button -->
-        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.HardwareButtonsHeading}"
-                   Margin="4,16,0,10" />
+        <!-- Dedicated hardware buttons (shown when declared by the active DeviceProfile) -->
+        <StackPanel Visibility="{Binding DedicatedButtonsVisibility}">
+          <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.HardwareButtonsHeading}"
+                     Margin="4,16,0,10" />
 
-        <Border Background="{DynamicResource Surface}" CornerRadius="{StaticResource Radius.Control}"
-                Padding="16,14,16,14" Margin="0,0,0,8">
-          <StackPanel>
+          <Border Background="{DynamicResource Surface}" CornerRadius="{StaticResource Radius.Control}"
+                  Padding="16,14,16,14" Margin="0,0,0,8"
+                  Visibility="{Binding GameBarButtonVisibility}">
+            <StackPanel>
 
-            <DockPanel Margin="0,0,0,10">
-              <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Icon}" FontSize="20" Width="22"
-                         TextAlignment="Center" VerticalAlignment="Center"
-                         Text="{x:Static theme:Glyphs.Sliders}" />
+              <DockPanel Margin="0,0,0,10">
+                <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Icon}" FontSize="20" Width="22"
+                           TextAlignment="Center" VerticalAlignment="Center"
+                           Text="{x:Static theme:Glyphs.Sliders}" />
 
-              <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
-                <TextBlock Style="{StaticResource Text.Body}" Text="{x:Static lang:Strings.GameBarButton}" />
-                <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
-                           Text="{Binding GameBarDetail}" Margin="0,2,0,0" />
-              </StackPanel>
-            </DockPanel>
+                <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                  <TextBlock Style="{StaticResource Text.Body}" Text="{Binding GameBarButtonLabel}" />
+                  <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+                             Text="{Binding GameBarDetail}" Margin="0,2,0,0" />
+                </StackPanel>
+              </DockPanel>
 
-            <controls:KeyDropdown ItemsSource="{Binding GameBarOptions}"
-                                  SelectedItem="{Binding SelectedGameBarOption, Mode=TwoWay}"
-                                  AutomationProperties.Name="{x:Static lang:Strings.GameBarButton}">
-              <controls:KeyDropdown.ItemTemplate>
-                <DataTemplate>
-                  <TextBlock Style="{StaticResource Text.Body}" Text="{Binding Label}" VerticalAlignment="Center" />
-                </DataTemplate>
-              </controls:KeyDropdown.ItemTemplate>
-            </controls:KeyDropdown>
+              <controls:KeyDropdown ItemsSource="{Binding GameBarOptions}"
+                                    SelectedItem="{Binding SelectedGameBarOption, Mode=TwoWay}"
+                                    AutomationProperties.Name="{Binding GameBarButtonLabel}">
+                <controls:KeyDropdown.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Style="{StaticResource Text.Body}" Text="{Binding Label}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </controls:KeyDropdown.ItemTemplate>
+              </controls:KeyDropdown>
 
-          </StackPanel>
-        </Border>
+            </StackPanel>
+          </Border>
 
-        <Border Background="{DynamicResource Surface}" CornerRadius="{StaticResource Radius.Control}"
-                Padding="16,14,16,14" Margin="0,0,0,8">
-          <StackPanel>
+          <Border Background="{DynamicResource Surface}" CornerRadius="{StaticResource Radius.Control}"
+                  Padding="16,14,16,14" Margin="0,0,0,8"
+                  Visibility="{Binding OemButtonVisibility}">
+            <StackPanel>
 
-            <DockPanel Margin="0,0,0,10">
-              <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Icon}" FontSize="20" Width="22"
-                         TextAlignment="Center" VerticalAlignment="Center"
-                         Text="{x:Static theme:Glyphs.Buttons}" />
+              <DockPanel Margin="0,0,0,10">
+                <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Icon}" FontSize="20" Width="22"
+                           TextAlignment="Center" VerticalAlignment="Center"
+                           Text="{x:Static theme:Glyphs.Buttons}" />
 
-              <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
-                <TextBlock Style="{StaticResource Text.Body}" Text="{x:Static lang:Strings.MButton}" />
-                <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
-                           Text="{Binding MButtonDetail}" Margin="0,2,0,0" />
-              </StackPanel>
-            </DockPanel>
+                <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                  <TextBlock Style="{StaticResource Text.Body}" Text="{Binding OemButtonLabel}" />
+                  <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+                             Text="{Binding OemButtonDetail}" Margin="0,2,0,0" />
+                </StackPanel>
+              </DockPanel>
 
-            <controls:KeyDropdown ItemsSource="{Binding MButtonOptions}"
-                                  SelectedItem="{Binding SelectedMButtonOption, Mode=TwoWay}"
-                                  AutomationProperties.Name="{x:Static lang:Strings.MButton}">
-              <controls:KeyDropdown.ItemTemplate>
-                <DataTemplate>
-                  <TextBlock Style="{StaticResource Text.Body}" Text="{Binding Label}" VerticalAlignment="Center" />
-                </DataTemplate>
-              </controls:KeyDropdown.ItemTemplate>
-            </controls:KeyDropdown>
+              <controls:KeyDropdown ItemsSource="{Binding OemButtonOptions}"
+                                    SelectedItem="{Binding SelectedOemButtonOption, Mode=TwoWay}"
+                                    AutomationProperties.Name="{Binding OemButtonLabel}">
+                <controls:KeyDropdown.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Style="{StaticResource Text.Body}" Text="{Binding Label}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </controls:KeyDropdown.ItemTemplate>
+              </controls:KeyDropdown>
 
-          </StackPanel>
-        </Border>
+            </StackPanel>
+          </Border>
+        </StackPanel>
 
-        <!-- Back buttons M1 and M2 -->
-        <StackPanel IsEnabled="{Binding IsControllerAvailable}">
+        <!-- Back buttons (shown only when verified in the active DeviceProfile) -->
+        <StackPanel Visibility="{Binding BackButtonsVisibility}" IsEnabled="{Binding IsControllerAvailable}">
           <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.BackButtonsHeading}"
                      Margin="4,16,0,4" />
 
           <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
-                     Text="{x:Static lang:Strings.BackButtonMultiHint}" Margin="4,0,4,10" />
+                     Text="{Binding BackButtonMultiHint}" Margin="4,0,4,10" />
 
-          <ContentControl Content="{Binding M1}" ContentTemplate="{StaticResource BackButtonCardTemplate}" Focusable="False" />
-          <ContentControl Content="{Binding M2}" ContentTemplate="{StaticResource BackButtonCardTemplate}" Focusable="False" />
+          <ItemsControl ItemsSource="{Binding BackButtons}"
+                        ItemTemplate="{StaticResource BackButtonCardTemplate}"
+                        Focusable="False" />
         </StackPanel>
 
       </StackPanel>

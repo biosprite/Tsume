@@ -12,10 +12,8 @@ namespace Tsume.App.ViewModels;
 /// </summary>
 public sealed class ChargeLimitViewModel : Observable
 {
-    /// <summary>MSI's EC resumes charging ten points below the chosen charge limit.</summary>
-    private const int ResumeGap = 10;
-
     private readonly HelperClient _helper;
+    private int? _resumeGap;
 
     /// <summary>Counts choices made here, so a reply requested before a choice cannot undo it.</summary>
     private int _changes;
@@ -25,6 +23,7 @@ public sealed class ChargeLimitViewModel : Observable
     {
         _helper = helper;
         Choices = state.Device?.ChargeLimits ?? [];
+        _resumeGap = state.Device?.ChargeResumeGap;
 
         // Until the firmware is read, show the last choice: charge to full.
         _absorbing = true;
@@ -100,10 +99,15 @@ public sealed class ChargeLimitViewModel : Observable
         }
     }
 
-    /// <summary>True while plugged in with the battery resting, to explain the firmware's 10-point resume rule.</summary>
-    public bool ShowRestingHint => IsAvailable && _battery is { PluggedIn: true, Flow: Battery.Flow.Resting };
+    public bool ShowRestingHint =>
+        IsAvailable
+        && _resumeGap is > 0
+        && Limit < 100
+        && _battery is { PluggedIn: true, Flow: Battery.Flow.Resting };
 
-    public string RestingHint => Strings.ChargeRestingHint(Math.Max(Limit - ResumeGap, 0));
+    public string RestingHint => _resumeGap is { } gap
+        ? Strings.ChargeRestingHint(Math.Max(Limit - gap, 0))
+        : string.Empty;
 
     /// <summary>Re-reads the battery. Cheap; called once a second while Settings is open.</summary>
     public void RefreshStatus()
@@ -147,7 +151,15 @@ public sealed class ChargeLimitViewModel : Observable
 
     private void Absorb(HelperReply reply)
     {
-        if (reply.Device is { } device && !device.ChargeLimits.SequenceEqual(Choices)) Choices = device.ChargeLimits;
+        if (reply.Device is { } device)
+        {
+            if (!device.ChargeLimits.SequenceEqual(Choices)) Choices = device.ChargeLimits;
+            if (_resumeGap != device.ChargeResumeGap)
+            {
+                _resumeGap = device.ChargeResumeGap;
+                NotifyStatus();
+            }
+        }
 
         IsAvailable = reply.Snapshot is not null && Choices.Count > 0;
         if (reply.Snapshot is not { } snapshot || Choices.Count == 0) return;

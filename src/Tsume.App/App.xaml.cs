@@ -6,6 +6,7 @@ using Tsume.App.Input;
 using Tsume.App.Platform;
 using Tsume.App.Shell;
 using Tsume.App.ViewModels;
+using Tsume.Core.Devices;
 using Tsume.Core.Ipc;
 
 namespace Tsume.App;
@@ -55,6 +56,9 @@ public partial class App
     private OverlayWindow? _window;
     private DateTime _lastButtonPress;
     private DateTime _lastGameBarPress;
+
+    /// <summary>Latest controls profile for lock-free reads from the WMI button thread.</summary>
+    private ControlsProfile? _activeControls;
 
     /// <summary>Whether MSI Center M was running when last looked at. Read on the button listener's thread.</summary>
     private volatile bool _msiCenterRuns;
@@ -247,16 +251,9 @@ public partial class App
         };
 
         _gameBarHook = new GameBarButtonHook(Dispatcher);
-        _gameBarHook.IsEnabled = panel.Settings.Controls.GameBarAction != GameBarAction.Default;
         _gameBarHook.Pressed += () => OnGameBarButton(window, panel);
-        panel.Settings.Controls.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(ControlsViewModel.GameBarAction))
-                _gameBarHook.IsEnabled = panel.Settings.Controls.GameBarAction != GameBarAction.Default;
-        };
 
-        _buttons = new ClawButtons();
-        // The M button is Tsume's only while MSI Center M is paused (otherwise both would open).
+        // The OEM button is Tsume's only while MSI Center M is paused on MSI machines (otherwise both would open).
         // Checking means walking the process list, too slow per press: act on the last answer, then re-check.
         _msiCenterRuns = !panel.Settings.IsMsiCenterPaused;
         panel.Settings.PropertyChanged += (_, e) =>
@@ -265,64 +262,84 @@ public partial class App
                 _msiCenterRuns = !panel.Settings.IsMsiCenterPaused;
         };
 
-        _buttons.Pressed += button =>
+        panel.Settings.Controls.PropertyChanged += (_, e) =>
         {
-            if (button == ClawButton.MsiCenter)
-            {
-                if (panel.Settings.Controls.MButtonAction != MButtonAction.Disabled && !_msiCenterRuns)
-                {
-                    if (panel.Settings.Controls.MButtonAction == MButtonAction.OpenTsume) OpenTrace.Summoned();
-                    Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnMButton(window, panel));
-                }
-
-                _msiCenterRuns = MsiCenter.IsRunning;
-            }
-            else if (button == ClawButton.QuickSettings)
-            {
-                if (panel.Settings.Controls.GameBarAction != GameBarAction.Default)
-                    Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnGameBarButton(window, panel));
-            }
+            if (e.PropertyName == nameof(ControlsViewModel.GameBarAction))
+                SyncHardwareButtons(window, panel);
         };
+
+        panel.Performance.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PerformanceViewModel.Device))
+                SyncHardwareButtons(window, panel);
+        };
+
+        SyncHardwareButtons(window, panel);
+
+        // Fetch the profile right away if state.json predates ControlsProfile so hardware buttons work before first open.
+        if (panel.Performance.Device.Controls is null)
+            _ = panel.Performance.RefreshAsync();
 
         _instance!.ToggleRequested += () => Dispatcher.BeginInvoke(window.Toggle);
     }
 
-    private void OnMButton(OverlayWindow window, PanelViewModel panel)
+    private void SyncHardwareButtons(OverlayWindow window, PanelViewModel panel)
+    {
+        var controls = panel.Performance.Device.Controls;
+        Volatile.Write(ref _activeControls, controls);
+
+        if (_gameBarHook is not null)
+        {
+            _gameBarHook.SetTriggers(controls?.GameBarTriggers ?? []);
+
+            var action = panel.Settings.Controls.GameBarAction;
+            _gameBarHook.IsEnabled = controls is { HasGameBarButton: true, GameBarTriggers.Count: > 0 }
+                && (action != HardwareButtonAction.XboxGameBar || !controls.GameBarNativeWinG);
+        }
+
+        if (_buttons is null && controls is { OemButtonWmiCode: not null } or { GameBarWmiCode: not null })
+        {
+            _buttons = new ClawButtons();
+            _buttons.CodePressed += code => OnWmiButtonCode(code, window, panel);
+        }
+    }
+
+    private void OnWmiButtonCode(int code, OverlayWindow window, PanelViewModel panel)
+    {
+        var controls = Volatile.Read(ref _activeControls);
+        if (controls is null) return;
+
+        if (controls.HasOemButton && controls.OemButtonWmiCode == code)
+        {
+            var action = panel.Settings.Controls.OemButtonAction;
+            var blockedByMsi = controls.HasMsiCenterConflict && _msiCenterRuns;
+
+            if (action != HardwareButtonAction.Disabled && !blockedByMsi)
+            {
+                if (action == HardwareButtonAction.OpenTsume) OpenTrace.Summoned();
+                Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnOemButton(window, panel));
+            }
+
+            if (controls.HasMsiCenterConflict)
+                _msiCenterRuns = MsiCenter.IsRunning;
+        }
+        else if (controls.HasGameBarButton && controls.GameBarWmiCode == code)
+        {
+            var action = panel.Settings.Controls.GameBarAction;
+            var handleDefault = !controls.GameBarNativeWinG && (!controls.HasMsiCenterConflict || !_msiCenterRuns);
+
+            if (action != HardwareButtonAction.XboxGameBar || handleDefault)
+                Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnGameBarButton(window, panel));
+        }
+    }
+
+    private void OnOemButton(OverlayWindow window, PanelViewModel panel)
     {
         var now = DateTime.UtcNow;
         if (now - _lastButtonPress < ButtonEcho) return;
         _lastButtonPress = now;
 
-        switch (panel.Settings.Controls.MButtonAction)
-        {
-            case MButtonAction.OpenTsume:
-                window.Toggle();
-                break;
-
-            case MButtonAction.XboxGameBar:
-                QuickActions.OpenGameBar();
-                break;
-
-            case MButtonAction.SteamBigPicture:
-                QuickActions.OpenSteamBigPicture();
-                break;
-
-            case MButtonAction.TaskManager:
-                QuickActions.TaskManager();
-                break;
-
-            case MButtonAction.TouchKeyboard:
-                QuickActions.ToggleTouchKeyboard();
-                break;
-
-            case MButtonAction.Screenshot:
-                QuickActions.Screenshot();
-                break;
-
-            case MButtonAction.ShowDesktop:
-                QuickActions.ShowDesktop();
-                break;
-        }
+        QuickActions.Run(panel.Settings.Controls.OemButtonAction, window.Toggle);
     }
 
     private void OnGameBarButton(OverlayWindow window, PanelViewModel panel)
@@ -331,33 +348,10 @@ public partial class App
         if (now - _lastGameBarPress < ButtonEcho) return;
         _lastGameBarPress = now;
 
-        switch (panel.Settings.Controls.GameBarAction)
-        {
-            case GameBarAction.OpenTsume:
-                OpenTrace.Summoned();
-                window.Toggle();
-                break;
+        var action = panel.Settings.Controls.GameBarAction;
+        if (action == HardwareButtonAction.OpenTsume) OpenTrace.Summoned();
 
-            case GameBarAction.SteamBigPicture:
-                QuickActions.OpenSteamBigPicture();
-                break;
-
-            case GameBarAction.TaskManager:
-                QuickActions.TaskManager();
-                break;
-
-            case GameBarAction.TouchKeyboard:
-                QuickActions.ToggleTouchKeyboard();
-                break;
-
-            case GameBarAction.Screenshot:
-                QuickActions.Screenshot();
-                break;
-
-            case GameBarAction.ShowDesktop:
-                QuickActions.ShowDesktop();
-                break;
-        }
+        QuickActions.Run(action, window.Toggle);
     }
 
     /// <summary>Trims memory once the panel has been closed for the idle interval.</summary>

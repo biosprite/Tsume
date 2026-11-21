@@ -1,18 +1,10 @@
 using System.Collections.ObjectModel;
-using Tsume.Core.Lighting;
 
 namespace Tsume.Core.Controller;
 
-/// <summary>The Claw's two rear grip buttons.</summary>
-public enum BackButton
-{
-    M1,
-    M2,
-}
-
 /// <summary>
-/// One key or button code the Claw controller firmware understands in its button-remap table.
-/// Codes match MSI's <c>KeyMapDefine</c> (<c>docs/hardware/controller.md</c>).
+/// One key or button code a controller's firmware understands in its button-remap table.
+/// MSI codes match MSI's <c>KeyMapDefine</c> (<c>docs/hardware/controller.md</c>).
 /// </summary>
 public sealed record BackButtonKey(byte Code, string Name, string Category)
 {
@@ -212,11 +204,12 @@ public sealed record BackButtonKey(byte Code, string Name, string Category)
 }
 
 /// <summary>
-/// A back button's simultaneous key binding (0 to 3 keys held together) and its 8-byte controller encoding.
-/// Layout: <c>[index=1, flag=0x04, turboSpeed, map0, map1, map2, map3, map4]</c>.
+/// A back button's simultaneous key binding (0 to <see cref="MaxKeys"/> keys held together) and its controller encoding.
+/// MSI Claw layout: <c>[index=1, flag=0x04, turboSpeed, map0, map1, map2, map3, map4]</c>.
 /// </summary>
-public sealed record BackButtonBinding(IReadOnlyList<byte> Keys, byte TurboSpeed = 0x0C)
+public sealed record BackButtonBinding(IReadOnlyList<byte> Keys, byte TurboSpeed = 0x0C, bool IsMacro = false)
 {
+    public const int DefaultBlockLength = 8;
     public const int MaxKeys = 3;
     private const byte RemapIndex = 0x01;
     private const byte MacroIndex = 0x02;
@@ -225,15 +218,16 @@ public sealed record BackButtonBinding(IReadOnlyList<byte> Keys, byte TurboSpeed
 
     public static BackButtonBinding Empty { get; } = new([]);
 
-    public static BackButtonBinding Decode(ReadOnlySpan<byte> raw)
+    public static BackButtonBinding Decode(ReadOnlySpan<byte> raw, int maxKeys = MaxKeys)
     {
-        if (raw.Length < ProfileMap.BackButtonProfileLength) return Empty;
+        if (raw.Length < 4) return Empty;
 
         var turbo = raw[2] == 0 ? DefaultTurboSpeed : raw[2];
-        if (raw[0] == MacroIndex) return new([], turbo);
+        if (raw[0] == MacroIndex) return new([], turbo, IsMacro: true);
 
-        var keys = new List<byte>(MaxKeys);
-        for (var i = 3; i < ProfileMap.BackButtonProfileLength && keys.Count < MaxKeys; i++)
+        var limit = Math.Clamp(maxKeys, 1, raw.Length - 3);
+        var keys = new List<byte>(limit);
+        for (var i = 3; i < raw.Length && keys.Count < limit; i++)
         {
             var code = raw[i];
             if (code is 0 or BackButtonKey.UnboundCode) continue;
@@ -243,9 +237,12 @@ public sealed record BackButtonBinding(IReadOnlyList<byte> Keys, byte TurboSpeed
         return new BackButtonBinding(keys, turbo);
     }
 
-    public byte[] Encode()
+    public byte[] Encode(int blockLength = DefaultBlockLength, int maxKeys = MaxKeys)
     {
-        var bytes = new byte[ProfileMap.BackButtonProfileLength];
+        var length = Math.Max(blockLength, 4);
+        var limit = Math.Clamp(maxKeys, 1, length - 3);
+
+        var bytes = new byte[length];
         bytes[0] = RemapIndex;
         bytes[1] = MapOrMacroFlag;
         bytes[2] = TurboSpeed == 0 ? DefaultTurboSpeed : TurboSpeed;
@@ -254,7 +251,7 @@ public sealed record BackButtonBinding(IReadOnlyList<byte> Keys, byte TurboSpeed
         foreach (var code in Keys)
         {
             if (code is 0 or BackButtonKey.UnboundCode) continue;
-            if (count >= MaxKeys) break;
+            if (count >= limit) break;
             bytes[3 + count++] = code;
         }
 
@@ -262,11 +259,12 @@ public sealed record BackButtonBinding(IReadOnlyList<byte> Keys, byte TurboSpeed
         return bytes;
     }
 
-    public string FormatSummary(string unboundLabel)
+    public string FormatSummary(string unboundLabel, string? macroLabel = null, int maxKeys = MaxKeys)
     {
-        var active = Keys.Where(code => code is not (0 or BackButtonKey.UnboundCode)).Take(MaxKeys).ToList();
-        return active.Count == 0
-            ? unboundLabel
-            : string.Join(" + ", active.Select(code => BackButtonKey.FromCode(code).Name));
+        var active = Keys.Where(code => code is not (0 or BackButtonKey.UnboundCode)).Take(maxKeys).ToList();
+        if (active.Count > 0)
+            return string.Join(" + ", active.Select(code => BackButtonKey.FromCode(code).Name));
+
+        return IsMacro && !string.IsNullOrEmpty(macroLabel) ? macroLabel : unboundLabel;
     }
 }

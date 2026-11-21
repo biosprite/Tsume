@@ -64,6 +64,7 @@ public sealed class PerformanceViewModel : Observable
         Device = device;
         _state.Device = device;
         _state.Save();
+        Notify(nameof(Device));
 
         // Bindings re-read everything from the profile. Values the controls push back
         // meanwhile are not user choices and must not reach the firmware.

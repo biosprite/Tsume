@@ -33,6 +33,12 @@ public sealed record DeviceProfile
     /// </summary>
     public IReadOnlyList<int> ChargeLimits { get; init; } = [];
 
+    /// <summary>Points below the charge limit where charging resumes; null if unknown.</summary>
+    public int? ChargeResumeGap { get; init; }
+
+    /// <summary>Dedicated buttons and verified back-button map; null if unverified.</summary>
+    public ControlsProfile? Controls { get; init; }
+
     public bool Offers(PerformanceMode mode) => Modes.Any(preset => preset.Mode == mode);
 
     public bool Offers(FanMode mode) => FanModes.Contains(mode);
@@ -61,7 +67,9 @@ public sealed record DeviceProfile
         && ManualRange == other.ManualRange
         && ManualDefault == other.ManualDefault
         && FanModes.SequenceEqual(other.FanModes)
-        && ChargeLimits.SequenceEqual(other.ChargeLimits);
+        && ChargeLimits.SequenceEqual(other.ChargeLimits)
+        && ChargeResumeGap == other.ChargeResumeGap
+        && (Controls is null ? other.Controls is null : other.Controls is not null && Controls.Matches(other.Controls));
 
     /// <summary>
     /// Used before the helper has answered, or without one. The three stock modes are

@@ -58,6 +58,31 @@ public static class MsiBoards
             ManualDefault = new PowerLimits(Sustained: 25, Boost: 28),
             FanModes = [FanMode.Auto, FanMode.Max],
             ChargeLimits = [80, 90, 100],   // the owner's choice; MSI Center M's own are 60, 80 and 100
+            ChargeResumeGap = 10,
+            Controls = new()
+            {
+                HasGameBarButton = true,
+                GameBarNativeWinG = true,
+                GameBarTriggers = [new KeyTrigger(VirtualKey: 0x47, Win: true)],   // Win+G; older Claw BIOSes may also need F15/F16
+                HasOemButton = true,
+                HasMsiCenterConflict = true,
+                OemButtonWmiCode = 0x29,
+                GameBarWmiCode = 0x58,
+                BackButtons = new()
+                {
+                    Protocol = BackButtonsProfile.MsiHidV1,
+                    VendorId = 0x0DB0,
+                    ProductIds = [0x1901, 0x1902],
+                    ProfileLength = 1478,
+                    BlockLength = 8,
+                    MaxSimultaneousKeys = 3,
+                    Buttons =
+                    [
+                        new("M1", "M1", "Left back button", Offset: 186),
+                        new("M2", "M2", "Right back button", Offset: 355),
+                    ],
+                },
+            },
         },
     };
 

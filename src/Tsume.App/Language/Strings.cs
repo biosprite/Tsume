@@ -439,6 +439,7 @@ public static class Strings
     public static string GameBarShowDesktop => Find();
     public static string GameBarDisabled => Find();
     public static string GameBarDefaultDetail => Find();
+    public static string GameBarNonNativeDefaultDetail => Find();
     public static string GameBarCustomDetail => Find();
     public static string GameBarMsiCenterWarning => Find();
     public static string MButton => Find();
@@ -449,16 +450,14 @@ public static class Strings
     public static string MButtonDetailDisabled => Find();
     public static string MButtonMsiCenterWarning => Find();
     public static string BackButtonsHeading => Find();
-    public static string BackButtonM1 => Find();
-    public static string BackButtonM1Sub => Find();
-    public static string BackButtonM2 => Find();
-    public static string BackButtonM2Sub => Find();
     public static string BackButtonUnbound => Find();
+    public static string BackButtonMacro => Find();
     public static string BackButtonKeySlot(int number) => Fill(Find(), number);
     public static string BackButtonAddKey => Find();
     public static string BackButtonRemoveKey => Find();
-    public static string BackButtonMultiHint => Find();
+    public static string BackButtonMultiHint(int maxKeys) => Fill(Find(), maxKeys);
     public static string ControlsSaved => Find();
+    public static string ControlsSavedPanelOnly => Find();
     public static string ControlsMsiCenterRuns => Find();
 
     /// <summary>The string named after the calling member; a name with no entry is shown as the name itself.</summary>

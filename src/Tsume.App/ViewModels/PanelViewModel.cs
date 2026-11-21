@@ -102,5 +102,6 @@ public sealed class PanelViewModel : IDisposable
     {
         _tick.Stop();
         _rtssService.Dispose();
+        Settings.Controls.Dispose();
     }
 }

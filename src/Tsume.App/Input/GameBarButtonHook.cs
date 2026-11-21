@@ -1,20 +1,18 @@
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
 using Tsume.App.Platform.Interop;
+using Tsume.Core.Devices;
 using Tsume.Core.Diagnostics;
 
 namespace Tsume.App.Input;
 
 /// <summary>
-/// Intercepts the Claw's Game Bar / Quick Settings button (<c>Win+G</c> sent by firmware) when
-/// reassigned away from Xbox Game Bar. Only installs a low-level keyboard hook while enabled.
+/// Intercepts firmware keyboard triggers for the Game Bar / Quick Settings button (e.g. Win+G or F15/F16).
+/// Hook is only installed while enabled and at least one trigger is configured.
 /// </summary>
 public sealed class GameBarButtonHook : IDisposable
 {
-    /// <summary>Tag placed on our own synthetic mask key so we never re-process it.</summary>
     private const nint MaskExtraInfo = 0x5453_554D;   // "TSUM"
-
-    /// <summary>Tag placed on intentional synthetic Win+G (e.g. M button mapped to Xbox Game Bar) so it passes through.</summary>
     public const nint PassThroughExtraInfo = 0x5453_5550;   // "TSUP"
 
     private static readonly Journal Errors = new("errors");
@@ -23,20 +21,29 @@ public sealed class GameBarButtonHook : IDisposable
     private readonly Dispatcher _dispatcher;
     private readonly User32.LowLevelHookProc _proc;
 
+    private KeyTrigger[] _triggers = [];
     private nint _hook;
     private bool _enabled;
     private bool _lWinDown;
     private bool _rWinDown;
-    private bool _swallowingG;
+    private uint? _swallowingVk;
     private bool _disposed;
 
-    /// <summary>Raised on the UI thread whenever a Win+G chord is intercepted.</summary>
     public event Action? Pressed;
 
     public GameBarButtonHook(Dispatcher dispatcher)
     {
         _dispatcher = dispatcher;
         _proc = OnKeyboardHook;
+    }
+
+    public void SetTriggers(IReadOnlyList<KeyTrigger> triggers)
+    {
+        if (_disposed) return;
+
+        var copy = triggers.Count == 0 ? [] : triggers.ToArray();
+        if (_dispatcher.CheckAccess()) ApplyTriggers(copy);
+        else _dispatcher.BeginInvoke(() => ApplyTriggers(copy));
     }
 
     public bool IsEnabled
@@ -46,15 +53,23 @@ public sealed class GameBarButtonHook : IDisposable
         {
             if (_disposed || _enabled == value) return;
             _enabled = value;
-            if (_dispatcher.CheckAccess()) ApplyState(value);
-            else _dispatcher.BeginInvoke(() => ApplyState(value));
+            if (_dispatcher.CheckAccess()) ReconcileHook();
+            else _dispatcher.BeginInvoke(ReconcileHook);
         }
     }
 
-    private void ApplyState(bool enabled)
+    private void ApplyTriggers(KeyTrigger[] triggers)
     {
         if (_disposed) return;
-        if (enabled) Install();
+        _triggers = triggers;
+        _swallowingVk = null;
+        ReconcileHook();
+    }
+
+    private void ReconcileHook()
+    {
+        if (_disposed) return;
+        if (_enabled && _triggers.Length > 0) Install();
         else Uninstall();
     }
 
@@ -73,7 +88,7 @@ public sealed class GameBarButtonHook : IDisposable
         }
         else
         {
-            Log.Write($"gamebar hook installed (0x{_hook:X})");
+            Log.Write($"gamebar hook installed (0x{_hook:X}, triggers={_triggers.Length})");
         }
     }
 
@@ -81,7 +96,7 @@ public sealed class GameBarButtonHook : IDisposable
     {
         _lWinDown = false;
         _rWinDown = false;
-        _swallowingG = false;
+        _swallowingVk = null;
         var hook = Interlocked.Exchange(ref _hook, 0);
         if (hook != 0)
         {
@@ -92,13 +107,13 @@ public sealed class GameBarButtonHook : IDisposable
 
     private nint OnKeyboardHook(int code, nint wParam, nint lParam)
     {
-        if (code < User32.HC_ACTION || !_enabled)
+        if (code < User32.HC_ACTION || !_enabled || _triggers.Length == 0)
             return User32.CallNextHookEx(_hook, code, wParam, lParam);
 
         var info = Marshal.PtrToStructure<User32.KBDLLHOOKSTRUCT>(lParam);
 
         // Ignore our own mask key and intentional pass-through Win+G — do not skip LLKHF_INJECTED
-        // generally, because OEM/HID button drivers can emit Win+G with LLKHF_INJECTED set.
+        // generally, because OEM/HID button drivers can emit button chords with LLKHF_INJECTED set.
         if (info.ExtraInfo is (nuint)MaskExtraInfo or (nuint)PassThroughExtraInfo || info.VkCode == User32.VK_MENU_MASK)
             return User32.CallNextHookEx(_hook, code, wParam, lParam);
 
@@ -112,47 +127,55 @@ public sealed class GameBarButtonHook : IDisposable
             if (isDown) _lWinDown = true;
             else if (isUp) _lWinDown = false;
             LogAsync($"ll-kbd LWin {(isDown ? "down" : "up")} scan=0x{info.ScanCode:X2} flags=0x{info.Flags:X2}");
+            return User32.CallNextHookEx(_hook, code, wParam, lParam);
         }
-        else if (info.VkCode == User32.VK_RWIN)
+
+        if (info.VkCode == User32.VK_RWIN)
         {
             if (isDown) _rWinDown = true;
             else if (isUp) _rWinDown = false;
             LogAsync($"ll-kbd RWin {(isDown ? "down" : "up")} scan=0x{info.ScanCode:X2} flags=0x{info.Flags:X2}");
+            return User32.CallNextHookEx(_hook, code, wParam, lParam);
         }
-        else if (info.VkCode == User32.VK_G)
-        {
-            if (isDown)
-            {
-                var winDown = _lWinDown || _rWinDown
-                    || User32.GetAsyncKeyState(User32.VK_LWIN) < 0
-                    || User32.GetAsyncKeyState(User32.VK_RWIN) < 0;
-                var otherMod = (info.Flags & User32.LLKHF_ALTDOWN) != 0
-                    || User32.GetAsyncKeyState(User32.VK_CONTROL) < 0
-                    || User32.GetAsyncKeyState(User32.VK_SHIFT) < 0;
 
-                if (winDown && !otherMod)
-                {
-                    if (!_swallowingG)
-                    {
-                        _swallowingG = true;
-                        LogAsync($"ll-kbd Win+G SWALLOWED scan=0x{info.ScanCode:X2} flags=0x{info.Flags:X2}");
-                        // Mask LWin so releasing it after we swallow G does not pop open the Start menu.
-                        User32.SendChord(MaskExtraInfo, User32.VK_MENU_MASK);
-                        _dispatcher.BeginInvoke(DispatcherPriority.Send, () => Pressed?.Invoke());
-                    }
-                    return 1;
-                }
-            }
-            else if (isUp && _swallowingG)
+        if (isUp && _swallowingVk == info.VkCode)
+        {
+            _swallowingVk = null;
+            return 1;
+        }
+
+        if (isDown)
+        {
+            var winDown = _lWinDown || _rWinDown
+                || User32.GetAsyncKeyState(User32.VK_LWIN) < 0
+                || User32.GetAsyncKeyState(User32.VK_RWIN) < 0;
+            var altDown = (info.Flags & User32.LLKHF_ALTDOWN) != 0;
+            var ctrlDown = User32.GetAsyncKeyState(User32.VK_CONTROL) < 0;
+            var shiftDown = User32.GetAsyncKeyState(User32.VK_SHIFT) < 0;
+
+            foreach (var trigger in _triggers)
             {
-                _swallowingG = false;
+                if (info.VkCode != trigger.VirtualKey) continue;
+                if (winDown != trigger.Win || altDown != trigger.Alt || ctrlDown != trigger.Ctrl || shiftDown != trigger.Shift)
+                    continue;
+
+                if (_swallowingVk != info.VkCode)
+                {
+                    _swallowingVk = info.VkCode;
+                    LogAsync($"ll-kbd trigger vk=0x{info.VkCode:X2} win={winDown} SWALLOWED scan=0x{info.ScanCode:X2} flags=0x{info.Flags:X2}");
+
+                    // Mask LWin so releasing it after we swallow a Win+<key> chord does not pop open Start.
+                    if (trigger.Win) User32.SendChord(MaskExtraInfo, User32.VK_MENU_MASK);
+
+                    _dispatcher.BeginInvoke(DispatcherPriority.Send, () => Pressed?.Invoke());
+                }
+
                 return 1;
             }
-        }
-        else if (isDown && (_lWinDown || _rWinDown || info.VkCode is >= 0x7C and <= 0x87))
-        {
+
             // Log Win+<other> and F13-F24 presses so firmware chords on any BIOS can be identified.
-            LogAsync($"ll-kbd vk=0x{info.VkCode:X2} down scan=0x{info.ScanCode:X2} flags=0x{info.Flags:X2} win={_lWinDown || _rWinDown}");
+            if (winDown || info.VkCode is >= 0x7C and <= 0x87)
+                LogAsync($"ll-kbd vk=0x{info.VkCode:X2} down scan=0x{info.ScanCode:X2} flags=0x{info.Flags:X2} win={winDown}");
         }
 
         return User32.CallNextHookEx(_hook, code, wParam, lParam);

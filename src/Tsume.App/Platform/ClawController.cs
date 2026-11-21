@@ -2,6 +2,7 @@ using System.IO;
 using Microsoft.Win32.SafeHandles;
 using Tsume.App.Platform.Interop;
 using Tsume.Core.Controller;
+using Tsume.Core.Devices;
 using Tsume.Core.Lighting;
 
 namespace Tsume.App.Platform;
@@ -58,11 +59,15 @@ public sealed class ClawController : IDisposable
     /// Opens the Claw controller's vendor collection, or returns null if there is none.
     /// Recognised as MSI does: it accepts output report 0x0F, with 64-byte reports.
     /// </summary>
-    public static ClawController? Find()
+    public static ClawController? Find() => Find(VendorId, ProductIds);
+
+    public static ClawController? Find(ushort vendorId, IReadOnlyList<ushort> productIds)
     {
+        if (productIds.Count == 0) return null;
+
         foreach (var path in Hid.DevicePaths())
         {
-            if (!IsClaw(path)) continue;
+            if (!MatchesUsbIds(path, vendorId, productIds)) continue;
 
             var handle = Hid.OpenReadWrite(path);
             if (handle is null) continue;
@@ -82,18 +87,27 @@ public sealed class ClawController : IDisposable
         return null;
     }
 
-    internal static bool IsClaw(string path)
+    internal static bool IsClaw(string path) => MatchesUsbIds(path, VendorId, ProductIds);
+
+    private static bool MatchesUsbIds(string path, ushort vendorId, IReadOnlyList<ushort> productIds)
     {
         var lower = path.ToLowerInvariant();
-        return lower.Contains($"vid_{VendorId:x4}")
-            && ProductIds.Any(id => lower.Contains($"pid_{id:x4}"));
+        if (!lower.Contains($"vid_{vendorId:x4}")) return false;
+
+        foreach (var id in productIds)
+            if (lower.Contains($"pid_{id:x4}")) return true;
+
+        return false;
     }
 
     /// <summary>Up to <see cref="MaxChunk"/> bytes of the profile, or null if the controller did not answer.</summary>
-    public async Task<byte[]?> ReadProfileAsync(int offset, int length)
+    public Task<byte[]?> ReadProfileAsync(int offset, int length) =>
+        ReadProfileAsync(offset, length, ProfileMap.Length);
+
+    public async Task<byte[]?> ReadProfileAsync(int offset, int length, int profileLength)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(offset);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(offset + length, ProfileMap.Length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(offset + length, profileLength);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(length, MaxChunk);
 
         var reply = await ExchangeAsync(
@@ -173,38 +187,17 @@ public sealed class ClawController : IDisposable
         return await WriteProfileChunkedAsync(offset, data);
     }
 
-    /// <summary>
-    /// Writes the 8-byte remap profile for M1 or M2 into the controller's working memory.
-    /// The binding takes effect at once; call <see cref="SaveAsync"/> to persist to flash.
-    /// </summary>
-    public Task<bool> WriteBackButtonAsync(BackButton button, ReadOnlyMemory<byte> data)
+    /// <summary>Writes a back button's remap block to RAM; rejects offsets outside <paramref name="profile"/>.</summary>
+    public Task<bool> WriteBackButtonAsync(BackButtonsProfile profile, BackButtonDefinition button, ReadOnlyMemory<byte> data)
     {
-        // Safety guard: only the exact 8-byte M1 or M2 basic remap block may be written.
-        if (data.Length != ProfileMap.BackButtonProfileLength)
-            throw new ArgumentOutOfRangeException(nameof(data), $"Back-button profile must be {ProfileMap.BackButtonProfileLength} bytes.");
+        if (!profile.Buttons.Contains(button))
+            throw new ArgumentOutOfRangeException(nameof(button), "Back button is not declared in this device's verified profile.");
+        if (data.Length != profile.BlockLength)
+            throw new ArgumentOutOfRangeException(nameof(data), $"Back-button profile must be {profile.BlockLength} bytes.");
+        if (button.Offset < 0 || button.Offset + data.Length > profile.ProfileLength)
+            throw new ArgumentOutOfRangeException(nameof(button), "Back-button offset lies outside the controller profile.");
 
-        var offset = button switch
-        {
-            BackButton.M1 => ProfileMap.M1ProfileStart,
-            BackButton.M2 => ProfileMap.M2ProfileStart,
-            _             => throw new ArgumentOutOfRangeException(nameof(button)),
-        };
-
-        return WriteProfileChunkedAsync(offset, data);
-    }
-
-    /// <summary>
-    /// Ensures the controller's M-key function is set to custom remap/macro mode (0) rather than
-    /// combination shortcuts (1) or disabled (2), leaving the active gamepad/cursor mode untouched.
-    /// </summary>
-    public async Task<bool> EnsureBackButtonsActiveAsync()
-    {
-        var current = await ReadModeAsync();
-        if (current is not { } now) return false;
-        if (now.MKeys == 0) return true;
-
-        var padMode = now.Mode == (byte)PadMode.Cursor ? PadMode.Cursor : PadMode.Gamepad;
-        return await SwitchModeAsync(padMode, mKeys: 0);
+        return WriteProfileChunkedAsync(button.Offset, data);
     }
 
     private async Task<bool> WriteProfileChunkedAsync(int offset, ReadOnlyMemory<byte> data)

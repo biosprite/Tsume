@@ -39,14 +39,32 @@ public sealed class SavedState
     /// <summary>True to slide the panel in from the right edge of the screen instead of the left.</summary>
     public bool OpenOnRight { get; set; }
 
-    /// <summary>What the Claw's Game Bar / Quick Settings button opens.</summary>
-    public Platform.GameBarAction GameBarButton { get; set; } = Platform.GameBarAction.Default;
+    public Platform.HardwareButtonAction GameBarButton { get; set; } = Platform.HardwareButtonAction.XboxGameBar;
+    public Platform.HardwareButtonAction? OemButton { get; set; }
 
-    /// <summary>What the Claw's M button opens (while MSI Center M is paused). Null falls back to <see cref="MButtonOpensTsume"/>.</summary>
-    public Platform.MButtonAction? MButton { get; set; }
-
-    /// <summary>Legacy flag kept for older state.json files; synced with <see cref="MButton"/>.</summary>
+    /// <summary>Legacy fields kept for migrating earlier state.json files.</summary>
+    public int? MButton { get; set; }
     public bool MButtonOpensTsume { get; set; } = true;
+
+    public Platform.HardwareButtonAction ResolveOemButton()
+    {
+        if (OemButton is { } chosen) return chosen;
+
+        if (MButton is { } legacy)
+        {
+            return legacy switch
+            {
+                0 => Platform.HardwareButtonAction.OpenTsume,
+                1 => Platform.HardwareButtonAction.XboxGameBar,
+                >= 2 and <= 7 => (Platform.HardwareButtonAction)legacy,
+                _ => Platform.HardwareButtonAction.OpenTsume,
+            };
+        }
+
+        return MButtonOpensTsume
+            ? Platform.HardwareButtonAction.OpenTsume
+            : Platform.HardwareButtonAction.Disabled;
+    }
 
     public static SavedState Load()
     {

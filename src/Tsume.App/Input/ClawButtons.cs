@@ -37,6 +37,9 @@ public sealed class ClawButtons : IDisposable
     /// <summary>Raised on a background thread. Only presses are reported — never releases.</summary>
     public event Action<ClawButton>? Pressed;
 
+    /// <summary>Raised on a background thread with the raw low-byte WMI event code for every press.</summary>
+    public event Action<int>? CodePressed;
+
     public ClawButtons()
     {
         _watcher.EventArrived += OnEvent;
@@ -82,6 +85,7 @@ public sealed class ClawButtons : IDisposable
         var known = Enum.IsDefined(typeof(ClawButton), code);
 
         // Act before logging: a press should not wait on the disk.
+        CodePressed?.Invoke(code);
         if (known) Pressed?.Invoke((ClawButton)code);
 
         _journal.Write($"event 0x{raw:X4}  code 0x{code:X2}  {(known ? ((ClawButton)code).ToString() : "unknown")}");

@@ -29,6 +29,40 @@ public static class QuickActions
     /// <summary>Toggles Xbox Game Bar via a tagged Win+G chord that passes through Tsume's Game Bar hook.</summary>
     public static void OpenGameBar() => User32.SendChord(Input.GameBarButtonHook.PassThroughExtraInfo, User32.VK_LWIN, User32.VK_G);
 
+    public static void Run(HardwareButtonAction action, Action toggleTsume)
+    {
+        switch (action)
+        {
+            case HardwareButtonAction.OpenTsume:
+                toggleTsume();
+                break;
+
+            case HardwareButtonAction.XboxGameBar:
+                OpenGameBar();
+                break;
+
+            case HardwareButtonAction.SteamBigPicture:
+                OpenSteamBigPicture();
+                break;
+
+            case HardwareButtonAction.TaskManager:
+                TaskManager();
+                break;
+
+            case HardwareButtonAction.TouchKeyboard:
+                ToggleTouchKeyboard();
+                break;
+
+            case HardwareButtonAction.Screenshot:
+                Screenshot();
+                break;
+
+            case HardwareButtonAction.ShowDesktop:
+                ShowDesktop();
+                break;
+        }
+    }
+
     /// <summary>
     /// Presses Insert, the key OptiScaler's in-game menu opens on, for the window behind the panel.
     /// Posted to that window rather than typed, so the panel can stay open and in front.

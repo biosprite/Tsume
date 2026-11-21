@@ -10,11 +10,14 @@ public sealed class PadPresses
     private const PadButton SummonChord = PadButton.View | PadButton.Menu;
     private const PadButton Directions = PadButton.Up | PadButton.Down | PadButton.Left | PadButton.Right;
 
-    private static readonly TimeSpan RepeatDelay = TimeSpan.FromMilliseconds(380);
-    private static readonly TimeSpan RepeatEvery = TimeSpan.FromMilliseconds(85);
+    private static readonly TimeSpan RepeatDelay = TimeSpan.FromMilliseconds(320);
+    private static readonly TimeSpan RepeatEvery = TimeSpan.FromMilliseconds(80);
+    private static readonly TimeSpan FastRepeatEvery = TimeSpan.FromMilliseconds(42);
+    private const int FastAfterRepeats = 4;
 
     private PadButton _before = PadButton.None;
     private DateTime _nextRepeat = DateTime.MaxValue;
+    private int _repeats;
 
     /// <param name="now">Every button held at this reading.</param>
     /// <param name="navigating">Whether the panel is open and wants presses.</param>
@@ -28,7 +31,11 @@ public sealed class PadPresses
 
         // Reset the repeat timer whenever the panel is not navigating: a stale one would fire
         // at once if the panel opened with the stick already held.
-        if (chordJustCompleted || !navigating) _nextRepeat = DateTime.MaxValue;
+        if (chordJustCompleted || !navigating)
+        {
+            _nextRepeat = DateTime.MaxValue;
+            _repeats = 0;
+        }
 
         if (chordJustCompleted) return (true, PadButton.None);
         if (!navigating) return (false, PadButton.None);
@@ -36,14 +43,20 @@ public sealed class PadPresses
         var pressed = fresh & ~SummonChord;
 
         var held = now & Directions;
-        if ((fresh & Directions) != 0)
+        if (held == PadButton.None)
         {
+            _repeats = 0;
+        }
+        else if ((fresh & Directions) != 0)
+        {
+            _repeats = 0;
             _nextRepeat = at + RepeatDelay;
         }
-        else if (held != 0 && at >= _nextRepeat)
+        else if (at >= _nextRepeat)
         {
             pressed |= held;
-            _nextRepeat = at + RepeatEvery;
+            _repeats++;
+            _nextRepeat = at + (_repeats >= FastAfterRepeats ? FastRepeatEvery : RepeatEvery);
         }
 
         return (false, pressed);

@@ -28,7 +28,7 @@ public sealed class SettingsViewModel : LayerViewModel
         ChargeLimit = new ChargeLimitViewModel(helper, state);
         PerformancePresets = new PerformancePresetsViewModel(performance, state);
         Customization = new CustomizationViewModel(state);
-        Controls = new ControlsViewModel(state);
+        Controls = new ControlsViewModel(performance, state);
 
         ToggleOptiScaler = new Command(() =>
         {
