@@ -15,8 +15,13 @@ namespace Tsume.App.ViewModels;
 public sealed class SettingsViewModel : LayerViewModel
 {
     /// <param name="dismiss">Closes the panel and completes once it is fully off screen.</param>
+    /// <param name="onRtssVisibilityChanged">Called when the RTSS tile switch changes.</param>
     public SettingsViewModel(
-        Tsume.Core.Ipc.HelperClient helper, SavedState state, PerformanceViewModel performance, Func<Task> dismiss)
+        Tsume.Core.Ipc.HelperClient helper,
+        SavedState state,
+        PerformanceViewModel performance,
+        Func<Task> dismiss,
+        Action<bool>? onRtssVisibilityChanged = null)
     {
         _helper = helper;
         _state = state;
@@ -31,6 +36,16 @@ public sealed class SettingsViewModel : LayerViewModel
 
             Notify(nameof(ShowsOptiScaler));
             Notify(nameof(OptiScalerTile));
+        });
+
+        ToggleRtss = new Command(() =>
+        {
+            _state.ShowRtss = !_state.ShowRtss;
+            _state.Save();
+
+            Notify(nameof(ShowsRtss));
+            Notify(nameof(RtssTile));
+            onRtssVisibilityChanged?.Invoke(_state.ShowRtss);
         });
 
         ToggleStartWithWindows = new Command(() => StartsWithWindows = !StartsWithWindows);
@@ -120,6 +135,7 @@ public sealed class SettingsViewModel : LayerViewModel
     private bool _sharing;
 
     public ICommand ToggleOptiScaler { get; }
+    public ICommand ToggleRtss { get; }
 
     public ICommand ShareLogs { get; }
     public ICommand OpenDataFolder { get; }
@@ -130,6 +146,13 @@ public sealed class SettingsViewModel : LayerViewModel
     public bool ShowsOptiScaler => _state.ShowOptiScaler;
 
     public System.Windows.Visibility OptiScalerTile => ShowsOptiScaler
+        ? System.Windows.Visibility.Visible
+        : System.Windows.Visibility.Collapsed;
+
+    /// <summary>Whether the RTSS overlay tile is on the main screen.</summary>
+    public bool ShowsRtss => _state.ShowRtss;
+
+    public System.Windows.Visibility RtssTile => ShowsRtss
         ? System.Windows.Visibility.Visible
         : System.Windows.Visibility.Collapsed;
 

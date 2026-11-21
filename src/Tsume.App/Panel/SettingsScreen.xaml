@@ -112,6 +112,14 @@
                        IsOn="{Binding ShowsOptiScaler}"
                        Command="{Binding ToggleOptiScaler}" />
 
+        <controls:Tile Style="{StaticResource Tile.Switch}"
+                       Glyph="{x:Static theme:Glyphs.Overlay}"
+                       Label="{x:Static lang:Strings.ShowRtss}"
+                       Tag="{x:Static lang:Strings.Experimental}"
+                       Detail="{x:Static lang:Strings.ShowRtssDetail}"
+                       IsOn="{Binding ShowsRtss}"
+                       Command="{Binding ToggleRtss}" />
+
         <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.MsiCenterHeading}"
                    Margin="4,12,0,10" />
 

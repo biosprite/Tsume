@@ -202,6 +202,9 @@ public sealed class PerformanceViewModel : Observable
 
     private PowerLimits? InForce => Device.LimitsFor(Mode, Manual, CustomFor(Mode));
 
+    /// <summary>The power limits currently in force, or null when the device has none.</summary>
+    public PowerLimits? ActiveLimits => InForce;
+
     /// <summary>The sustained limit in force, e.g. "25 W".</summary>
     public string SustainedInForce => InForce is { } limits ? Strings.Watts(limits.Sustained) : Strings.NoReading;
 

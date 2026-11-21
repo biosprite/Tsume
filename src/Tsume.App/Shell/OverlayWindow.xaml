@@ -119,6 +119,10 @@
             <panel:RestoreAllMenu />
           </controls:Sheet>
 
+          <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Rtss.IsOpen}">
+            <panel:RtssScreen />
+          </controls:Screen>
+
           <controls:Sheet Title="{x:Static lang:Strings.QuitHeading}" IsOpen="{Binding Quit.IsOpen}">
             <panel:QuitMenu />
           </controls:Sheet>

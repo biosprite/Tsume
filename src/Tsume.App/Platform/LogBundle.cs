@@ -229,6 +229,10 @@ public static class LogBundle
 
         var refresh = DisplayMode.CurrentRefreshRate();
         if (refresh > 0) summary.AppendLine($"  Refresh rate: {refresh} Hz");
+
+        var rtssInstall = Rtss.RtssInstallation.Find();
+        var rtssState = SavedState.Load();
+        summary.AppendLine($"  RTSS: {(rtssInstall is null ? "not installed" : $"{rtssInstall.Version} ({(Rtss.RtssInstallation.IsRunning() ? "running" : "stopped")})")} (tile {(rtssState.ShowRtss ? "shown" : "hidden")}, tsume overlay {(rtssState.Rtss?.UseTsumeOverlay ?? true ? rtssState.Rtss?.Level.ToString() ?? "Off" : "disabled")})");
         summary.AppendLine();
 
         summary.AppendLine("Helper");

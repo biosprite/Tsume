@@ -41,12 +41,18 @@
     <controls:Tile Glyph="{x:Static theme:Glyphs.Desktop}" Label="{x:Static lang:Strings.Desktop}"
                    Command="{Binding Actions.Desktop}" />
 
-    <!-- Optional: Settings can hide it. -->
+    <!-- Optional: Settings can hide these. -->
     <controls:Tile Glyph="{x:Static theme:Glyphs.Upscaling}" Label="{x:Static lang:Strings.OptiScaler}"
                    Detail="{Binding Upscaling.TileDetail}"
                    IsOn="{Binding Upscaling.IsInUse}"
                    Visibility="{Binding Settings.OptiScalerTile}"
                    Command="{Binding Upscaling.Open}" />
+
+    <controls:Tile Glyph="{x:Static theme:Glyphs.Overlay}" Label="{x:Static lang:Strings.Rtss}"
+                   Detail="{Binding Rtss.TileDetail}"
+                   IsOn="{Binding Rtss.IsActive}"
+                   Visibility="{Binding Settings.RtssTile}"
+                   Command="{Binding Rtss.Open}" />
 
   </UniformGrid>
 

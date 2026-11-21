@@ -164,6 +164,8 @@ public static class Strings
     public static string PresetDaylight => Find();
     public static string ShowOptiScaler => Find();
     public static string ShowOptiScalerDetail => Find();
+    public static string ShowRtss => Find();
+    public static string ShowRtssDetail => Find();
     public static string Experimental => Find();
 
     public static string PerformancePresets => Find();
@@ -344,6 +346,76 @@ public static class Strings
     public static string RestoreAllHeading => Find();
     public static string KeepOptiScaler => Find();
     public static string RestoredGames(int count) => Fill(Find(), count);
+
+    public static string Rtss => Find();
+    public static string RtssNotInstalledTitle => Find();
+    public static string RtssNotInstalledExplained => Find();
+    public static string RtssDownloadOfficial => Find();
+    public static string RtssDownloadOfficialDetail => Find();
+    public static string RtssRunInstaller => Find();
+    public static string RtssRunInstallerDetail(string fileName) => Fill(Find(), fileName);
+    public static string RtssCheckAgain => Find();
+    public static string RtssCheckAgainDetail => Find();
+    public static string RtssStillNotFound => Find();
+    public static string RtssOpeningDownload => Find();
+    public static string RtssInstallerFailed => Find();
+
+    public static string RtssOverlayHeading => Find();
+    public static string RtssUseTsumeOverlay => Find();
+    public static string RtssUseTsumeOverlayOn => Find();
+    public static string RtssUseTsumeOverlayOff => Find();
+
+    public static string RtssLevelOff => Find();
+    public static string RtssLevelFps => Find();
+    public static string RtssLevelBar => Find();
+    public static string RtssLevelDetailed => Find();
+    public static string RtssLevelFull => Find();
+
+    public static string RtssLevelOffDetail => Find();
+    public static string RtssLevelFpsDetail => Find();
+    public static string RtssLevelBarDetail => Find();
+    public static string RtssLevelDetailedDetail => Find();
+    public static string RtssLevelFullDetail => Find();
+
+    public static string RtssCornerTopLeft => Find();
+    public static string RtssCornerTopRight => Find();
+    public static string RtssCornerBottomLeft => Find();
+    public static string RtssCornerBottomRight => Find();
+    public static string RtssScale => Find();
+
+    public static string RtssShowOwnOsd => Find();
+    public static string RtssShowOwnOsdDetail => Find();
+
+    public static string RtssFrameCapHeading => Find();
+    public static string RtssCapCustom => Find();
+    public static string RtssCapSlider => Find();
+    public static string RtssCapNote => Find();
+    public static string RtssFpsShort(int fps) => Fill(Find(), fps);
+    public static string RtssOsdOn => Find();
+
+    public static string RtssAppHeading => Find();
+    public static string RtssStart => Find();
+    public static string RtssOpenMenu => Find();
+    public static string RtssOpenMenuDetail => Find();
+    public static string RtssClose => Find();
+    public static string RtssCloseDetail => Find();
+    public static string RtssClosing => Find();
+    public static string RtssClosed => Find();
+    public static string RtssCloseFailed => Find();
+    public static string RtssOpenMenuFailed => Find();
+    public static string RtssSkipAntiCheat => Find();
+    public static string RtssSkipAntiCheatOn(int count) => count == 1 ? Find("RtssSkipAntiCheatOne") : Fill(Find(), count);
+    public static string RtssSkipAntiCheatNone => Find();
+    public static string RtssSkipAntiCheatOff => Find();
+    public static string RtssSkipAntiCheatBusy => Find();
+    public static string RtssStatusRunning(string version) => string.IsNullOrWhiteSpace(version) ? Find("RtssRunningPlain") : Fill(Find(), version);
+    public static string RtssStatusStopped(string version) => string.IsNullOrWhiteSpace(version) ? Find("RtssStoppedPlain") : Fill(Find(), version);
+    public static string RtssStarting => Find();
+    public static string RtssStartFailed => Find();
+    public static string RtssNotRunningNote => Find();
+    public static string RtssSavedNote => Find();
+    public static string RtssGuru3dLink => Find();
+    public static string RtssGuru3dLinkDetail => Find();
 
     /// <summary>The string named after the calling member; a name with no entry is shown as the name itself.</summary>
     private static string Find([CallerMemberName] string name = "") =>

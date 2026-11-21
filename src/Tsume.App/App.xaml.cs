@@ -32,6 +32,7 @@ public partial class App
     private const string PadModeCheckSwitch = "--pad-mode-check";
     private const string OptiScalerCheckSwitch = "--optiscaler-check";
     private const string OpenOptiScalerSwitch = "--optiscaler";
+    private const string OpenRtssSwitch = "--rtss";
     private const string ScreensSwitch = "--screens";
 
     // Run by the uninstaller (installer\Package.wxs) before it removes anything.
@@ -48,6 +49,7 @@ public partial class App
     private GlobalHotkey? _hotkey;
     private Gamepad? _gamepad;
     private ClawButtons? _buttons;
+    private PanelViewModel? _panel;
     private OverlayWindow? _window;
     private DateTime _lastButtonPress;
 
@@ -137,10 +139,11 @@ public partial class App
             return;
         }
 
-        var panel = new PanelViewModel(
+        var panel = _panel = new PanelViewModel(
             SavedState.Load(),
             dismiss: () => _window!.CloseAsync(),
             quit: Shutdown);
+        panel.StartBackgroundServices();
 
         _window = new OverlayWindow(panel, stayOpen: e.Args.Contains(StayOpenSwitch));
 
@@ -157,6 +160,7 @@ public partial class App
         if (e.Args.Contains(OpenSettingsSwitch)) panel.Settings.IsOpen = true;
         if (e.Args.Contains(OpenLightingSwitch)) panel.Lighting.IsOpen = true;
         if (e.Args.Contains(OpenOptiScalerSwitch)) panel.Upscaling.IsOpen = true;
+        if (e.Args.Contains(OpenRtssSwitch)) panel.Rtss.IsOpen = true;
     }
 
     /// <summary>
@@ -173,7 +177,8 @@ public partial class App
             Settings: args.Contains(OpenSettingsSwitch),
             Lighting: args.Contains(OpenLightingSwitch),
             OptiScaler: args.Contains(OpenOptiScalerSwitch),
-            Stay: args.Contains(StayOpenSwitch));
+            Stay: args.Contains(StayOpenSwitch),
+            Rtss: args.Contains(OpenRtssSwitch));
 
         var attempts = request.Background && HelperServiceInstalled() ? 20 : 1;
 
@@ -294,6 +299,7 @@ public partial class App
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _panel?.Dispose();
         _buttons?.Dispose();
         _gamepad?.Dispose();
         _hotkey?.Dispose();

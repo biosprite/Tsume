@@ -21,7 +21,8 @@ public static class Battery
     /// <param name="PluggedIn">True on wall power.</param>
     /// <param name="Watts">Positive while charging, negative while draining, null when unknown.</param>
     /// <param name="Flow">Whether the battery is filling, emptying, or being left alone.</param>
-    public readonly record struct Reading(int Percent, bool PluggedIn, double? Watts, Flow Flow);
+    /// <param name="EstimatedMinutes">Estimated remaining runtime in minutes while draining, or null when unknown.</param>
+    public readonly record struct Reading(int Percent, bool PluggedIn, double? Watts, Flow Flow, int? EstimatedMinutes = null);
 
     public static Reading? Read()
     {
@@ -39,6 +40,11 @@ public static class Battery
             : state.Rate == 0          ? Flow.Resting
             : Flow.Unknown;
 
-        return new Reading(Math.Clamp(percent, 0, 100), state.AcOnLine != 0, watts, flow);
+        // Windows reports uint.MaxValue (0xFFFFFFFF) when remaining time is unknown; cap at 99h to filter garbage.
+        int? estimatedMinutes = flow == Flow.Draining && state.EstimatedTime is > 0 and < 360_000
+            ? (int)Math.Round(state.EstimatedTime / 60.0)
+            : null;
+
+        return new Reading(Math.Clamp(percent, 0, 100), state.AcOnLine != 0, watts, flow, estimatedMinutes);
     }
 }

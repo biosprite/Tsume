@@ -25,7 +25,10 @@ public static class HelperPipe
 [JsonDerivedType(typeof(SetFan),         "fan.set")]
 [JsonDerivedType(typeof(SetChargeLimit), "charge.set")]
 [JsonDerivedType(typeof(StartPanel),     "panel.start")]
-[JsonDerivedType(typeof(GetLog),         "log.get")]
+[JsonDerivedType(typeof(GetLog),            "log.get")]
+[JsonDerivedType(typeof(SetRtssProfile),    "rtss.profile.set")]
+[JsonDerivedType(typeof(SetRtssExclusions), "rtss.exclusions.set")]
+[JsonDerivedType(typeof(StopRtss),          "rtss.stop")]
 public abstract record HelperRequest;
 
 /// <summary>Read the current state without changing anything.</summary>
@@ -52,10 +55,32 @@ public sealed record SetChargeLimit(int Percent) : HelperRequest;
 /// program. The flags are the panel's own start-up intentions; the helper always starts the fixed Tsume.exe beside
 /// it, in the caller's own session, so neither the program run nor the session is anything a caller can name.
 /// </summary>
-public sealed record StartPanel(bool Background, bool Settings, bool Lighting, bool OptiScaler, bool Stay) : HelperRequest;
+public sealed record StartPanel(bool Background, bool Settings, bool Lighting, bool OptiScaler, bool Stay, bool Rtss = false) : HelperRequest;
 
 /// <summary>Read the helper's own log (kept under the service account's profile when installed, so the panel cannot read it on disk).</summary>
 public sealed record GetLog : HelperRequest;
+
+/// <summary>
+/// Updates validated keys in RTSS's Global profile file under Program Files (which requires elevation to write).
+/// Only non-null fields are updated; all values are clamped by the helper and the path is resolved from RTSS's own install.
+/// </summary>
+public sealed record SetRtssProfile(
+    int? FramerateLimit = null,
+    int? PositionX = null,
+    int? PositionY = null,
+    int? ZoomRatio = null,
+    int? EnableFill = null,
+    uint? FillColor = null) : HelperRequest;
+
+/// <summary>
+/// Writes RTSS per-game exclusion profiles (<c>EnableHooking=0</c>) for the given bare executable names
+/// (e.g. anti-cheat games), and removes previously Tsume-created exclusions no longer in the list.
+/// Never touches user-created RTSS profiles.
+/// </summary>
+public sealed record SetRtssExclusions(IReadOnlyList<string> Executables) : HelperRequest;
+
+/// <summary>Stops the running RTSS process (and its companion executables inside RTSS's install folder).</summary>
+public sealed record StopRtss : HelperRequest;
 
 /// <summary>The helper's answer to any request.</summary>
 public sealed record HelperReply

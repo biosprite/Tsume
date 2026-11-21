@@ -50,6 +50,8 @@ public static class Glyphs
     public const string Up          = "";
     public const string Chip        = "";
     public const string Counter     = "";   // heartbeat line
+    public const string Overlay     = "\uE9D2";   // vertical metric bars (performance overlay)
+    public const string Shield      = "\uEA18";   // shield (anti-cheat protection)
     public const string Proxy       = "";   // two arrows swapping
     public const string Chevron     = "";   // points right: this opens something
 

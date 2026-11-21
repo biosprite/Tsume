@@ -103,6 +103,15 @@ public sealed class PipeServer(RequestHandler handler)
         if (request is GetLog)
             return new HelperReply { Ok = true, Log = Log.Read() ?? "" };
 
+        if (request is SetRtssProfile rtss)
+            return RtssProfileWriter.Apply(rtss);
+
+        if (request is SetRtssExclusions exclusions)
+            return RtssProfileWriter.SetExclusions(exclusions);
+
+        if (request is StopRtss)
+            return RtssProfileWriter.Stop();
+
         return handler.Handle(request);
     }
 

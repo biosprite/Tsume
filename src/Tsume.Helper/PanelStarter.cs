@@ -27,6 +27,7 @@ internal static class PanelStarter
     private const string Settings = "--settings";    // App.OpenSettingsSwitch
     private const string Lighting = "--lighting";    // App.OpenLightingSwitch
     private const string OptiScaler = "--optiscaler"; // App.OpenOptiScalerSwitch
+    private const string Rtss = "--rtss";            // App.OpenRtssSwitch
     private const string Stay = "--stay";            // App.StayOpenSwitch
 
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -138,6 +139,7 @@ internal static class PanelStarter
         if (request.Settings) command.Append(' ').Append(Settings);
         if (request.Lighting) command.Append(' ').Append(Lighting);
         if (request.OptiScaler) command.Append(' ').Append(OptiScaler);
+        if (request.Rtss) command.Append(' ').Append(Rtss);
 
         return command.ToString();
     }

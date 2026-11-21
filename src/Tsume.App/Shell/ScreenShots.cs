@@ -55,6 +55,14 @@ public static class ScreenShots
             panel.Settings.IsOpen = true;
             await Shot("2-settings");
 
+            if (Descendants<Panel.SettingsScreen>(window).FirstOrDefault() is { } settingsScreen
+                && Descendants<System.Windows.Controls.ScrollViewer>(settingsScreen).FirstOrDefault() is { } settingsScroll)
+            {
+                settingsScroll.ScrollToVerticalOffset(340);
+                await Shot("2-settings-features");
+                settingsScroll.ScrollToTop();
+            }
+
             // No slider is moved, so nothing is saved or sent on closing.
             panel.Settings.PerformancePresets.IsOpen = true;
             await Shot("2c-performance-presets");
@@ -82,6 +90,14 @@ public static class ScreenShots
             panel.Lighting.IsOpen = true;
             await Shot("2b-lighting");
             panel.Lighting.IsOpen = false;
+
+            panel.Rtss.IsOpen = true;
+            await Shot("2d-rtss");
+            panel.Rtss.PreviewForScreenShot(useTsumeOverlay: true, Platform.Rtss.RtssOverlayLevel.Bar, frameRateLimit: 45);
+            await Shot("2d-rtss-steam");
+            panel.Rtss.PreviewForScreenShot(useTsumeOverlay: false, Platform.Rtss.RtssOverlayLevel.Off, frameRateLimit: 60);
+            await Shot("2d-rtss-own");
+            panel.Rtss.IsOpen = false;
 
             var upscaling = panel.Upscaling;
 

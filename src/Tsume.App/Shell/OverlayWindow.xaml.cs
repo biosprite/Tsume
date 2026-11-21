@@ -410,7 +410,7 @@ public partial class OverlayWindow
         SettingsScreen.IsEnabled = !onAPage && !_panel.Quit.IsOpen;
         UpscalingScreen.IsCovered = _panel.Upscaling.HasPageOpen;
         UpscalingScreen.IsEnabled = !_panel.Upscaling.HasPageOpen && !_panel.Upscaling.RestoreAll.IsOpen;
-        StepAside(_panel.Settings.IsOpen || _panel.Lighting.IsOpen || _panel.Upscaling.IsOpen);
+        StepAside(_panel.Settings.IsOpen || _panel.Lighting.IsOpen || _panel.Upscaling.IsOpen || _panel.Rtss.IsOpen);
 
         if (layer.IsOpen || !_focusBeneath.TryPop(out var beneath)) return;
         if (!IsOpen) return;

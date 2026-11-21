@@ -48,6 +48,11 @@ yet, the panel runs but leaves the firmware alone.
   game you choose the upscaler (XeSS, FSR 4 or FSR 3.1), frame generation and
   a frame-rate counter. Single-player games only: in an online game it can get
   an account banned, and it is not offered where an anti-cheat is found.
+- **RTSS overlay (experimental):** optional Steam-style performance overlay
+  (FPS, compact horizontal bar, detailed stats, or full stats with a live
+  frametime graph) and global frame-rate cap driven through RivaTuner
+  Statistics Server. Can be switched off to leave your own RTSS overlay alone.
+  Nothing is bundled — links to Guru3D's official RTSS 7.3.7 download.
 - **Themes:** eight colour schemes, or your own accent, background and text
   colours.
 - **Controller, touch and mouse:** the whole panel works with any of the
