@@ -29,6 +29,7 @@ public sealed class SettingsViewModel : LayerViewModel
         PerformancePresets = new PerformancePresetsViewModel(performance, state);
         Customization = new CustomizationViewModel(state);
         Controls = new ControlsViewModel(performance, state);
+        Developer = new DeveloperViewModel(helper, state, dismiss);
 
         ToggleOptiScaler = new Command(() =>
         {
@@ -132,6 +133,8 @@ public sealed class SettingsViewModel : LayerViewModel
     public CustomizationViewModel Customization { get; }
 
     public ControlsViewModel Controls { get; }
+
+    public DeveloperViewModel Developer { get; }
 
     private readonly Tsume.Core.Ipc.HelperClient _helper;
     private readonly SavedState _state;

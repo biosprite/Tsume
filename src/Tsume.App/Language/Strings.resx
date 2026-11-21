@@ -639,4 +639,28 @@
   <data name="ControlsSavedPanelOnly" xml:space="preserve"><value>Panel &amp; button settings save immediately.</value></data>
   <data name="ControlsMsiCenterRuns" xml:space="preserve"><value>MSI Center M is running and may undo back-button bindings.</value></data>
 
+  <!-- Developer options & Hardware Discovery -->
+
+  <data name="DeveloperOptions" xml:space="preserve"><value>Developer options</value></data>
+  <data name="DeveloperOptionsDetail" xml:space="preserve"><value>Hardware discovery, button mapping and device support logging</value></data>
+  <data name="DeveloperDiscoveryHeading" xml:space="preserve"><value>DEVICE SUPPORT</value></data>
+  <data name="OpenHardwareDiscovery" xml:space="preserve"><value>Hardware Discovery</value></data>
+  <data name="OpenHardwareDiscoveryDetail" xml:space="preserve"><value>Opens a dedicated window for quick scans, guided capture, watch mode and button mapping</value></data>
+  <data name="QuickHardwareSnapshot" xml:space="preserve"><value>Quick hardware snapshot</value></data>
+  <data name="QuickHardwareSnapshotDetail" xml:space="preserve"><value>Hands-free 10-second read-only scan saved straight to your Desktop</value></data>
+  <data name="QuickHardwareSnapshotBusy" xml:space="preserve"><value>Scanning hardware (read-only)…</value></data>
+  <data name="QuickHardwareSnapshotDone" xml:space="preserve"><value>Saved to Desktop and copied to clipboard</value></data>
+  <data name="QuickHardwareSnapshotFailed" xml:space="preserve">
+    <value>Snapshot failed: {0}</value>
+    <comment>{0} = error message</comment>
+  </data>
+  <data name="DeveloperDiagnosticsHeading" xml:space="preserve"><value>DIAGNOSTICS</value></data>
+  <data name="CheckEnvironment" xml:space="preserve"><value>Environment &amp; read-back check</value></data>
+  <data name="CheckEnvironmentDetail" xml:space="preserve"><value>Verify helper status, CPU boost mode, OEM software and live readings</value></data>
+  <data name="CheckEnvironmentBusy" xml:space="preserve"><value>Checking environment…</value></data>
+  <data name="IncludeHardwareInLogs" xml:space="preserve"><value>Include hardware info in logs</value></data>
+  <data name="IncludeHardwareInLogsDetail" xml:space="preserve"><value>Embeds a read-only hardware inventory in Share logs (always on for unsupported devices)</value></data>
+  <data name="HardwareDiscoveryTitle" xml:space="preserve"><value>Hardware Discovery</value></data>
+  <data name="HardwareDiscoverySubtitle" xml:space="preserve"><value>100% read-only device logging for adding full handheld support to Tsume</value></data>
+
 </root>

@@ -444,7 +444,8 @@ public partial class OverlayWindow
         Main.IsEnabled = !_panel.IsCovered;
         var onAPage = _panel.Settings.Customization.IsOpen
             || _panel.Settings.PerformancePresets.IsOpen
-            || _panel.Settings.Controls.IsOpen;
+            || _panel.Settings.Controls.IsOpen
+            || _panel.Settings.Developer.IsOpen;
         SettingsScreen.IsCovered = onAPage;
         SettingsScreen.IsEnabled = !onAPage && !_panel.Quit.IsOpen;
         UpscalingScreen.IsCovered = _panel.Upscaling.HasPageOpen;

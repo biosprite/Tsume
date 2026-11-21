@@ -39,6 +39,9 @@ public sealed class SavedState
     /// <summary>True to slide the panel in from the right edge of the screen instead of the left.</summary>
     public bool OpenOnRight { get; set; }
 
+    /// <summary>True to embed read-only hardware discovery data inside Share Logs bundles even on supported devices.</summary>
+    public bool IncludeHardwareInLogs { get; set; }
+
     public Platform.HardwareButtonAction GameBarButton { get; set; } = Platform.HardwareButtonAction.XboxGameBar;
     public Platform.HardwareButtonAction? OemButton { get; set; }
 

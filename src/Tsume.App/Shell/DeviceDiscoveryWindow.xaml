@@ -1,0 +1,447 @@
+<Window x:Class="Tsume.App.Shell.DeviceDiscoveryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:theme="clr-namespace:Tsume.App.Theme"
+        xmlns:lang="clr-namespace:Tsume.App.Language"
+        Title="Tsume — Hardware Discovery"
+        Width="980"
+        Height="700"
+        MinWidth="760"
+        MinHeight="540"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource Panel.Fill}"
+        Foreground="{DynamicResource Text}"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Ideal">
+
+  <Window.Resources>
+    <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
+    <Style x:Key="Dev.Button" TargetType="Button">
+      <Setter Property="Background" Value="{DynamicResource Surface}" />
+      <Setter Property="Foreground" Value="{DynamicResource Text}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Panel.Edge}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="14,8" />
+      <Setter Property="FontFamily" Value="{StaticResource Font.Words}" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="10" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface.Hover}" />
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="Dev.PrimaryButton" TargetType="Button" BasedOn="{StaticResource Dev.Button}">
+      <Setter Property="Foreground" Value="#FF0B0D11" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Background="{x:Static theme:Accent.Brush}"
+                    CornerRadius="10" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Opacity" Value="0.88" />
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.4" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="Dev.TabButton" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="{DynamicResource Text.Muted}" />
+      <Setter Property="FontFamily" Value="{StaticResource Font.Words}" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Padding" Value="14,8" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="Bd" Background="Transparent" CornerRadius="10" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                <Setter Property="Foreground" Value="{DynamicResource Text}" />
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface}" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="Dev.Card" TargetType="Border">
+      <Setter Property="Background" Value="{DynamicResource Surface}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Panel.Edge}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="14" />
+      <Setter Property="Padding" Value="16,12" />
+      <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+  </Window.Resources>
+
+  <Border Background="{DynamicResource Panel.Fill}" Padding="20,16">
+    <DockPanel>
+
+      <!-- Top Header -->
+      <DockPanel DockPanel.Dock="Top" Margin="0,0,0,14">
+        <StackPanel DockPanel.Dock="Left">
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Style="{StaticResource Text.Icon}" Text="{x:Static theme:Glyphs.Developer}"
+                       Foreground="{x:Static theme:Accent.Brush}" FontSize="20" Margin="0,0,10,0" />
+            <TextBlock Style="{StaticResource Text.Title}" Text="{x:Static lang:Strings.HardwareDiscoveryTitle}" />
+            <Border Background="{x:Static theme:Accent.Tint}" BorderBrush="{x:Static theme:Accent.Wash}"
+                    BorderThickness="1" CornerRadius="8" Padding="8,2" Margin="12,0,0,0" VerticalAlignment="Center">
+              <TextBlock Style="{StaticResource Text.Caption}" Text="100% READ-ONLY"
+                         Foreground="{x:Static theme:Accent.Brush}" FontWeight="Bold" FontSize="10" />
+            </Border>
+          </StackPanel>
+          <TextBlock Style="{StaticResource Text.Caption}" Text="{x:Static lang:Strings.HardwareDiscoverySubtitle}"
+                     Margin="0,4,0,0" />
+        </StackPanel>
+
+        <!-- Mode tabs -->
+        <Border DockPanel.Dock="Right" Background="{DynamicResource Surface}" CornerRadius="12" Padding="4"
+                VerticalAlignment="Center" HorizontalAlignment="Right">
+          <StackPanel Orientation="Horizontal">
+            <RadioButton Style="{StaticResource Dev.TabButton}" GroupName="ModeTabs" Content="Quick Scan"
+                         IsChecked="{Binding IsQuickScanTab, Mode=OneWay}" Click="OnSelectQuickScan" />
+            <RadioButton Style="{StaticResource Dev.TabButton}" GroupName="ModeTabs" Content="Guided Capture"
+                         IsChecked="{Binding IsGuidedTab, Mode=OneWay}" Click="OnSelectGuided" />
+            <RadioButton Style="{StaticResource Dev.TabButton}" GroupName="ModeTabs" Content="Live Watch"
+                         IsChecked="{Binding IsWatchTab, Mode=OneWay}" Click="OnSelectWatch" />
+            <RadioButton Style="{StaticResource Dev.TabButton}" GroupName="ModeTabs" Content="Report Preview"
+                         IsChecked="{Binding IsPreviewTab, Mode=OneWay}" Click="OnSelectPreview" />
+          </StackPanel>
+        </Border>
+      </DockPanel>
+
+      <!-- Status strip -->
+      <Border DockPanel.Dock="Top" Background="{DynamicResource Surface}" CornerRadius="10" Padding="12,8" Margin="0,0,0,12">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Icon}" Text="{x:Static theme:Glyphs.Info}"
+                     FontSize="14" Foreground="{x:Static theme:Accent.Brush}" Margin="0,0,8,0" />
+          <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
+                     Text="{Binding StatusBanner}" TextWrapping="Wrap" VerticalAlignment="Center" />
+        </DockPanel>
+      </Border>
+
+      <!-- Persistent Bottom Action Bar -->
+      <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Surface.Divider}" BorderThickness="0,1,0,0"
+              Padding="0,12,0,0" Margin="0,12,0,0">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center">
+            <TextBlock Style="{StaticResource Text.Body}" Text="{Binding SummaryPill}" FontSize="12.5" />
+            <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding ExportMessage}"
+                       Foreground="{StaticResource Signal.Good}" Margin="0,2,0,0" />
+          </StackPanel>
+
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Style="{StaticResource Dev.Button}" Content="Environment Check" Margin="0,0,8,0"
+                    IsEnabled="{Binding IsNotBusy}" Command="{Binding RunEnvCheckCommand}" />
+            <Button Style="{StaticResource Dev.PrimaryButton}" Content="Export Support Bundle (.zip)"
+                    IsEnabled="{Binding IsNotBusy}" Command="{Binding ExportBundleCommand}" />
+          </StackPanel>
+        </DockPanel>
+      </Border>
+
+      <!-- Main Body (4 switchable views) -->
+      <Grid>
+
+        <!-- TAB 0: QUICK SCAN (HANDS-FREE) -->
+        <ScrollViewer Visibility="{Binding IsQuickScanTab, Converter={StaticResource BoolToVis}}"
+                      VerticalScrollBarVisibility="Auto">
+          <StackPanel>
+            <Border Style="{StaticResource Dev.Card}">
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Left" MaxWidth="620">
+                  <TextBlock Style="{StaticResource Text.Body}" Text="Hands-Free Automatic Discovery (~10 seconds)" FontSize="15" />
+                  <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,4,0,10"
+                             Text="Captures SMBIOS/CPU/GPU identity, display timings, Windows power plan &amp; boost mode, vendor WMI classes + MOF schemas, safe OEM firmware reads, a 3-second live-telemetry load delta, full HID/XInput/LampArray/controller topology, and OEM software footprint." />
+                  <StackPanel Orientation="Horizontal">
+                    <CheckBox Content="Include 3-second CPU load delta (identifies live temp/fan/power bytes)"
+                              IsChecked="{Binding IncludeTimedLoad}" Foreground="{DynamicResource Text}" Margin="0,0,18,0" />
+                    <CheckBox Content="Allow UAC fallback if Helper service is offline"
+                              IsChecked="{Binding AllowUacFallback}" Foreground="{DynamicResource Text}" />
+                  </StackPanel>
+                </StackPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource Dev.PrimaryButton}"
+                        Content="Run Quick Scan" Padding="20,12" VerticalAlignment="Center"
+                        IsEnabled="{Binding IsNotBusy}" Command="{Binding RunQuickScanCommand}" />
+              </DockPanel>
+            </Border>
+
+            <Border Style="{StaticResource Dev.Card}">
+              <StackPanel>
+                <TextBlock Style="{StaticResource Text.Heading}" Text="SYSTEM IDENTITY" Margin="0,0,0,6" />
+                <TextBlock Style="{StaticResource Text.Body}" Text="{Binding QuickIdentityText}" TextWrapping="Wrap" FontWeight="Normal" />
+              </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Dev.Card}">
+              <StackPanel>
+                <TextBlock Style="{StaticResource Text.Heading}" Text="FIRMWARE &amp; WMI SURFACE" Margin="0,0,0,6" />
+                <TextBlock Style="{StaticResource Text.Body}" Text="{Binding QuickFirmwareText}" TextWrapping="Wrap" FontWeight="Normal" />
+              </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Dev.Card}">
+              <StackPanel>
+                <TextBlock Style="{StaticResource Text.Heading}" Text="WINDOWS POWER, BOOST MODE &amp; DISPLAY" Margin="0,0,0,6" />
+                <TextBlock Style="{StaticResource Text.Body}" Text="{Binding QuickPowerDisplayText}" TextWrapping="Wrap" FontWeight="Normal" />
+              </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Dev.Card}">
+              <StackPanel>
+                <TextBlock Style="{StaticResource Text.Heading}" Text="CONTROLLERS, HID &amp; LIGHTING" Margin="0,0,0,6" />
+                <TextBlock Style="{StaticResource Text.Body}" Text="{Binding QuickHidText}" TextWrapping="Wrap" FontWeight="Normal" />
+              </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Dev.Card}">
+              <StackPanel>
+                <TextBlock Style="{StaticResource Text.Heading}" Text="OEM SOFTWARE FOOTPRINT" Margin="0,0,0,6" />
+                <TextBlock Style="{StaticResource Text.Body}" Text="{Binding QuickOemText}" TextWrapping="Wrap" FontWeight="Normal" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- TAB 1: GUIDED CAPTURE (11-STEP INTERACTIVE WIZARD) -->
+        <Grid Visibility="{Binding IsGuidedTab, Converter={StaticResource BoolToVis}}">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="270" />
+            <ColumnDefinition Width="14" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+
+          <!-- Step list -->
+          <Border Grid.Column="0" Style="{StaticResource Dev.Card}" Margin="0" Padding="8">
+            <ListBox ItemsSource="{Binding Steps}" SelectedItem="{Binding SelectedStep, Mode=TwoWay}"
+                     Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                  <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                  <Setter Property="Padding" Value="0" />
+                  <Setter Property="Margin" Value="0,0,0,4" />
+                  <Setter Property="Template">
+                    <Setter.Value>
+                      <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="10" Padding="10,8" Cursor="Hand">
+                          <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                          <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                          </Trigger>
+                          <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface}" />
+                          </Trigger>
+                        </ControlTemplate.Triggers>
+                      </ControlTemplate>
+                    </Setter.Value>
+                  </Setter>
+                </Style>
+              </ListBox.ItemContainerStyle>
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Text.Caption}" Text="{Binding Status}"
+                               VerticalAlignment="Center" Margin="6,0,0,0" />
+                    <TextBlock Style="{StaticResource Text.Body}" FontSize="12.5" VerticalAlignment="Center">
+                      <Run Text="{Binding Number, Mode=OneWay}" /><Run Text=". " /><Run Text="{Binding Title, Mode=OneWay}" />
+                    </TextBlock>
+                  </DockPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </Border>
+
+          <!-- Active step workspace -->
+          <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+              <Border Style="{StaticResource Dev.Card}">
+                <StackPanel>
+                  <TextBlock Style="{StaticResource Text.Heading}" Margin="0,0,0,4">
+                    <Run Text="STEP " /><Run Text="{Binding SelectedStep.Number, Mode=OneWay}" /><Run Text=" OF 11" />
+                  </TextBlock>
+                  <TextBlock Style="{StaticResource Text.Title}" Text="{Binding SelectedStep.Title}" Margin="0,0,0,10" />
+                  <TextBlock Style="{StaticResource Text.Body}" Text="{Binding SelectedStep.Instruction}"
+                             TextWrapping="Wrap" FontWeight="Normal" LineHeight="21" Margin="0,0,0,12" />
+                  <Border Background="{x:Static theme:Accent.Tint}" CornerRadius="10" Padding="12,8" Margin="0,0,0,12">
+                    <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
+                               Text="{Binding SelectedStep.WhyItMatters}" TextWrapping="Wrap" />
+                  </Border>
+
+                  <!-- Button capture step controls -->
+                  <StackPanel Visibility="{Binding IsButtonStepSelected, Converter={StaticResource BoolToVis}}">
+                    <DockPanel Margin="0,4,0,8">
+                      <Button DockPanel.Dock="Right" Style="{StaticResource Dev.PrimaryButton}"
+                              Content="{Binding ButtonListenLabel}" Margin="10,0,0,0"
+                              Command="{Binding ToggleButtonListeningCommand}" />
+                      <TextBlock Style="{StaticResource Text.Heading}" Text="SELECT WHICH BUTTON YOU ARE PRESSING"
+                                 VerticalAlignment="Center" Margin="0" />
+                    </DockPanel>
+                    <ListBox ItemsSource="{Binding ButtonPrompts}" SelectedItem="{Binding SelectedButtonPrompt, Mode=TwoWay}"
+                             Background="Transparent" BorderThickness="0" Margin="0,0,0,10"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                      <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                      </ListBox.ItemsPanel>
+                      <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                          <Setter Property="Padding" Value="0" />
+                          <Setter Property="Margin" Value="0,0,6,6" />
+                          <Setter Property="Template">
+                            <Setter.Value>
+                              <ControlTemplate TargetType="ListBoxItem">
+                                <Border x:Name="Bd" Background="{DynamicResource Surface}"
+                                        BorderBrush="{DynamicResource Panel.Edge}" BorderThickness="1"
+                                        CornerRadius="8" Padding="10,6" Cursor="Hand">
+                                  <ContentPresenter />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                  <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{x:Static theme:Accent.Tint}" />
+                                    <Setter TargetName="Bd" Property="BorderBrush" Value="{x:Static theme:Accent.Brush}" />
+                                  </Trigger>
+                                  <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                                  </Trigger>
+                                </ControlTemplate.Triggers>
+                              </ControlTemplate>
+                            </Setter.Value>
+                          </Setter>
+                        </Style>
+                      </ListBox.ItemContainerStyle>
+                      <ListBox.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
+                                     Text="{Binding Label}" FontWeight="SemiBold" />
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Border Background="#FF0A0C10" BorderBrush="{DynamicResource Panel.Edge}" BorderThickness="1"
+                            CornerRadius="10" Padding="10" Height="175">
+                      <ListBox ItemsSource="{Binding ButtonFeed}" Background="Transparent" BorderThickness="0"
+                               Foreground="#FFE6ECF5" FontFamily="Consolas" FontSize="11.5" />
+                    </Border>
+                  </StackPanel>
+
+                  <!-- Optional note + capture buttons (for non-button steps) -->
+                  <StackPanel>
+                    <StackPanel.Style>
+                      <Style TargetType="StackPanel">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding IsButtonStepSelected}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </StackPanel.Style>
+
+                    <TextBlock Style="{StaticResource Text.Caption}" Text="Optional note (e.g., actual watts or OEM mode label):" Margin="0,0,0,4" />
+                    <TextBox Text="{Binding StepUserNote, UpdateSourceTrigger=PropertyChanged}"
+                             Background="#FF0B0D12" Foreground="#FFE6ECF5" CaretBrush="#FFE6ECF5"
+                             BorderBrush="{DynamicResource Panel.Edge}" Padding="10,7" Margin="0,0,0,12" FontSize="13" />
+
+                    <StackPanel Orientation="Horizontal">
+                      <Button Style="{StaticResource Dev.PrimaryButton}" Content="Capture Step" Margin="0,0,8,0"
+                              IsEnabled="{Binding IsNotBusy}" Command="{Binding CaptureStepCommand}" />
+                      <Button Style="{StaticResource Dev.Button}" Content="Skip Step" Margin="0,0,8,0"
+                              IsEnabled="{Binding IsNotBusy}" Command="{Binding SkipStepCommand}" />
+                      <Button Style="{StaticResource Dev.Button}" Content="Previous" Margin="0,0,8,0"
+                              IsEnabled="{Binding CanGoPrevious}" Command="{Binding PreviousStepCommand}" />
+                      <Button Style="{StaticResource Dev.Button}" Content="Next"
+                              IsEnabled="{Binding CanGoNext}" Command="{Binding NextStepCommand}" />
+                    </StackPanel>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
+              <!-- Diff output card -->
+              <Border Style="{StaticResource Dev.Card}">
+                <StackPanel>
+                  <TextBlock Style="{StaticResource Text.Heading}" Text="DETECTED DIFFERENCES FOR THIS STEP" Margin="0,0,0,6" />
+                  <TextBox Text="{Binding SelectedStepDiffPreview, Mode=OneWay}" IsReadOnly="True"
+                           Background="#FF0A0C10" Foreground="#FFE6ECF5" BorderThickness="0"
+                           FontFamily="Consolas" FontSize="12" TextWrapping="Wrap" Padding="10" MinHeight="80" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+
+        <!-- TAB 2: LIVE WATCH MODE -->
+        <DockPanel Visibility="{Binding IsWatchTab, Converter={StaticResource BoolToVis}}">
+          <Border DockPanel.Dock="Top" Style="{StaticResource Dev.Card}">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Left" MaxWidth="620">
+                <TextBlock Style="{StaticResource Text.Body}" Text="Live Watch Mode (Free-Form Recorder)" FontSize="15" />
+                <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding WatchStatusText}" TextWrapping="Wrap" Margin="0,4,0,0" />
+              </StackPanel>
+              <Button DockPanel.Dock="Right" Style="{StaticResource Dev.PrimaryButton}"
+                      Content="{Binding WatchButtonLabel}" Padding="20,12" VerticalAlignment="Center"
+                      IsEnabled="{Binding IsNotBusy}" Command="{Binding ToggleWatchModeCommand}" />
+            </DockPanel>
+          </Border>
+
+          <Border Style="{StaticResource Dev.Card}" Margin="0">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Top" Style="{StaticResource Text.Heading}" Text="LIVE TIMELINE (FIRMWARE / REGISTRY / HID DIFFS + BUTTON EVENTS)" Margin="0,0,0,8" />
+              <ListBox ItemsSource="{Binding LiveFeed}" Background="#FF0A0C10" BorderBrush="{DynamicResource Panel.Edge}"
+                       BorderThickness="1" Foreground="#FFE6ECF5" FontFamily="Consolas" FontSize="12" Padding="6" />
+            </DockPanel>
+          </Border>
+        </DockPanel>
+
+        <!-- TAB 3: REPORT PREVIEW (PRIVACY AUDIT) -->
+        <DockPanel Visibility="{Binding IsPreviewTab, Converter={StaticResource BoolToVis}}">
+          <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+            <TextBlock Style="{StaticResource Text.Caption}" VerticalAlignment="Center"
+                       Text="Audit exactly what will be saved in report.md before exporting. Serial numbers, usernames, and hostnames are scrubbed." />
+            <Button DockPanel.Dock="Right" Style="{StaticResource Dev.Button}" Content="Refresh Preview"
+                    HorizontalAlignment="Right" Command="{Binding RefreshPreviewCommand}" />
+          </DockPanel>
+          <TextBox Text="{Binding ReportPreviewText, Mode=OneWay}" IsReadOnly="True"
+                   Background="#FF0A0C10" Foreground="#FFE6ECF5" BorderBrush="{DynamicResource Panel.Edge}"
+                   BorderThickness="1" FontFamily="Consolas" FontSize="12" Padding="12"
+                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
+        </DockPanel>
+
+      </Grid>
+    </DockPanel>
+  </Border>
+</Window>

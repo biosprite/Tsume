@@ -26,17 +26,27 @@ internal static unsafe partial class Hid
     public static IReadOnlyList<string> DevicePaths()
     {
         HidD_GetHidGuid(out var hidGuid);
+        return InterfacePaths(hidGuid);
+    }
 
+    /// <summary>GUID_DEVINTERFACE_LAMP_ARRAY — Windows Dynamic Lighting devices.</summary>
+    private static readonly Guid LampArrayGuid = new("F0679F4B-B3B7-4382-A5B4-8B4707C6DC23");
+
+    /// <summary>The path of every Windows LampArray (Dynamic Lighting) device present right now.</summary>
+    public static IReadOnlyList<string> LampArrayDevicePaths() => InterfacePaths(LampArrayGuid);
+
+    private static IReadOnlyList<string> InterfacePaths(Guid interfaceGuid)
+    {
         // The list can grow between asking its size and reading it; try again if so.
         for (var attempt = 0; attempt < 3; attempt++)
         {
-            if (CM_Get_Device_Interface_List_Size(out var length, hidGuid, 0, CM_GET_DEVICE_INTERFACE_LIST_PRESENT) != CR_SUCCESS)
+            if (CM_Get_Device_Interface_List_Size(out var length, interfaceGuid, 0, CM_GET_DEVICE_INTERFACE_LIST_PRESENT) != CR_SUCCESS)
                 return [];
 
             var buffer = new char[length];
             uint result;
             fixed (char* chars = buffer)
-                result = CM_Get_Device_Interface_List(hidGuid, 0, chars, length, CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
+                result = CM_Get_Device_Interface_List(interfaceGuid, 0, chars, length, CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
 
             if (result == CR_BUFFER_SMALL) continue;
             if (result != CR_SUCCESS) return [];
@@ -70,8 +80,25 @@ internal static unsafe partial class Hid
         return null;
     }
 
+    /// <summary>
+    /// Opens a collection with zero data-access rights so Windows allows querying attributes, strings, and
+    /// preparsed capabilities even on exclusive system keyboards, mice, and touchpads.
+    /// </summary>
+    public static SafeFileHandle? OpenMetadataOnly(string path)
+    {
+        var handle = CreateFile(path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            0, OPEN_EXISTING, 0, 0);
+
+        if (!handle.IsInvalid) return handle;
+
+        handle.Dispose();
+        return null;
+    }
+
     private const int HIDP_STATUS_SUCCESS = 0x00110000;
+    private const int HidP_Input = 0;
     private const int HidP_Output = 1;
+    private const int HidP_Feature = 2;
 
     /// <summary>HIDP_BUTTON_CAPS and HIDP_VALUE_CAPS are both 72 bytes, with the report ID at byte 2.</summary>
     private const int CapsSize = 72;
@@ -99,7 +126,7 @@ internal static unsafe partial class Hid
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct HiddAttributes
+    public struct HiddAttributes
     {
         public uint Size;
         public ushort VendorID;
@@ -110,6 +137,14 @@ internal static unsafe partial class Hid
     [LibraryImport("hid.dll")]
     [return: MarshalAs(UnmanagedType.U1)]
     private static partial bool HidD_GetAttributes(SafeFileHandle device, ref HiddAttributes attributes);
+
+    [LibraryImport("hid.dll")]
+    [return: MarshalAs(UnmanagedType.U1)]
+    private static partial bool HidD_GetManufacturerString(SafeFileHandle device, char* buffer, uint bufferLengthBytes);
+
+    [LibraryImport("hid.dll")]
+    [return: MarshalAs(UnmanagedType.U1)]
+    private static partial bool HidD_GetProductString(SafeFileHandle device, char* buffer, uint bufferLengthBytes);
 
     [LibraryImport("hid.dll")]
     [return: MarshalAs(UnmanagedType.U1)]
@@ -134,14 +169,41 @@ internal static unsafe partial class Hid
     private static partial int HidP_GetValueCaps(int reportType, byte* caps, ref ushort length, nint preparsed);
 
     /// <summary>Firmware version as the device reports it: 0x0414 for "4.14".</summary>
-    public static ushort? Version(SafeFileHandle device)
+    public static ushort? Version(SafeFileHandle device) => Attributes(device)?.VersionNumber;
+
+    public static HiddAttributes? Attributes(SafeFileHandle device)
     {
         var attributes = new HiddAttributes { Size = (uint)sizeof(HiddAttributes) };
-        return HidD_GetAttributes(device, ref attributes) ? attributes.VersionNumber : null;
+        return HidD_GetAttributes(device, ref attributes) ? attributes : null;
+    }
+
+    public static string ManufacturerString(SafeFileHandle device)
+    {
+        var buffer = new char[128];
+        fixed (char* ptr = buffer)
+            return HidD_GetManufacturerString(device, ptr, (uint)(buffer.Length * 2))
+                ? new string(ptr).Trim()
+                : "";
+    }
+
+    public static string ProductString(SafeFileHandle device)
+    {
+        var buffer = new char[128];
+        fixed (char* ptr = buffer)
+            return HidD_GetProductString(device, ptr, (uint)(buffer.Length * 2))
+                ? new string(ptr).Trim()
+                : "";
     }
 
     /// <summary>The collection's summary, and the IDs of every output report it declares.</summary>
     public static (HidpCaps Caps, IReadOnlySet<byte> OutputReports)? Describe(SafeFileHandle device)
+    {
+        if (DescribeAll(device) is not { } full) return null;
+        return (full.Caps, full.OutputReports);
+    }
+
+    /// <summary>Full collection summary plus every Input, Output, and Feature report ID it declares.</summary>
+    public static (HidpCaps Caps, IReadOnlySet<byte> InputReports, IReadOnlySet<byte> OutputReports, IReadOnlySet<byte> FeatureReports)? DescribeAll(SafeFileHandle device)
     {
         if (!HidD_GetPreparsedData(device, out var preparsed)) return null;
 
@@ -149,13 +211,22 @@ internal static unsafe partial class Hid
         {
             if (HidP_GetCaps(preparsed, out var caps) != HIDP_STATUS_SUCCESS) return null;
 
-            var reports = new HashSet<byte>();
-            Collect(caps.NumberOutputButtonCaps, (buffer, ref length) => HidP_GetButtonCaps(HidP_Output, buffer, ref length, preparsed));
-            Collect(caps.NumberOutputValueCaps, (buffer, ref length) => HidP_GetValueCaps(HidP_Output, buffer, ref length, preparsed));
+            var inputReports = new HashSet<byte>();
+            var outputReports = new HashSet<byte>();
+            var featureReports = new HashSet<byte>();
 
-            return (caps, reports);
+            Collect(inputReports, caps.NumberInputButtonCaps, (buffer, ref length) => HidP_GetButtonCaps(HidP_Input, buffer, ref length, preparsed));
+            Collect(inputReports, caps.NumberInputValueCaps, (buffer, ref length) => HidP_GetValueCaps(HidP_Input, buffer, ref length, preparsed));
 
-            void Collect(ushort count, CapsReader read)
+            Collect(outputReports, caps.NumberOutputButtonCaps, (buffer, ref length) => HidP_GetButtonCaps(HidP_Output, buffer, ref length, preparsed));
+            Collect(outputReports, caps.NumberOutputValueCaps, (buffer, ref length) => HidP_GetValueCaps(HidP_Output, buffer, ref length, preparsed));
+
+            Collect(featureReports, caps.NumberFeatureButtonCaps, (buffer, ref length) => HidP_GetButtonCaps(HidP_Feature, buffer, ref length, preparsed));
+            Collect(featureReports, caps.NumberFeatureValueCaps, (buffer, ref length) => HidP_GetValueCaps(HidP_Feature, buffer, ref length, preparsed));
+
+            return (caps, inputReports, outputReports, featureReports);
+
+            static void Collect(HashSet<byte> target, ushort count, CapsReader read)
             {
                 if (count == 0) return;
 
@@ -164,7 +235,7 @@ internal static unsafe partial class Hid
                 fixed (byte* bytes = buffer)
                     if (read(bytes, ref length) != HIDP_STATUS_SUCCESS) return;
 
-                for (var i = 0; i < length; i++) reports.Add(buffer[i * CapsSize + CapsReportIdOffset]);
+                for (var i = 0; i < length; i++) target.Add(buffer[i * CapsSize + CapsReportIdOffset]);
             }
         }
         finally

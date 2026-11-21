@@ -1,4 +1,7 @@
+using System.Text.Json;
+using Tsume.Core.Diagnostics;
 using Tsume.Hardware;
+using Tsume.Hardware.Diagnostics;
 using Tsume.Hardware.Msi;
 using Tsume.Hardware.Msi.Diagnostics;
 using Tsume.Helper;
@@ -50,8 +53,23 @@ switch (args)
         MsiCenterControl.Resume();
         return 0;
 
+    case ["--hardware-inventory", var outputFile]:
+        File.WriteAllText(outputFile, JsonSerializer.Serialize(
+            HardwareDiscoveryCollector.CollectInventory(includeTimedLoad: true), DiscoveryJson.Indented));
+        return 0;
+
+    case ["--hardware-inventory-fast", var outputFile]:
+        File.WriteAllText(outputFile, JsonSerializer.Serialize(
+            HardwareDiscoveryCollector.CollectInventory(includeTimedLoad: false), DiscoveryJson.Indented));
+        return 0;
+
+    case ["--hardware-state", var outputFile]:
+        File.WriteAllText(outputFile, JsonSerializer.Serialize(
+            HardwareDiscoveryCollector.CollectFastState(), DiscoveryJson.Indented));
+        return 0;
+
     default:
-        Console.Error.WriteLine("Usage: Tsume.Helper [--serve-for <seconds> | --probe <file> | --write-check <file> | --mode-check <file> | --msi-center pause|resume]");
+        Console.Error.WriteLine("Usage: Tsume.Helper [--serve-for <seconds> | --probe <file> | --write-check <file> | --mode-check <file> | --hardware-inventory <file> | --hardware-state <file> | --msi-center pause|resume]");
         return 64;
 }
 

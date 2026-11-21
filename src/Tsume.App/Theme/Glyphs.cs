@@ -61,6 +61,9 @@ public static class Glyphs
 
     public const string Customize   = "";   // paintbrush
     public const string Tick        = "";
+    public const string Developer   = "\uE943";   // code brackets </>
+    public const string Inspect     = "\uE721";   // magnifying glass / hardware discovery
+    public const string Record      = "\uE7C8";   // live watch circle
 
     public const string Power     = "";
     public const string Sleep       = "";   // moon

@@ -6,9 +6,11 @@ using System.IO.Compression;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Win32;
 using Tsume.App.Panel;
 using Tsume.Core;
+using Tsume.Core.Diagnostics;
 using Tsume.Core.Ipc;
 
 namespace Tsume.App.Platform;
@@ -32,7 +34,24 @@ public static class LogBundle
         var snapshot = await helper.SendAsync(new GetSnapshot());
         var helperLog = await helper.SendAsync(new GetLog());
 
-        return await Task.Run(() => CreateArchive(snapshot, helperLog));
+        // Automatically include a fast read-only hardware inventory on unsupported devices (or when opted-in under Developer options).
+        var includeHardware = snapshot.Unsupported || SavedState.Load().IncludeHardwareInLogs;
+        DeviceSupportBundle? hardware = null;
+        if (includeHardware)
+        {
+            var inv = await DeviceSupportExporter.CollectInventoryAsync(helper, includeTimedLoad: false, allowUacFallback: false);
+            var hid = await Task.Run(() => HidInventory.CaptureAsync(readVendorProfiles: true));
+            hardware = new DeviceSupportBundle
+            {
+                ExportedAtUtc = DateTimeOffset.UtcNow,
+                TsumeVersion = DeviceSupportExporter.TsumeVersionLabel(),
+                Inventory = inv,
+                Hid = hid,
+                Display = DisplayInventory.Capture(),
+            };
+        }
+
+        return await Task.Run(() => CreateArchive(snapshot, helperLog, hardware));
     }
 
     /// <summary>Copies <paramref name="filePath"/> onto the clipboard as a file drop (must run on the UI thread).</summary>
@@ -83,14 +102,14 @@ public static class LogBundle
         catch (Exception error) when (error is Win32Exception or IOException or UnauthorizedAccessException) { }
     }
 
-    private static string CreateArchive(HelperReply snapshot, HelperReply helperLog)
+    private static string CreateArchive(HelperReply snapshot, HelperReply helperLog, DeviceSupportBundle? hardware)
     {
         var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
         if (!string.IsNullOrWhiteSpace(desktop))
         {
             try
             {
-                return CreateArchiveIn(desktop, snapshot, helperLog);
+                return CreateArchiveIn(desktop, snapshot, helperLog, hardware);
             }
             catch (Exception error) when (error is UnauthorizedAccessException or DirectoryNotFoundException)
             {
@@ -98,10 +117,10 @@ public static class LogBundle
             }
         }
 
-        return CreateArchiveIn(DataFolder.Path, snapshot, helperLog);
+        return CreateArchiveIn(DataFolder.Path, snapshot, helperLog, hardware);
     }
 
-    private static string CreateArchiveIn(string destination, HelperReply snapshot, HelperReply helperLog)
+    private static string CreateArchiveIn(string destination, HelperReply snapshot, HelperReply helperLog, DeviceSupportBundle? hardware)
     {
         Directory.CreateDirectory(destination);
 
@@ -155,6 +174,15 @@ public static class LogBundle
                 {
                     serviceLogEntry = "helper.log";
                 }
+            }
+
+            if (hardware is not null)
+            {
+                AddText(archive, "hardware-report.md", DiscoveryReportBuilder.BuildMarkdown(hardware));
+                included.Add("hardware-report.md");
+
+                AddText(archive, "hardware-discovery.json", JsonSerializer.Serialize(hardware, DiscoveryJson.Indented));
+                included.Add("hardware-discovery.json");
             }
 
             included.Insert(0, "summary.txt");

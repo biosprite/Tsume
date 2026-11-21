@@ -9,14 +9,17 @@ namespace Tsume.Core.Ipc;
 /// </summary>
 public sealed class HelperClient
 {
-    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(4);
 
     /// <summary>
     /// Sends one request and waits for the reply. Never throws for an absent or
     /// misbehaving helper; it returns a failed reply instead.
     /// </summary>
-    public async Task<HelperReply> SendAsync(HelperRequest request, CancellationToken cancel = default)
+    public Task<HelperReply> SendAsync(HelperRequest request, CancellationToken cancel = default) =>
+        SendAsync(request, replyTimeout: null, cancel);
+
+    public async Task<HelperReply> SendAsync(HelperRequest request, TimeSpan? replyTimeout, CancellationToken cancel = default)
     {
         try
         {
@@ -25,8 +28,15 @@ public sealed class HelperClient
 
             await pipe.ConnectAsync(ConnectTimeout, cancel);
 
+            var effectiveTimeout = replyTimeout ?? request switch
+            {
+                GetHardwareInventory => TimeSpan.FromSeconds(35),
+                GetHardwareState     => TimeSpan.FromSeconds(10),
+                _                    => ReplyTimeout,
+            };
+
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-            timeout.CancelAfter(ReplyTimeout);
+            timeout.CancelAfter(effectiveTimeout);
 
             await using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
             using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);

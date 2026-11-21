@@ -39,7 +39,7 @@ public sealed class PanelViewModel : IDisposable
         Rtss = new RtssViewModel(_rtssService, dismiss);
         Quit = new QuitViewModel(quit);
 
-        Layers = [Power, Settings, Settings.PerformancePresets, Settings.Customization, Settings.Controls, Lighting, Upscaling, .. Upscaling.Pages, Upscaling.RestoreAll, Rtss, Quit];
+        Layers = [Power, Settings, Settings.PerformancePresets, Settings.Customization, Settings.Controls, Settings.Developer, Lighting, Upscaling, .. Upscaling.Pages, Upscaling.RestoreAll, Rtss, Quit];
 
         _tick.Tick += async (_, _) =>
         {

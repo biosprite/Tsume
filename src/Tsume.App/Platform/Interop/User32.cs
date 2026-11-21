@@ -451,11 +451,20 @@ internal static partial class User32
 
     public const ushort HID_USAGE_PAGE_GENERIC = 0x01;
     public const ushort HID_USAGE_GENERIC_MOUSE = 0x02;
+    public const ushort HID_USAGE_GENERIC_JOYSTICK = 0x04;
+    public const ushort HID_USAGE_GENERIC_GAMEPAD = 0x05;
+    public const ushort HID_USAGE_PAGE_CONSUMER = 0x0C;
+    public const ushort HID_USAGE_CONSUMER_CONTROL = 0x01;
     public const uint RIDEV_REMOVE = 0x0000_0001;
+    public const uint RIDEV_PAGEONLY = 0x0000_0020;
     public const uint RIDEV_INPUTSINK = 0x0000_0100;
+    public const uint RID_INPUT = 0x1000_0003;
     public const uint RID_HEADER = 0x1000_0005;
     public const uint RIM_TYPEMOUSE = 0;
+    public const uint RIM_TYPEKEYBOARD = 1;
+    public const uint RIM_TYPEHID = 2;
     public const uint RIDI_DEVICENAME = 0x2000_0007;
+    public const uint RIDI_DEVICEINFO = 0x2000_000B;
 
     [StructLayout(LayoutKind.Sequential)]
     public struct RAWINPUTDEVICE
@@ -481,6 +490,9 @@ internal static partial class User32
 
     [LibraryImport("user32.dll")]
     public static partial uint GetRawInputData(nint rawInput, uint command, out RAWINPUTHEADER data, ref uint size, uint headerSize);
+
+    [LibraryImport("user32.dll")]
+    public static partial uint GetRawInputData(nint rawInput, uint command, [Out] byte[]? data, ref uint size, uint headerSize);
 
     [DllImport("user32.dll", EntryPoint = "GetRawInputDeviceInfoW", CharSet = CharSet.Unicode)]
     public static extern uint GetRawInputDeviceInfo(nint device, uint command, [Out] char[]? data, ref uint size);

@@ -31,6 +31,8 @@ public static class HelperPipe
 [JsonDerivedType(typeof(StopRtss),          "rtss.stop")]
 [JsonDerivedType(typeof(GetRtssStartup),    "rtss.startup.get")]
 [JsonDerivedType(typeof(SetRtssStartup),    "rtss.startup.set")]
+[JsonDerivedType(typeof(GetHardwareInventory), "discovery.inventory")]
+[JsonDerivedType(typeof(GetHardwareState),     "discovery.state")]
 public abstract record HelperRequest;
 
 /// <summary>Read the current state without changing anything.</summary>
@@ -90,6 +92,19 @@ public sealed record GetRtssStartup : HelperRequest;
 /// <summary>Enables or disables RTSS starting automatically with Windows (via Task Scheduler and RTSS config).</summary>
 public sealed record SetRtssStartup(bool Enabled) : HelperRequest;
 
+/// <summary>
+/// Strictly read-only full hardware discovery scan (SMBIOS, vendor WMI/MOF, OEM-safe firmware reads,
+/// timed live-telemetry delta, and OEM software footprint). Runs asynchronously on the helper so the
+/// pipe stays responsive: replies with <see cref="HelperReply.Pending"/> while running.
+/// </summary>
+public sealed record GetHardwareInventory(bool IncludeTimedLoad = true, bool PollOnly = false) : HelperRequest;
+
+/// <summary>
+/// Strictly read-only fast hardware state snapshot for differential capture and live watch mode.
+/// Runs asynchronously on the helper so the pipe never blocks: replies with <see cref="HelperReply.Pending"/> while running.
+/// </summary>
+public sealed record GetHardwareState(bool PollOnly = false) : HelperRequest;
+
 /// <summary>The helper's answer to any request.</summary>
 public sealed record HelperReply
 {
@@ -111,6 +126,12 @@ public sealed record HelperReply
 
     /// <summary>Sent with answers to <see cref="GetRtssStartup"/> and <see cref="SetRtssStartup"/>.</summary>
     public bool? RtssStartsWithWindows { get; init; }
+
+    /// <summary>JSON payload for read-only discovery requests (<see cref="GetHardwareInventory"/> and <see cref="GetHardwareState"/>).</summary>
+    public string? PayloadJson { get; init; }
+
+    /// <summary>True while an asynchronous discovery job is still running on the helper; caller should poll again shortly.</summary>
+    public bool Pending { get; init; }
 
     public static HelperReply Success(HardwareSnapshot snapshot) => new() { Ok = true, Snapshot = snapshot };
     public static HelperReply Success(LiveReadings readings) => new() { Ok = true, Readings = readings };

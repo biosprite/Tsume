@@ -68,12 +68,13 @@ public sealed class PipeServer(RequestHandler handler)
             var line = await ReadLineAsync(reader, asking.Token);
             if (line is null) return;
 
-            var reply = Parse(line) is { } request
-                ? Answer(pipe, request)
+            var parsed = Parse(line);
+            var reply = parsed is not null
+                ? Answer(pipe, parsed)
                 : HelperReply.Failure("The request could not be understood.");
 
             using var answering = CancellationTokenSource.CreateLinkedTokenSource(stop);
-            answering.CancelAfter(Patience);
+            answering.CancelAfter(parsed is GetHardwareInventory or GetHardwareState ? TimeSpan.FromSeconds(15) : Patience);
 
             await writer.WriteLineAsync(HelperJson.Write(reply).AsMemory(), answering.Token);
         }
@@ -117,6 +118,12 @@ public sealed class PipeServer(RequestHandler handler)
 
         if (request is SetRtssStartup startup)
             return RtssProfileWriter.SetStartup(startup.Enabled, CallerUserSid(pipe));
+
+        if (request is GetHardwareInventory inv)
+            return DiscoveryWorker.HandleInventory(inv);
+
+        if (request is GetHardwareState state)
+            return DiscoveryWorker.HandleState(state);
 
         return handler.Handle(request);
     }

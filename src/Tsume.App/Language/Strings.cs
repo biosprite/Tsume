@@ -460,6 +460,25 @@ public static class Strings
     public static string ControlsSavedPanelOnly => Find();
     public static string ControlsMsiCenterRuns => Find();
 
+    public static string DeveloperOptions => Find();
+    public static string DeveloperOptionsDetail => Find();
+    public static string DeveloperDiscoveryHeading => Find();
+    public static string OpenHardwareDiscovery => Find();
+    public static string OpenHardwareDiscoveryDetail => Find();
+    public static string QuickHardwareSnapshot => Find();
+    public static string QuickHardwareSnapshotDetail => Find();
+    public static string QuickHardwareSnapshotBusy => Find();
+    public static string QuickHardwareSnapshotDone => Find();
+    public static string QuickHardwareSnapshotFailed(string why) => Fill(Find(), why);
+    public static string DeveloperDiagnosticsHeading => Find();
+    public static string CheckEnvironment => Find();
+    public static string CheckEnvironmentDetail => Find();
+    public static string CheckEnvironmentBusy => Find();
+    public static string IncludeHardwareInLogs => Find();
+    public static string IncludeHardwareInLogsDetail => Find();
+    public static string HardwareDiscoveryTitle => Find();
+    public static string HardwareDiscoverySubtitle => Find();
+
     /// <summary>The string named after the calling member; a name with no entry is shown as the name itself.</summary>
     private static string Find([CallerMemberName] string name = "") =>
         Words.GetString(name, CultureInfo.CurrentUICulture) ?? name;

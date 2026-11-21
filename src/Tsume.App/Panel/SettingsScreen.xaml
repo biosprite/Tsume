@@ -170,6 +170,12 @@
                        Detail="{x:Static lang:Strings.OpenDataFolderDetail}"
                        Command="{Binding OpenDataFolder}" />
 
+        <controls:Tile Style="{StaticResource Tile.Link}"
+                       Glyph="{x:Static theme:Glyphs.Developer}"
+                       Label="{x:Static lang:Strings.DeveloperOptions}"
+                       Detail="{x:Static lang:Strings.DeveloperOptionsDetail}"
+                       Command="{Binding Developer.Open}" />
+
       </StackPanel>
     </ScrollViewer>
 
