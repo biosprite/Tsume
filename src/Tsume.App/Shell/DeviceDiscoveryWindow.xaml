@@ -239,51 +239,191 @@
         <!-- TAB 1: GUIDED CAPTURE (11-STEP INTERACTIVE WIZARD) -->
         <Grid Visibility="{Binding IsGuidedTab, Converter={StaticResource BoolToVis}}">
           <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="270" />
+            <ColumnDefinition Width="310" />
             <ColumnDefinition Width="14" />
             <ColumnDefinition Width="*" />
           </Grid.ColumnDefinitions>
 
           <!-- Step list -->
           <Border Grid.Column="0" Style="{StaticResource Dev.Card}" Margin="0" Padding="8">
-            <ListBox ItemsSource="{Binding Steps}" SelectedItem="{Binding SelectedStep, Mode=TwoWay}"
-                     Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-              <ListBox.ItemContainerStyle>
-                <Style TargetType="ListBoxItem">
-                  <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                  <Setter Property="Padding" Value="0" />
-                  <Setter Property="Margin" Value="0,0,0,4" />
-                  <Setter Property="Template">
-                    <Setter.Value>
-                      <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="Bd" Background="Transparent" CornerRadius="10" Padding="10,8" Cursor="Hand">
-                          <ContentPresenter />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                          <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface.Hover}" />
-                          </Trigger>
-                          <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface}" />
-                          </Trigger>
-                        </ControlTemplate.Triggers>
-                      </ControlTemplate>
-                    </Setter.Value>
-                  </Setter>
-                </Style>
-              </ListBox.ItemContainerStyle>
-              <ListBox.ItemTemplate>
-                <DataTemplate>
-                  <DockPanel>
-                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Text.Caption}" Text="{Binding Status}"
-                               VerticalAlignment="Center" Margin="6,0,0,0" />
-                    <TextBlock Style="{StaticResource Text.Body}" FontSize="12.5" VerticalAlignment="Center">
-                      <Run Text="{Binding Number, Mode=OneWay}" /><Run Text=". " /><Run Text="{Binding Title, Mode=OneWay}" />
-                    </TextBlock>
-                  </DockPanel>
-                </DataTemplate>
-              </ListBox.ItemTemplate>
-            </ListBox>
+            <DockPanel>
+              <!-- Guided progress header -->
+              <StackPanel DockPanel.Dock="Top" Margin="6,2,6,8">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Right" Text="{Binding GuidedProgressText}" FontSize="11" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding HasGuidedProgress}" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource Signal.Good}" />
+                            <Setter Property="FontWeight" Value="SemiBold" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                  <TextBlock Style="{StaticResource Text.Heading}" Text="STEPS" Margin="0" VerticalAlignment="Center" />
+                </DockPanel>
+                <ProgressBar Height="4" Minimum="0" Maximum="{Binding Steps.Count, Mode=OneWay}"
+                             Value="{Binding GuidedCapturedCount, Mode=OneWay}" Margin="0,6,0,0">
+                  <ProgressBar.Template>
+                    <ControlTemplate TargetType="ProgressBar">
+                      <Border x:Name="PART_Track" Background="{DynamicResource Surface.Hover}" CornerRadius="2">
+                        <Border x:Name="PART_Indicator" HorizontalAlignment="Left"
+                                Background="{StaticResource Signal.Good}" CornerRadius="2" />
+                      </Border>
+                    </ControlTemplate>
+                  </ProgressBar.Template>
+                </ProgressBar>
+              </StackPanel>
+
+              <ListBox ItemsSource="{Binding Steps}" SelectedItem="{Binding SelectedStep, Mode=TwoWay}"
+                       Background="Transparent" BorderThickness="0"
+                       ScrollViewer.CanContentScroll="False"
+                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                       ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <ListBox.ItemContainerStyle>
+                  <Style TargetType="ListBoxItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="Margin" Value="0,0,0,3" />
+                    <Setter Property="Template">
+                      <Setter.Value>
+                        <ControlTemplate TargetType="ListBoxItem">
+                          <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent"
+                                  BorderThickness="1" CornerRadius="9" Padding="8,5" Cursor="Hand">
+                            <ContentPresenter />
+                          </Border>
+                          <ControlTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsCaptured}" Value="True">
+                              <Setter TargetName="Bd" Property="Background" Value="#123DDC97" />
+                              <Setter TargetName="Bd" Property="BorderBrush" Value="#303DDC97" />
+                            </DataTrigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                              <Setter TargetName="Bd" Property="BorderBrush" Value="{x:Static theme:Accent.Brush}" />
+                            </Trigger>
+                          </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                      </Setter.Value>
+                    </Setter>
+                  </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                  <DataTemplate>
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                      </Grid.ColumnDefinitions>
+
+                      <!-- Step number / captured checkmark circle -->
+                      <Border Grid.Column="0" Width="22" Height="22" CornerRadius="11"
+                              VerticalAlignment="Center" Margin="0,0,10,0" BorderThickness="1">
+                        <Border.Style>
+                          <Style TargetType="Border">
+                            <Setter Property="Background" Value="{DynamicResource Surface}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource Panel.Edge}" />
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter Property="Background" Value="{x:Static theme:Accent.Tint}" />
+                                <Setter Property="BorderBrush" Value="{x:Static theme:Accent.Brush}" />
+                              </DataTrigger>
+                              <DataTrigger Binding="{Binding IsSkipped}" Value="True">
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderBrush" Value="{DynamicResource Surface.Divider}" />
+                              </DataTrigger>
+                              <DataTrigger Binding="{Binding IsCaptured}" Value="True">
+                                <Setter Property="Background" Value="{StaticResource Signal.Good}" />
+                                <Setter Property="BorderBrush" Value="{StaticResource Signal.Good}" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </Border.Style>
+                        <Grid>
+                          <TextBlock Text="{Binding Number, Mode=OneWay}"
+                                     FontFamily="{StaticResource Font.Words}" FontSize="11" FontWeight="SemiBold"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock.Style>
+                              <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource Text.Muted}" />
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                  <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                    <Setter Property="Foreground" Value="{x:Static theme:Accent.Brush}" />
+                                  </DataTrigger>
+                                  <DataTrigger Binding="{Binding IsCaptured}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                  </DataTrigger>
+                                  <DataTrigger Binding="{Binding IsSkipped}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                  </DataTrigger>
+                                </Style.Triggers>
+                              </Style>
+                            </TextBlock.Style>
+                          </TextBlock>
+
+                          <TextBlock Text="{x:Static theme:Glyphs.Tick}"
+                                     FontFamily="{StaticResource Font.Icons}" FontSize="11" FontWeight="Bold"
+                                     Foreground="#FF0B0D11" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Visibility="{Binding IsCaptured, Converter={StaticResource BoolToVis}}" />
+
+                          <TextBlock Text="–"
+                                     FontFamily="{StaticResource Font.Words}" FontSize="12" FontWeight="SemiBold"
+                                     Foreground="{DynamicResource Text.Faint}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Visibility="{Binding IsSkipped, Converter={StaticResource BoolToVis}}" />
+                        </Grid>
+                      </Border>
+
+                      <!-- Step title & status stacked cleanly -->
+                      <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Title, Mode=OneWay}" FontSize="12"
+                                   LineHeight="15" LineStackingStrategy="BlockLineHeight"
+                                   ToolTip="{Binding Title, Mode=OneWay}">
+                          <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+                              <Setter Property="FontWeight" Value="Medium" />
+                              <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                  <Setter Property="FontWeight" Value="SemiBold" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsSkipped}" Value="True">
+                                  <Setter Property="Foreground" Value="{DynamicResource Text.Muted}" />
+                                </DataTrigger>
+                              </Style.Triggers>
+                            </Style>
+                          </TextBlock.Style>
+                        </TextBlock>
+
+                        <TextBlock Text="{Binding Status}" FontSize="10.5"
+                                   LineHeight="13" LineStackingStrategy="BlockLineHeight" Margin="0,1,0,0">
+                          <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+                              <Setter Property="Foreground" Value="{DynamicResource Text.Faint}" />
+                              <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                  <Setter Property="Foreground" Value="{DynamicResource Text.Muted}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsSkipped}" Value="True">
+                                  <Setter Property="Foreground" Value="{DynamicResource Text.Faint}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsCaptured}" Value="True">
+                                  <Setter Property="Foreground" Value="{StaticResource Signal.Good}" />
+                                  <Setter Property="FontWeight" Value="SemiBold" />
+                                </DataTrigger>
+                              </Style.Triggers>
+                            </Style>
+                          </TextBlock.Style>
+                        </TextBlock>
+                      </StackPanel>
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </DockPanel>
           </Border>
 
           <!-- Active step workspace -->
@@ -291,9 +431,27 @@
             <StackPanel>
               <Border Style="{StaticResource Dev.Card}">
                 <StackPanel>
-                  <TextBlock Style="{StaticResource Text.Heading}" Margin="0,0,0,4">
-                    <Run Text="STEP " /><Run Text="{Binding SelectedStep.Number, Mode=OneWay}" /><Run Text=" OF 11" />
-                  </TextBlock>
+                  <DockPanel Margin="0,0,0,4">
+                    <Border DockPanel.Dock="Right" Background="#1F3DDC97" BorderBrush="#553DDC97"
+                            BorderThickness="1" CornerRadius="8" Padding="8,2" VerticalAlignment="Center"
+                            Visibility="{Binding SelectedStep.IsCaptured, Converter={StaticResource BoolToVis}}">
+                      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{x:Static theme:Glyphs.Tick}" FontFamily="{StaticResource Font.Icons}"
+                                   FontSize="10" FontWeight="Bold" Foreground="{StaticResource Signal.Good}"
+                                   VerticalAlignment="Center" Margin="0,0,5,0" />
+                        <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding SelectedStep.Status}"
+                                   Foreground="{StaticResource Signal.Good}" FontWeight="SemiBold" FontSize="11" />
+                      </StackPanel>
+                    </Border>
+                    <Border DockPanel.Dock="Right" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Panel.Edge}"
+                            BorderThickness="1" CornerRadius="8" Padding="8,2" VerticalAlignment="Center"
+                            Visibility="{Binding SelectedStep.IsSkipped, Converter={StaticResource BoolToVis}}">
+                      <TextBlock Style="{StaticResource Text.Caption}" Text="Skipped" FontSize="11" />
+                    </Border>
+                    <TextBlock Style="{StaticResource Text.Heading}" Margin="0" VerticalAlignment="Center">
+                      <Run Text="STEP " /><Run Text="{Binding SelectedStep.Number, Mode=OneWay}" /><Run Text=" OF 11" />
+                    </TextBlock>
+                  </DockPanel>
                   <TextBlock Style="{StaticResource Text.Title}" Text="{Binding SelectedStep.Title}" Margin="0,0,0,10" />
                   <TextBlock Style="{StaticResource Text.Body}" Text="{Binding SelectedStep.Instruction}"
                              TextWrapping="Wrap" FontWeight="Normal" LineHeight="21" Margin="0,0,0,12" />

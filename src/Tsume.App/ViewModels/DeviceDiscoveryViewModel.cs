@@ -187,6 +187,20 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
     public bool CanGoNext => SelectedStepIndex < Steps.Count - 1;
     public bool IsButtonStepSelected => SelectedStep.IsButtonCaptureStep;
 
+    public int GuidedCapturedCount => Steps.Count(s => s.IsCaptured);
+    public bool HasGuidedProgress => GuidedCapturedCount > 0;
+    public string GuidedProgressText
+    {
+        get
+        {
+            var captured = GuidedCapturedCount;
+            var skipped = Steps.Count(s => s.IsSkipped);
+            return skipped > 0
+                ? $"{captured} / {Steps.Count} captured · {skipped} skipped"
+                : $"{captured} / {Steps.Count} captured";
+        }
+    }
+
     public string StepUserNote { get; set => Set(ref field, value); } = "";
 
     public string SelectedStepDiffPreview
@@ -520,7 +534,10 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             if (buttonStep is not null)
             {
                 buttonStep.IsCaptured = true;
-                buttonStep.Status = $"{_buttonEvents.Count} events";
+                buttonStep.IsSkipped = false;
+                buttonStep.Status = _buttonEvents.Count == 1
+                    ? "Captured (1 event)"
+                    : $"Captured ({_buttonEvents.Count} events)";
             }
 
             Notify(nameof(SelectedStepDiffPreview));
@@ -800,6 +817,9 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         var watchCount = _watchDiffs.Count;
         var btnCount = _buttonEvents.Count;
         SummaryPill = $"{scan}  ·  {guidedCount} guided  ·  {watchCount} watch diffs  ·  {btnCount} button events  ·  Privacy scrubbed";
+        Notify(nameof(GuidedCapturedCount));
+        Notify(nameof(HasGuidedProgress));
+        Notify(nameof(GuidedProgressText));
     }
 
     private static string FormatDiffSummary(CaptureDiffEntry diff)
