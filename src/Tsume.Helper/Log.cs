@@ -8,4 +8,6 @@ internal static class Log
     private static readonly Journal Journal = new("helper");
 
     public static void Write(string message) => Journal.Write(message);
+
+    public static string? Read() => Journal.Read();
 }

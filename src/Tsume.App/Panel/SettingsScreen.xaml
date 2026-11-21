@@ -122,6 +122,21 @@
                        IsOn="{Binding IsMsiCenterPaused}"
                        Command="{Binding ToggleMsiCenter}" />
 
+        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.TroubleshootingHeading}"
+                   Margin="4,12,0,10" />
+
+        <controls:Tile Style="{StaticResource Tile.Link}"
+                       Glyph="{x:Static theme:Glyphs.Share}"
+                       Label="{x:Static lang:Strings.ShareLogs}"
+                       Detail="{Binding ShareLogsDetail}"
+                       Command="{Binding ShareLogs}" />
+
+        <controls:Tile Style="{StaticResource Tile.Link}"
+                       Glyph="{x:Static theme:Glyphs.Folder}"
+                       Label="{x:Static lang:Strings.OpenDataFolder}"
+                       Detail="{x:Static lang:Strings.OpenDataFolderDetail}"
+                       Command="{Binding OpenDataFolder}" />
+
       </StackPanel>
     </ScrollViewer>
 

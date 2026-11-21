@@ -25,6 +25,7 @@ public static class HelperPipe
 [JsonDerivedType(typeof(SetFan),         "fan.set")]
 [JsonDerivedType(typeof(SetChargeLimit), "charge.set")]
 [JsonDerivedType(typeof(StartPanel),     "panel.start")]
+[JsonDerivedType(typeof(GetLog),         "log.get")]
 public abstract record HelperRequest;
 
 /// <summary>Read the current state without changing anything.</summary>
@@ -53,6 +54,9 @@ public sealed record SetChargeLimit(int Percent) : HelperRequest;
 /// </summary>
 public sealed record StartPanel(bool Background, bool Settings, bool Lighting, bool OptiScaler, bool Stay) : HelperRequest;
 
+/// <summary>Read the helper's own log (kept under the service account's profile when installed, so the panel cannot read it on disk).</summary>
+public sealed record GetLog : HelperRequest;
+
 /// <summary>The helper's answer to any request.</summary>
 public sealed record HelperReply
 {
@@ -68,6 +72,9 @@ public sealed record HelperReply
 
     /// <summary>Sent only with the answer to <see cref="GetSnapshot"/>.</summary>
     public DeviceProfile? Device { get; init; }
+
+    /// <summary>Sent only with the answer to <see cref="GetLog"/>.</summary>
+    public string? Log { get; init; }
 
     public static HelperReply Success(HardwareSnapshot snapshot) => new() { Ok = true, Snapshot = snapshot };
     public static HelperReply Success(LiveReadings readings) => new() { Ok = true, Readings = readings };

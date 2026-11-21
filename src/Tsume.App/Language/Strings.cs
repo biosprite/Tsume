@@ -93,6 +93,14 @@ public static class Strings
     public static string MsiCenterRunning => Find();
     public static string MsiCenterNoHelper => Find();
 
+    public static string TroubleshootingHeading => Find();
+    public static string ShareLogs => Find();
+    public static string ShareLogsDetail => Find();
+    public static string ShareLogsBusy => Find();
+    public static string ShareLogsFailed(string why) => Fill(Find(), why);
+    public static string OpenDataFolder => Find();
+    public static string OpenDataFolderDetail => Find();
+
     public static string QuitTsume => Find();
 
     public static string Lighting => Find();

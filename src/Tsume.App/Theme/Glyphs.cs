@@ -34,6 +34,7 @@ public static class Glyphs
     public const string StartMenu   = "";   // all apps
     public const string Battery     = "";   // a full battery
     public const string Pause       ="";
+    public const string Share       = "\uE72D";   // box with an arrow out
     public const string Quit        = "";   // cross
 
     public const string Upscaling   = "";   // arrows to the corners

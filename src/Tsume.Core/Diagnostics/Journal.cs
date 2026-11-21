@@ -27,4 +27,24 @@ public sealed class Journal(string name)
             }
         }
     }
+
+    /// <summary>Reads the whole log, or null if it has not been written yet or cannot be read.</summary>
+    public string? Read()
+    {
+        lock (_gate)
+        {
+            try
+            {
+                if (!File.Exists(Path)) return null;
+
+                using var stream = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var reader = new StreamReader(stream);
+                return reader.ReadToEnd();
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+    }
 }

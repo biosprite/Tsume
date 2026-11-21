@@ -145,6 +145,17 @@
   <data name="MsiCenterRunning" xml:space="preserve"><value>Running  ·  it owns the M button</value></data>
   <data name="MsiCenterNoHelper" xml:space="preserve"><value>Running  ·  helper not found</value></data>
 
+  <data name="TroubleshootingHeading" xml:space="preserve"><value>TROUBLESHOOTING</value></data>
+  <data name="ShareLogs" xml:space="preserve"><value>Share logs</value></data>
+  <data name="ShareLogsDetail" xml:space="preserve"><value>Saves a zip to your Desktop and copies it to the clipboard</value></data>
+  <data name="ShareLogsBusy" xml:space="preserve"><value>Gathering logs…</value></data>
+  <data name="ShareLogsFailed" xml:space="preserve">
+    <value>Could not save logs: {0}</value>
+    <comment>{0} = the system's description of the error</comment>
+  </data>
+  <data name="OpenDataFolder" xml:space="preserve"><value>Open app data folder</value></data>
+  <data name="OpenDataFolderDetail" xml:space="preserve"><value>Settings, logs and OptiScaler files</value></data>
+
   <data name="QuitTsume" xml:space="preserve"><value>Quit Tsume</value></data>
 
   <!-- Lighting screen -->

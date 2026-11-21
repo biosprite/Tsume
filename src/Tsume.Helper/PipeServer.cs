@@ -84,9 +84,9 @@ public sealed class PipeServer(RequestHandler handler)
     }
 
     /// <summary>
-    /// Answers one request. Starting the panel is handled here, not in <see cref="RequestHandler"/>: it is not a
-    /// device request (it works on a machine Tsume does not know), and it must run in the caller's own session,
-    /// which is read from the pipe — never a session a caller could name in the message.
+    /// Answers one request. Starting the panel and reading the helper's log are handled here, not in
+    /// <see cref="RequestHandler"/>: neither touches the device (both work on a machine Tsume does not know),
+    /// and starting the panel must run in the caller's own session, read from the pipe — never named by the caller.
     /// </summary>
     private HelperReply Answer(NamedPipeServerStream pipe, HelperRequest request)
     {
@@ -99,6 +99,9 @@ public sealed class PipeServer(RequestHandler handler)
                 ? new HelperReply { Ok = true }
                 : HelperReply.Failure("The panel could not be started.");
         }
+
+        if (request is GetLog)
+            return new HelperReply { Ok = true, Log = Log.Read() ?? "" };
 
         return handler.Handle(request);
     }

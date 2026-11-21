@@ -1,13 +1,16 @@
+using System.IO;
 using System.Windows.Input;
 using Tsume.App.Language;
 using Tsume.App.Mvvm;
 using Tsume.App.Platform;
+using Tsume.Core;
 
 namespace Tsume.App.ViewModels;
 
 /// <summary>
 /// The settings screen: startup, charge limit, performance presets, colours, the OptiScaler tile,
-/// and pausing MSI Center M. Performance presets and colours each open a page of their own.
+/// pausing MSI Center M, and troubleshooting (sharing logs and opening the data folder).
+/// Performance presets and colours each open a page of their own.
 /// </summary>
 public sealed class SettingsViewModel : LayerViewModel
 {
@@ -15,6 +18,7 @@ public sealed class SettingsViewModel : LayerViewModel
     public SettingsViewModel(
         Tsume.Core.Ipc.HelperClient helper, SavedState state, PerformanceViewModel performance, Func<Task> dismiss)
     {
+        _helper = helper;
         _state = state;
         ChargeLimit = new ChargeLimitViewModel(helper, state);
         PerformancePresets = new PerformancePresetsViewModel(performance, state);
@@ -42,6 +46,38 @@ public sealed class SettingsViewModel : LayerViewModel
             else await MsiCenter.ResumeAsync();
 
             Refresh();
+        });
+
+        ShareLogs = new Command(async () =>
+        {
+            if (_sharing) return;
+            _sharing = true;
+            ShareLogsDetail = Strings.ShareLogsBusy;
+
+            try
+            {
+                var zip = await LogBundle.ExportAsync(_helper);
+                LogBundle.CopyFileToClipboard(zip);
+
+                // Started while the panel is still in front: Windows lets only the foreground program
+                // bring a new window forward, so after dismissing Explorer would open behind the game.
+                LogBundle.RevealInExplorer(zip);
+                await dismiss();
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                ShareLogsDetail = Strings.ShareLogsFailed(error.Message);
+            }
+            finally
+            {
+                _sharing = false;
+            }
+        });
+
+        OpenDataFolder = new Command(async () =>
+        {
+            LogBundle.OpenFolder(DataFolder.Path);
+            await dismiss();
         });
 
         Refresh();
@@ -79,9 +115,16 @@ public sealed class SettingsViewModel : LayerViewModel
 
     public CustomizationViewModel Customization { get; }
 
+    private readonly Tsume.Core.Ipc.HelperClient _helper;
     private readonly SavedState _state;
+    private bool _sharing;
 
     public ICommand ToggleOptiScaler { get; }
+
+    public ICommand ShareLogs { get; }
+    public ICommand OpenDataFolder { get; }
+
+    public string ShareLogsDetail { get; private set => Set(ref field, value); } = Strings.ShareLogsDetail;
 
     /// <summary>Whether the OptiScaler tile is on the main screen.</summary>
     public bool ShowsOptiScaler => _state.ShowOptiScaler;
@@ -111,6 +154,7 @@ public sealed class SettingsViewModel : LayerViewModel
 
     protected override void OnOpened()
     {
+        if (!_sharing) ShareLogsDetail = Strings.ShareLogsDetail;
         Refresh();
         _ = ChargeLimit.RefreshAsync();
     }
