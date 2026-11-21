@@ -44,6 +44,7 @@ public sealed class PanelViewModel : IDisposable
         {
             Status.Refresh();
             if (Settings.IsOpen) Settings.ChargeLimit.RefreshStatus();
+            if (Rtss.IsOpen) Rtss.RefreshRunningState();
             await Performance.RefreshTelemetryAsync();
         };
     }

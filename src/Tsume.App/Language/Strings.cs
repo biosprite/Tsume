@@ -393,6 +393,7 @@ public static class Strings
     public static string RtssFpsShort(int fps) => Fill(Find(), fps);
     public static string RtssOsdOn => Find();
 
+    public static string RtssOnlineWarning => Find();
     public static string RtssAppHeading => Find();
     public static string RtssStart => Find();
     public static string RtssOpenMenu => Find();
@@ -414,6 +415,7 @@ public static class Strings
     public static string RtssStartFailed => Find();
     public static string RtssNotRunningNote => Find();
     public static string RtssSavedNote => Find();
+    public static string RtssRunningSavedNote(string version) => string.IsNullOrWhiteSpace(version) ? Find("RtssSavedNote") : Fill(Find(), version);
     public static string RtssGuru3dLink => Find();
     public static string RtssGuru3dLinkDetail => Find();
 

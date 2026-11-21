@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32;
 using Tsume.Core.Ipc;
@@ -164,7 +165,7 @@ internal static class RtssProfileWriter
                             // Only stop processes verified to live inside RTSS's install directory.
                             if (fence is not null)
                             {
-                                var exe = process.MainModule?.FileName;
+                                var exe = TryReadProcessPath(process);
                                 if (exe is null || !Path.GetFullPath(exe).StartsWith(fence, StringComparison.OrdinalIgnoreCase))
                                     continue;
                             }
@@ -185,6 +186,42 @@ internal static class RtssProfileWriter
             return HelperReply.Failure(error.Message);
         }
     }
+
+    private static string? TryReadProcessPath(Process process)
+    {
+        try
+        {
+            if (process.MainModule?.FileName is { Length: > 0 } path) return path;
+        }
+        catch (Exception error) when (error is Win32Exception or InvalidOperationException) { }
+
+        // Fallback for 32-bit WOW64 or restricted processes: QueryFullProcessImageNameW only needs PROCESS_QUERY_LIMITED_INFORMATION.
+        const uint ProcessQueryLimitedInformation = 0x1000;
+        var handle = OpenProcess(ProcessQueryLimitedInformation, inheritHandle: false, unchecked((uint)process.Id));
+        if (handle == 0) return null;
+
+        try
+        {
+            var sb = new StringBuilder(1024);
+            var len = (uint)sb.Capacity;
+            return QueryFullProcessImageNameW(handle, 0, sb, ref len) && len > 0 ? sb.ToString() : null;
+        }
+        finally
+        {
+            CloseHandle(handle);
+        }
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern nint OpenProcess(uint desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, uint processId);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool QueryFullProcessImageNameW(nint process, uint flags, StringBuilder exeName, ref uint size);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseHandle(nint handle);
 
     private static string? SanitizeExeName(string? raw)
     {

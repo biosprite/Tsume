@@ -26,6 +26,7 @@
 
   <!-- Meaning -->
   <SolidColorBrush x:Key="Signal.Good"   Color="#3DDC97" />
+  <SolidColorBrush x:Key="Signal.Warn"   Color="#F5B841" />
   <SolidColorBrush x:Key="Signal.Danger" Color="#FF5D5D" />
 
   <!-- Shape -->

@@ -93,9 +93,11 @@ public static class ScreenShots
 
             panel.Rtss.IsOpen = true;
             await Shot("2d-rtss");
-            panel.Rtss.PreviewForScreenShot(useTsumeOverlay: true, Platform.Rtss.RtssOverlayLevel.Bar, frameRateLimit: 45);
+            panel.Rtss.PreviewForScreenShot(useTsumeOverlay: true, Platform.Rtss.RtssOverlayLevel.Bar, frameRateLimit: 45, isRunning: false);
+            await Shot("2d-rtss-off");
+            panel.Rtss.PreviewForScreenShot(useTsumeOverlay: true, Platform.Rtss.RtssOverlayLevel.Bar, frameRateLimit: 45, isRunning: true);
             await Shot("2d-rtss-steam");
-            panel.Rtss.PreviewForScreenShot(useTsumeOverlay: false, Platform.Rtss.RtssOverlayLevel.Off, frameRateLimit: 60);
+            panel.Rtss.PreviewForScreenShot(useTsumeOverlay: false, Platform.Rtss.RtssOverlayLevel.Off, frameRateLimit: 60, isRunning: true);
             await Shot("2d-rtss-own");
             panel.Rtss.IsOpen = false;
 

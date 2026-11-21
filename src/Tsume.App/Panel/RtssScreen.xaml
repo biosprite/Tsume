@@ -29,6 +29,18 @@
                   VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
       <StackPanel controls:Screen.TakesFocus="True">
 
+        <!-- Small warning about playing live online games with RTSS running. -->
+        <Border Style="{StaticResource Card.Warning}">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Icon}" FontSize="15"
+                       Foreground="{StaticResource Signal.Warn}" VerticalAlignment="Top" Margin="0,1,10,0"
+                       Text="{x:Static theme:Glyphs.Warning}" />
+            <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
+                       TextWrapping="Wrap" TextTrimming="None"
+                       Text="{x:Static lang:Strings.RtssOnlineWarning}" />
+          </DockPanel>
+        </Border>
+
         <!-- Shown when RivaTuner Statistics Server is not installed on this PC. -->
         <StackPanel Visibility="{Binding NotInstalledVisibility}">
 
@@ -66,6 +78,7 @@
         <!-- Shown once RTSS is installed. -->
         <StackPanel Visibility="{Binding InstalledVisibility}">
 
+          <!-- Start RTSS when it is not running. -->
           <controls:Reveal IsOpen="{Binding IsNotRunning}">
             <controls:Tile Style="{StaticResource Tile.Link}" Tag=""
                            Glyph="{x:Static theme:Glyphs.Startup}"
@@ -74,77 +87,98 @@
                            Command="{Binding StartRtss}" />
           </controls:Reveal>
 
-          <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.RtssOverlayHeading}" />
-
-          <!-- Lets the user opt out of Tsume's Steam-style overlay and keep their own RTSS layout untouched. -->
-          <controls:Tile Style="{StaticResource Tile.Switch}"
-                         Glyph="{x:Static theme:Glyphs.Overlay}"
-                         Label="{x:Static lang:Strings.RtssUseTsumeOverlay}"
-                         Detail="{Binding UseTsumeOverlayDetail}"
-                         IsOn="{Binding UseTsumeOverlay}"
-                         Command="{Binding ToggleUseTsumeOverlay}" />
-
-          <!-- Tsume's built-in Steam-style overlay controls. -->
-          <controls:Reveal IsOpen="{Binding UseTsumeOverlay}">
+          <!-- Only shown while RTSS is running: Open/End actions, overlay options, and frame-rate cap. -->
+          <controls:Reveal IsOpen="{Binding IsRunning}">
             <StackPanel>
 
-              <controls:SegmentedControl AutomationProperties.Name="{x:Static lang:Strings.RtssOverlayHeading}"
-                                         Segments="{Binding Levels}" SelectedIndex="{Binding LevelIndex}" />
+              <UniformGrid Columns="2" Margin="-4,0,-4,8">
+                <controls:Tile Style="{StaticResource Tile.Row}"
+                               Glyph="{x:Static theme:Glyphs.GameMenu}"
+                               Label="{x:Static lang:Strings.RtssOpenMenu}"
+                               IsOn="True"
+                               Command="{Binding OpenRtssMenu}" />
 
-              <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
-                         Text="{Binding LevelDetail}" Margin="6,6,6,0" />
+                <controls:Tile Style="{StaticResource Tile.Row}"
+                               Glyph="{x:Static theme:Glyphs.Quit}"
+                               Label="{x:Static lang:Strings.RtssClose}"
+                               Command="{Binding CloseRtss}" />
+              </UniformGrid>
 
-              <controls:Reveal IsOpen="{Binding IsTsumeOverlayShown}">
+              <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.RtssOverlayHeading}"
+                         Margin="4,10,0,10" />
+
+              <!-- Lets the user opt out of Tsume's Steam-style overlay and keep their own RTSS layout untouched. -->
+              <controls:Tile Style="{StaticResource Tile.Switch}"
+                             Glyph="{x:Static theme:Glyphs.Overlay}"
+                             Label="{x:Static lang:Strings.RtssUseTsumeOverlay}"
+                             Detail="{Binding UseTsumeOverlayDetail}"
+                             IsOn="{Binding UseTsumeOverlay}"
+                             Command="{Binding ToggleUseTsumeOverlay}" />
+
+              <!-- Tsume's built-in Steam-style overlay controls. -->
+              <controls:Reveal IsOpen="{Binding UseTsumeOverlay}">
                 <StackPanel>
-                  <controls:SegmentedControl Margin="0,10,0,0"
-                                             Segments="{Binding Corners}" SelectedIndex="{Binding CornerIndex}" />
 
-                  <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Upscaling}"
-                                        Label="{x:Static lang:Strings.RtssScale}" Unit="×"
-                                        AutomationProperties.Name="{x:Static lang:Strings.RtssScale}"
-                                        Minimum="{x:Static vm:RtssViewModel.MinScale}"
-                                        Maximum="{x:Static vm:RtssViewModel.MaxScale}"
-                                        LargeChange="1"
-                                        Value="{Binding Scale}"
-                                        Margin="0,8,0,0" />
+                  <controls:SegmentedControl AutomationProperties.Name="{x:Static lang:Strings.RtssOverlayHeading}"
+                                             Segments="{Binding Levels}" SelectedIndex="{Binding LevelIndex}" />
+
+                  <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+                             Text="{Binding LevelDetail}" Margin="6,6,6,0" />
+
+                  <controls:Reveal IsOpen="{Binding IsTsumeOverlayShown}">
+                    <StackPanel>
+                      <controls:SegmentedControl Margin="0,10,0,0"
+                                                 Segments="{Binding Corners}" SelectedIndex="{Binding CornerIndex}" />
+
+                      <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Upscaling}"
+                                            Label="{x:Static lang:Strings.RtssScale}" Unit="×"
+                                            AutomationProperties.Name="{x:Static lang:Strings.RtssScale}"
+                                            Minimum="{x:Static vm:RtssViewModel.MinScale}"
+                                            Maximum="{x:Static vm:RtssViewModel.MaxScale}"
+                                            LargeChange="1"
+                                            Value="{Binding Scale}"
+                                            Margin="0,8,0,0" />
+                    </StackPanel>
+                  </controls:Reveal>
+
                 </StackPanel>
               </controls:Reveal>
+
+              <!-- When not using Tsume's overlay: simple toggle for the user's own RTSS OSD. -->
+              <controls:Reveal IsOpen="{Binding UsesCustomOverlay}">
+                <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0"
+                               Glyph="{x:Static theme:Glyphs.Counter}"
+                               Label="{x:Static lang:Strings.RtssShowOwnOsd}"
+                               Detail="{x:Static lang:Strings.RtssShowOwnOsdDetail}"
+                               IsOn="{Binding IsOsdVisible}"
+                               Command="{Binding ToggleOsdVisible}" />
+              </controls:Reveal>
+
+              <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.RtssFrameCapHeading}"
+                         Margin="4,22,0,10" />
+
+              <controls:SegmentedControl AutomationProperties.Name="{x:Static lang:Strings.RtssFrameCapHeading}"
+                                         Segments="{Binding FrameCapModes}" SelectedIndex="{Binding FrameCapIndex}" />
+
+              <controls:Reveal IsOpen="{Binding ShowsCustomCapSlider}">
+                <controls:LevelSlider Glyph="{x:Static theme:Glyphs.RefreshRate}"
+                                      Label="{x:Static lang:Strings.RtssCapSlider}" Unit=" FPS"
+                                      AutomationProperties.Name="{x:Static lang:Strings.RtssCapSlider}"
+                                      Minimum="{x:Static vm:RtssViewModel.MinCustomFps}"
+                                      Maximum="{x:Static vm:RtssViewModel.MaxCustomFps}"
+                                      LargeChange="1"
+                                      Value="{Binding CustomCap}"
+                                      Margin="0,8,0,0" />
+              </controls:Reveal>
+
+              <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+                         Text="{x:Static lang:Strings.RtssCapNote}" Margin="6,6,6,0" />
 
             </StackPanel>
           </controls:Reveal>
 
-          <!-- When not using Tsume's overlay: simple toggle for the user's own RTSS OSD. -->
-          <controls:Reveal IsOpen="{Binding UsesCustomOverlay}">
-            <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0"
-                           Glyph="{x:Static theme:Glyphs.Counter}"
-                           Label="{x:Static lang:Strings.RtssShowOwnOsd}"
-                           Detail="{x:Static lang:Strings.RtssShowOwnOsdDetail}"
-                           IsOn="{Binding IsOsdVisible}"
-                           Command="{Binding ToggleOsdVisible}" />
-          </controls:Reveal>
-
-          <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.RtssFrameCapHeading}"
-                     Margin="4,22,0,10" />
-
-          <controls:SegmentedControl AutomationProperties.Name="{x:Static lang:Strings.RtssFrameCapHeading}"
-                                     Segments="{Binding FrameCapModes}" SelectedIndex="{Binding FrameCapIndex}" />
-
-          <controls:Reveal IsOpen="{Binding ShowsCustomCapSlider}">
-            <controls:LevelSlider Glyph="{x:Static theme:Glyphs.RefreshRate}"
-                                  Label="{x:Static lang:Strings.RtssCapSlider}" Unit=" FPS"
-                                  AutomationProperties.Name="{x:Static lang:Strings.RtssCapSlider}"
-                                  Minimum="{x:Static vm:RtssViewModel.MinCustomFps}"
-                                  Maximum="{x:Static vm:RtssViewModel.MaxCustomFps}"
-                                  LargeChange="1"
-                                  Value="{Binding CustomCap}"
-                                  Margin="0,8,0,0" />
-          </controls:Reveal>
-
-          <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
-                     Text="{x:Static lang:Strings.RtssCapNote}" Margin="6,6,6,0" />
-
           <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.RtssAppHeading}"
-                     Margin="4,22,0,10" />
+                     Margin="4,18,0,10" />
 
           <controls:Tile Style="{StaticResource Tile.Switch}"
                          Glyph="{x:Static theme:Glyphs.Shield}"
@@ -152,31 +186,6 @@
                          Detail="{Binding SkipAntiCheatDetail}"
                          IsOn="{Binding SkipAntiCheatGames}"
                          Command="{Binding ToggleSkipAntiCheat}" />
-
-          <controls:Reveal IsOpen="{Binding IsNotRunning}">
-            <controls:Tile Style="{StaticResource Tile.Link}" Tag=""
-                           Glyph="{x:Static theme:Glyphs.Startup}"
-                           Label="{x:Static lang:Strings.RtssStart}"
-                           Detail="{Binding RtssAppDetail}"
-                           Command="{Binding StartRtss}" />
-          </controls:Reveal>
-
-          <controls:Reveal IsOpen="{Binding IsRunning}">
-            <StackPanel>
-              <controls:Tile Style="{StaticResource Tile.Link}"
-                             Glyph="{x:Static theme:Glyphs.GameMenu}"
-                             Label="{x:Static lang:Strings.RtssOpenMenu}"
-                             Detail="{Binding RtssAppDetail}"
-                             IsOn="True"
-                             Command="{Binding OpenRtssMenu}" />
-
-              <controls:Tile Style="{StaticResource Tile.Link}" Tag=""
-                             Glyph="{x:Static theme:Glyphs.Quit}"
-                             Label="{x:Static lang:Strings.RtssClose}"
-                             Detail="{x:Static lang:Strings.RtssCloseDetail}"
-                             Command="{Binding CloseRtss}" />
-            </StackPanel>
-          </controls:Reveal>
 
           <controls:Tile Style="{StaticResource Tile.Link}"
                          Glyph="{x:Static theme:Glyphs.Download}"

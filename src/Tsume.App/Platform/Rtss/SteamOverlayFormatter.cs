@@ -100,11 +100,10 @@ public static class SteamOverlayFormatter
         if (includeHeader)
         {
             var mode = string.IsNullOrWhiteSpace(f.PowerModeLabel) ? "TSUME" : f.PowerModeLabel.ToUpperInvariant();
-            var time = f.Now.ToString("HH:mm", CultureInfo.InvariantCulture);
             sb.Append($"<C={ColMuted}>{mode}");
             if (f.SustainedWatts is { } pl1 && f.BoostWatts is { } pl2)
                 sb.Append($"  {pl1}W/{pl2}W");
-            sb.Append($"  {time}<C>\n");
+            sb.Append("<C>\n");
         }
 
         // FPS & Frametime

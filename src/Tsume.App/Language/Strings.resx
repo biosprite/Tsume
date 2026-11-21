@@ -520,7 +520,7 @@
   <data name="RtssLevelFpsDetail" xml:space="preserve"><value>Minimal green frame-rate counter, Steam Deck style.</value></data>
   <data name="RtssLevelBarDetail" xml:space="preserve"><value>Compact horizontal strip: battery, GPU, CPU, RAM and FPS.</value></data>
   <data name="RtssLevelDetailedDetail" xml:space="preserve"><value>Stacked readout with temperatures, VRAM, fan speed and power.</value></data>
-  <data name="RtssLevelFullDetail" xml:space="preserve"><value>Full stats, power mode, clock and a live frametime graph.</value></data>
+  <data name="RtssLevelFullDetail" xml:space="preserve"><value>Full stats, power mode and a live frametime graph.</value></data>
 
   <data name="RtssCornerTopLeft" xml:space="preserve"><value>Top left</value></data>
   <data name="RtssCornerTopRight" xml:space="preserve"><value>Top right</value></data>
@@ -541,15 +541,17 @@
   </data>
   <data name="RtssOsdOn" xml:space="preserve"><value>OSD on</value></data>
 
+  <data name="RtssOnlineWarning" xml:space="preserve"><value>Using RTSS in live online games may trigger anti-cheat and result in a ban. End RTSS before playing.</value></data>
+
   <data name="RtssAppHeading" xml:space="preserve"><value>RIVATUNER</value></data>
   <data name="RtssStart" xml:space="preserve"><value>Start RTSS</value></data>
-  <data name="RtssOpenMenu" xml:space="preserve"><value>Open RTSS menu</value></data>
+  <data name="RtssOpenMenu" xml:space="preserve"><value>Open RTSS</value></data>
   <data name="RtssOpenMenuDetail" xml:space="preserve"><value>Brings up the RivaTuner Statistics Server window</value></data>
-  <data name="RtssClose" xml:space="preserve"><value>Close RTSS</value></data>
+  <data name="RtssClose" xml:space="preserve"><value>End RTSS</value></data>
   <data name="RtssCloseDetail" xml:space="preserve"><value>Stops RTSS and unhooks it until you start it again</value></data>
-  <data name="RtssClosing" xml:space="preserve"><value>Closing RTSS…</value></data>
-  <data name="RtssClosed" xml:space="preserve"><value>RTSS closed.</value></data>
-  <data name="RtssCloseFailed" xml:space="preserve"><value>Could not close RTSS. Close it from the system tray.</value></data>
+  <data name="RtssClosing" xml:space="preserve"><value>Ending RTSS…</value></data>
+  <data name="RtssClosed" xml:space="preserve"><value>RTSS ended.</value></data>
+  <data name="RtssCloseFailed" xml:space="preserve"><value>Could not end RTSS. Close it from the system tray.</value></data>
   <data name="RtssOpenMenuFailed" xml:space="preserve"><value>Could not open the RTSS window. Open it from the system tray.</value></data>
   <data name="RtssSkipAntiCheat" xml:space="preserve"><value>Skip anti-cheat games</value></data>
   <data name="RtssSkipAntiCheatOn" xml:space="preserve">
@@ -572,8 +574,12 @@
   <data name="RtssStoppedPlain" xml:space="preserve"><value>Not running</value></data>
   <data name="RtssStarting" xml:space="preserve"><value>Starting RTSS…</value></data>
   <data name="RtssStartFailed" xml:space="preserve"><value>RTSS did not start. Accept any permission prompt or start it from the Start menu.</value></data>
-  <data name="RtssNotRunningNote" xml:space="preserve"><value>Start RTSS to show the overlay or change the frame-rate cap.</value></data>
+  <data name="RtssNotRunningNote" xml:space="preserve"><value>Start RTSS to show the overlay or set a frame-rate cap.</value></data>
   <data name="RtssSavedNote" xml:space="preserve"><value>Changes apply immediately through RTSS and are kept.</value></data>
+  <data name="RtssRunningSavedNote" xml:space="preserve">
+    <value>RTSS {0} running · Changes apply immediately.</value>
+    <comment>{0} = installed RTSS version, e.g. 7.3.7</comment>
+  </data>
   <data name="RtssGuru3dLink" xml:space="preserve"><value>Guru3D download page</value></data>
   <data name="RtssGuru3dLinkDetail" xml:space="preserve"><value>Official RTSS 7.3.7 download and updates</value></data>
 

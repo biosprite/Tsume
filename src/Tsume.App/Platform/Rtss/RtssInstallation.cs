@@ -36,11 +36,11 @@ public static class RtssInstallation
         return null;
     }
 
-    /// <summary>True when RTSS is currently running.</summary>
+    /// <summary>True when <c>RTSS.exe</c> is currently running.</summary>
     public static bool IsRunning()
     {
-        if (RtssSharedMemory.IsAvailable()) return true;
-
+        // Check the RTSS process directly rather than RTSSSharedMemoryV2: hooked games or other tools
+        // can keep the shared-memory section alive briefly after RTSS.exe has already exited.
         var processes = Process.GetProcessesByName("RTSS");
         try
         {
@@ -73,7 +73,7 @@ public static class RtssInstallation
 
         try
         {
-            Process.Start(new ProcessStartInfo(install.Executable)
+            using var _ = Process.Start(new ProcessStartInfo(install.Executable)
             {
                 WorkingDirectory = install.Folder,
                 UseShellExecute = true,

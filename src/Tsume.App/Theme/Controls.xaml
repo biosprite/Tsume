@@ -560,6 +560,16 @@
     <Setter Property="Margin" Value="0,0,0,8" />
   </Style>
 
+  <!-- Compact warning banner: subtle amber tint, takes no focus. -->
+  <Style x:Key="Card.Warning" TargetType="Border">
+    <Setter Property="Background" Value="#1AF5B841" />
+    <Setter Property="BorderBrush" Value="#55F5B841" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="14" />
+    <Setter Property="Padding" Value="14,10,14,10" />
+    <Setter Property="Margin" Value="0,0,0,10" />
+  </Style>
+
   <!-- Icon button: round, icon only, sized for touch. -->
   <Style x:Key="Tile.Icon" TargetType="controls:Tile">
     <Setter Property="Width" Value="46" />

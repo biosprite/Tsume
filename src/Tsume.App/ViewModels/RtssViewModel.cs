@@ -195,10 +195,18 @@ public sealed class RtssViewModel : LayerViewModel
     public string DownloadedInstallerDetail =>
         _downloadedInstaller is { } path ? Strings.RtssRunInstallerDetail(Path.GetFileName(path)) : "";
 
-    public string InstalledVersion { get; private set => Set(ref field, value); } = "";
+    public string InstalledVersion
+    {
+        get;
+        private set
+        {
+            if (Set(ref field, value)) Notify(nameof(RtssAppDetail));
+        }
+    } = "";
 
-    public string RtssAppDetail => IsRunning
-        ? Strings.RtssStatusRunning(InstalledVersion)
+    public string RtssAppDetail =>
+        _launching ? Strings.RtssStarting
+        : IsRunning ? Strings.RtssStatusRunning(InstalledVersion)
         : Strings.RtssStatusStopped(InstalledVersion);
 
     public bool UseTsumeOverlay
@@ -373,6 +381,19 @@ public sealed class RtssViewModel : LayerViewModel
         });
     }
 
+    /// <summary>Polled while the RTSS screen is open so external RTSS start/exit updates the screen live.</summary>
+    public void RefreshRunningState()
+    {
+        if (!IsInstalled || _launching || _closing) return;
+
+        var running = _service.IsRunning;
+        if (running == IsRunning) return;
+
+        RefreshState();
+        Status = DefaultStatus();
+        Settled?.Invoke();
+    }
+
     protected override void OnOpened()
     {
         RefreshState();
@@ -477,20 +498,24 @@ public sealed class RtssViewModel : LayerViewModel
         if (install is null) return;
 
         _launching = true;
+        Notify(nameof(RtssAppDetail));
         Status = Strings.RtssStarting;
 
         try
         {
-            if (!RtssInstallation.Launch(install, minimized: true))
+            // Launch off the UI thread so any Windows UAC prompt never freezes the panel.
+            var launched = await Task.Run(() => RtssInstallation.Launch(install, minimized: true));
+            if (!launched)
             {
                 Status = Strings.RtssStartFailed;
                 return;
             }
 
-            for (var attempt = 0; attempt < 20; attempt++)
+            // Wait for RTSS shared memory to come online so OSD and profile controls work immediately.
+            for (var attempt = 0; attempt < 30; attempt++)
             {
                 await Task.Delay(250);
-                if (_service.IsRunning)
+                if (_service.IsRunning && (RtssSharedMemory.IsAvailable() || attempt >= 8))
                 {
                     RefreshState();
                     _service.ApplySettings(_service.Settings);
@@ -506,6 +531,7 @@ public sealed class RtssViewModel : LayerViewModel
         finally
         {
             _launching = false;
+            Notify(nameof(RtssAppDetail));
         }
     }
 
@@ -571,7 +597,7 @@ public sealed class RtssViewModel : LayerViewModel
     private string DefaultStatus() =>
         !IsInstalled ? ""
         : !IsRunning ? Strings.RtssNotRunningNote
-        : Strings.RtssSavedNote;
+        : Strings.RtssRunningSavedNote(InstalledVersion);
 
     private void NotifyTile()
     {
@@ -580,12 +606,12 @@ public sealed class RtssViewModel : LayerViewModel
     }
 
     /// <summary>Development aid for <see cref="Shell.ScreenShots"/>: displays an installed state without touching disk or RTSS.</summary>
-    internal void PreviewForScreenShot(bool useTsumeOverlay, RtssOverlayLevel level, int frameRateLimit)
+    internal void PreviewForScreenShot(bool useTsumeOverlay, RtssOverlayLevel level, int frameRateLimit, bool isRunning = true)
     {
         _absorbing = true;
         IsInstalled = true;
         InstalledVersion = "7.3.7";
-        IsRunning = true;
+        IsRunning = isRunning;
         UseTsumeOverlay = useTsumeOverlay;
         SkipAntiCheatGames = true;
         _excludedGamesCount = 2;
@@ -594,7 +620,7 @@ public sealed class RtssViewModel : LayerViewModel
         CornerIndex = (int)RtssCorner.TopLeft;
         Scale = 2;
         IsOsdVisible = true;
-        ActiveFrameRateLimit = frameRateLimit;
+        ActiveFrameRateLimit = isRunning ? frameRateLimit : 0;
 
         var presetIndex = Array.IndexOf(CapPresets, frameRateLimit);
         if (presetIndex >= 0)
@@ -607,7 +633,7 @@ public sealed class RtssViewModel : LayerViewModel
             FrameCapIndex = CapPresets.Length;
         }
 
-        Status = Strings.RtssSavedNote;
+        Status = DefaultStatus();
         _absorbing = false;
         NotifyTile();
     }

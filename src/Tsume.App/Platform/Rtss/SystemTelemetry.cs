@@ -18,7 +18,6 @@ public sealed record TelemetryFrame
     public int? BoostWatts { get; init; }
     public float? LiveFps { get; init; }
     public float? LiveFrameTimeMs { get; init; }
-    public DateTime Now { get; init; } = DateTime.Now;
 }
 
 /// <summary>

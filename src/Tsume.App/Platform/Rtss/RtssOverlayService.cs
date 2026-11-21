@@ -391,7 +391,7 @@ public sealed class RtssOverlayService : IDisposable
         {
             try
             {
-                if (!RtssSharedMemory.IsAvailable())
+                if (!IsRunning || !RtssSharedMemory.IsAvailable())
                 {
                     _appearanceApplied = false;
                     await Task.Delay(WaitingInterval, cancel).ConfigureAwait(false);
@@ -429,7 +429,7 @@ public sealed class RtssOverlayService : IDisposable
         TelemetryFrame frame;
         if (settings.Level == RtssOverlayLevel.Fps)
         {
-            frame = new TelemetryFrame { Now = DateTime.Now };
+            frame = new TelemetryFrame();
         }
         else
         {
@@ -471,7 +471,6 @@ public sealed class RtssOverlayService : IDisposable
                 BoostWatts = boost,
                 LiveFps = app.Fps,
                 LiveFrameTimeMs = app.FrameTimeMs,
-                Now = DateTime.Now,
             };
         }
 
