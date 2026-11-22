@@ -286,6 +286,7 @@ public static class Strings
     public static string ProxyFallbackHint => Find();
     public static string XmxLockedBuild => Find();
     public static string XmxLockedUpdate => Find();
+    public static string MultiplierIntelOnly => Find();
 
     /// <summary>"Nightly of 11 November"</summary>
     public static string NightlyOf(string night) => Fill(Find(), night);

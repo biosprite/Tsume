@@ -105,19 +105,25 @@ public sealed record UpscalerSettings
     private const string XmxRunAs = "Model";
 
     /// <summary>
-    /// Adjusts settings for what the target game actually supports: falls back to plain FSR 4 (INT8) when XMX
-    /// is chosen but not in the game's folder, and maps plain FSR 4's Lite choice to INT8 (AMD's DX12 upscaler
-    /// does not offer the Lite network).
+    /// Adjusts settings for what the target game and this GPU actually support: falls back to plain FSR 4 (INT8) when
+    /// XMX is chosen but not in the game's folder, maps plain FSR 4's Lite choice to INT8 (AMD's DX12 upscaler does
+    /// not offer the Lite network), and clamps XeFG's multiplier to 2× on non-Intel GPUs (3×/4× require Intel Arc).
     /// </summary>
-    public UpscalerSettings Fitting(bool hasXmx)
+    public UpscalerSettings Fitting(bool hasXmx) => Fitting(hasXmx, GpuVendor.HasIntelGpu());
+
+    public UpscalerSettings Fitting(bool hasXmx, bool hasIntelGpu)
     {
-        if (Upscaler == UpscalerChoice.Fsr4Xmx && !hasXmx)
-            return this with { Upscaler = UpscalerChoice.Fsr4, Model = Fsr4Model.Int8 };
+        var fitted = this;
 
-        if (Upscaler == UpscalerChoice.Fsr4 && Model == Fsr4Model.Lite)
-            return this with { Model = Fsr4Model.Int8 };
+        if (fitted.Upscaler == UpscalerChoice.Fsr4Xmx && !hasXmx)
+            fitted = fitted with { Upscaler = UpscalerChoice.Fsr4, Model = Fsr4Model.Int8 };
+        else if (fitted.Upscaler == UpscalerChoice.Fsr4 && fitted.Model == Fsr4Model.Lite)
+            fitted = fitted with { Model = Fsr4Model.Int8 };
 
-        return this;
+        if (!hasIntelGpu && fitted.Multiplier > 2)
+            fitted = fitted with { Multiplier = 2 };
+
+        return fitted;
     }
 
     /// <summary>Writes these settings into the file, and only these.</summary>

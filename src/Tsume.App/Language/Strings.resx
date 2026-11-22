@@ -377,6 +377,7 @@
   <data name="ProxyFallbackHint" xml:space="preserve"><value>Fallback</value></data>
   <data name="XmxLockedBuild" xml:space="preserve"><value>XMX is greyed out until you add the XMX archive on the OptiScaler build page.</value></data>
   <data name="XmxLockedUpdate" xml:space="preserve"><value>XMX is not in this game yet. Press Update above to add it.</value></data>
+  <data name="MultiplierIntelOnly" xml:space="preserve"><value>3× and 4× require an Intel Arc GPU; other GPUs support 2×.</value></data>
 
   <!-- OptiScaler: the build -->
 

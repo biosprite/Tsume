@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Input;
 using Tsume.App.Language;
 using Tsume.App.Mvvm;
+using Tsume.Upscaling;
 using Tsume.Upscaling.Config;
 using Tsume.Upscaling.Install;
 
@@ -17,6 +18,7 @@ public sealed record ProxyOption(string Value, string Label, string Hint);
 public sealed class UpscalerTuningViewModel : Observable
 {
     private static readonly IReadOnlySet<int> DisabledXmx = new HashSet<int> { (int)UpscalerChoice.Fsr4Xmx };
+    private static readonly IReadOnlySet<int> DisabledMultiFrame = new HashSet<int> { 1, 2 };
 
     private bool _loading;
     private string? _lockedProxy;
@@ -140,7 +142,14 @@ public sealed class UpscalerTuningViewModel : Observable
     public int FrameGenIndex
     {
         get => (int)Settings.FrameGen;
-        set => Change(Settings with { FrameGen = (FrameGenChoice)value });
+        set
+        {
+            var choice = (FrameGenChoice)value;
+            var multiplier = choice == FrameGenChoice.XeFG && !SupportsMultiFrame && Settings.Multiplier > 2
+                ? 2
+                : Settings.Multiplier;
+            Change(Settings with { FrameGen = choice, Multiplier = multiplier });
+        }
     }
 
     public bool ShowsSource => Settings.FrameGen != FrameGenChoice.Off;
@@ -163,13 +172,27 @@ public sealed class UpscalerTuningViewModel : Observable
     /// <summary>Only Intel's frame generation makes more than one frame in between.</summary>
     public bool ShowsMultiplier => Settings.FrameGen == FrameGenChoice.XeFG;
 
+    /// <summary>True on Intel Arc GPUs, which support XeFG multi-frame generation (3× and 4×).</summary>
+    public bool SupportsMultiFrame => GpuVendor.HasIntelGpu();
+
+    /// <summary>Greys out 3× and 4× on non-Intel GPUs, where XeFG only supports 2×.</summary>
+    public IReadOnlySet<int>? DisabledMultipliers => SupportsMultiFrame ? null : DisabledMultiFrame;
+
     public IReadOnlyList<string> Multipliers { get; } = ["2×", "3×", "4×"];
 
     public int MultiplierIndex
     {
-        get => Math.Clamp(Settings.Multiplier, 2, 4) - 2;
-        set => Change(Settings with { Multiplier = value + 2 });
+        get => SupportsMultiFrame ? Math.Clamp(Settings.Multiplier, 2, 4) - 2 : 0;
+        set
+        {
+            if (!SupportsMultiFrame && value > 0) return;
+            Change(Settings with { Multiplier = Math.Clamp(value + 2, 2, 4) });
+        }
     }
+
+    public string MultiplierHint => SupportsMultiFrame ? "" : Strings.MultiplierIntelOnly;
+
+    public Visibility MultiplierHintShown => MultiplierHint.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
     public ICommand ToggleSpoof { get; }
 

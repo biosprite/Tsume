@@ -3,7 +3,7 @@ using Microsoft.Win32;
 namespace Tsume.Upscaling;
 
 /// <summary>Checks which GPU vendors are present on this machine, read once from Windows' display adapter registry keys.</summary>
-internal static class GpuVendor
+public static class GpuVendor
 {
     private const string DisplayClassKey = @"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
 

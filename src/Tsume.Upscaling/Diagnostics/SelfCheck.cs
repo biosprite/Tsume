@@ -121,6 +121,11 @@ public static class SelfCheck
         Check(fsr4Lite.Fitting(hasXmx: true) is { Upscaler: UpscalerChoice.Fsr4, Model: Fsr4Model.Int8 },
             "plain FSR 4 clamps Lite to INT8 because AMD's DX12 upscaler has no Lite network");
 
+        var xefgMfg = new UpscalerSettings { FrameGen = FrameGenChoice.XeFG, Multiplier = 4 };
+        Check(xefgMfg.Fitting(hasXmx: true, hasIntelGpu: true).Multiplier == 4
+              && xefgMfg.Fitting(hasXmx: true, hasIntelGpu: false).Multiplier == 2,
+            "XeFG 3×/4× stays on Intel GPUs and clamps to 2× on non-Intel GPUs");
+
         var dlssgFg = new UpscalerSettings { FrameGen = FrameGenChoice.XeFG, Source = FrameGenSource.Dlssg, Multiplier = 2 };
         ini = IniFile.Parse(blank);
         dlssgFg.WriteTo(ini, ueIntelAtomics: true);

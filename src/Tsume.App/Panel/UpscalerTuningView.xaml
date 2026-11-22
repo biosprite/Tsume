@@ -71,7 +71,13 @@
                    Margin="4,14,0,8" />
 
         <controls:SegmentedControl AutomationProperties.Name="{x:Static lang:Strings.FrameGenMultiplierHeading}"
-                                   Segments="{Binding Multipliers}" SelectedIndex="{Binding MultiplierIndex}" />
+                                   Segments="{Binding Multipliers}"
+                                   DisabledIndices="{Binding DisabledMultipliers}"
+                                   SelectedIndex="{Binding MultiplierIndex}" />
+
+        <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text.Faint}"
+                   TextWrapping="Wrap" TextTrimming="None"
+                   Text="{Binding MultiplierHint}" Visibility="{Binding MultiplierHintShown}" Margin="6,4,6,0" />
       </StackPanel>
     </controls:Reveal>
 
