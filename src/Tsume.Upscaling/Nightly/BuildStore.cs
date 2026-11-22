@@ -90,8 +90,11 @@ public sealed class BuildStore(UpscalingPaths paths)
     {
         try
         {
+            using var headersLimit = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+            headersLimit.CancelAfter(TimeSpan.FromSeconds(20));
+
             using var response = await NightlyFeed.Web
-                .GetAsync(build.Url, HttpCompletionOption.ResponseHeadersRead, cancel).ConfigureAwait(false);
+                .GetAsync(build.Url, HttpCompletionOption.ResponseHeadersRead, headersLimit.Token).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
             var total = response.Content.Headers.ContentLength ?? build.Size;

@@ -91,6 +91,14 @@
                    IsOn="{Binding SpoofNvidia}"
                    Command="{Binding ToggleSpoof}" />
 
+    <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0,8,0,0"
+                   Glyph="{x:Static theme:Glyphs.Plugin}"
+                   Label="{x:Static lang:Strings.OptiPatcher}"
+                   Detail="{Binding OptiPatcherDetail}"
+                   IsOn="{Binding OptiPatcher}"
+                   IsEnabled="{Binding HasOptiPatcher}"
+                   Command="{Binding ToggleOptiPatcher}" />
+
   </StackPanel>
 
 </UserControl>

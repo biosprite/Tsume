@@ -5,6 +5,7 @@ using Tsume.Core.Diagnostics;
 using Tsume.Upscaling.Config;
 using Tsume.Upscaling.Games;
 using Tsume.Upscaling.Nightly;
+using Tsume.Upscaling.OptiPatcher;
 using Tsume.Upscaling.Xmx;
 
 namespace Tsume.Upscaling.Install;
@@ -16,6 +17,7 @@ namespace Tsume.Upscaling.Install;
 public sealed class Installer(UpscalingPaths paths)
 {
     private readonly XmxStore _xmx = new(paths);
+    private readonly OptiPatcherStore _optiPatcher = new(paths);
 
     private const string SettingsFile = "OptiScaler.ini";
     private const string Program = "OptiScaler.dll";
@@ -87,14 +89,50 @@ public sealed class Installer(UpscalingPaths paths)
     /// <summary>True if the XMX upscaler went into the game with this install.</summary>
     public static bool HasXmx(InstallManifest manifest) => XmxIn(manifest) is not null;
 
-    /// <summary>True if the install is from the build on disk and carries the XMX upscaler Tsume holds now.</summary>
+    /// <summary>True if OptiPatcher went into the game with this install.</summary>
+    public static bool HasOptiPatcher(InstallManifest manifest) => OptiPatcherIn(manifest) is not null;
+
+    /// <summary>True if OptiPatcher is installed in this game and ASI plugin loading is enabled in its OptiScaler.ini.</summary>
+    public static bool IsOptiPatcherEnabled(InstallManifest manifest)
+    {
+        if (!HasOptiPatcher(manifest)) return false;
+
+        try
+        {
+            var ini = IniFile.Load(Path.Combine(manifest.Target, SettingsFile));
+            return string.Equals(ini.Get("Plugins", "LoadAsiPlugins"), "true", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// True if this install already carries the exact OptiPatcher binary held by Tsume, Tsume holds none, or the
+    /// user's own copy in Extras\ already went into this game (Extras\ is laid over every install, so that copy is
+    /// what Update would place).
+    /// </summary>
+    public bool IsOptiPatcherCurrent(InstallManifest manifest, StoredOptiPatcher? patcher) =>
+        patcher is null
+        || (ExtrasHaveOptiPatcher && HasOptiPatcher(manifest))
+        || OptiPatcherIn(manifest)?.Sha256 == patcher.Release.Sha256;
+
+    /// <summary>True if the user put their own OptiPatcher.asi in Extras\plugins\, which replaces the downloaded one.</summary>
+    private bool ExtrasHaveOptiPatcher => File.Exists(Path.Combine(paths.Extras, "plugins", OptiPatcherLayout.FileName));
+
+    /// <summary>True if the install is from the build on disk and carries the XMX upscaler and OptiPatcher Tsume holds now.</summary>
     public bool IsCurrent(InstallManifest manifest, StoredBuild? build) =>
         (build is null || manifest.Build == build.Build.Tag)
         && manifest.Linked is not null   // installed before games shared the store's files: installing again saves the space
-        && (_xmx.Current() is not { } held || XmxIn(manifest)?.Sha256 == held.Sha256);
+        && (_xmx.Current() is not { } held || XmxIn(manifest)?.Sha256 == held.Sha256)
+        && IsOptiPatcherCurrent(manifest, _optiPatcher.Current());
 
     private static PlacedFile? XmxIn(InstallManifest manifest) =>
         manifest.Files.FirstOrDefault(file => file.Path.Equals(XmxLayout.Upscaler, StringComparison.OrdinalIgnoreCase));
+
+    private static PlacedFile? OptiPatcherIn(InstallManifest manifest) =>
+        manifest.Files.FirstOrDefault(file => file.Path.Equals(OptiPatcherLayout.Plugin, StringComparison.OrdinalIgnoreCase));
 
     public InstallManifest Install(Game game, GameFacts facts, StoredBuild build, UpscalerSettings settings)
     {
@@ -123,11 +161,22 @@ public sealed class Installer(UpscalingPaths paths)
         {
             MakeSureWritable(target);
 
-            // The XMX upscaler is installed whenever Tsume holds it, chosen or not, so choosing it later is only an ini change.
+            // XMX and OptiPatcher are installed whenever Tsume holds them, chosen or not, so switching them later is only an ini change.
             var xmx = _xmx.Current() is { } held ? _xmx.Shared(held) : null;
+            var patcher = _optiPatcher.Current();
+            var patcherFile = patcher is not null ? OptiPatcherStore.Verified(patcher) : null;
+            var hasOptiPatcher = patcher is not null || ExtrasHaveOptiPatcher;
+
             var ueIntelAtomics = GameInspector.IsUnrealTarget(target) && GpuVendor.HasIntelGpu();
 
-            var plan = Plan(build, proxy, StageSettings(home, build, settings.Fitting(xmx is not null), ueIntelAtomics), xmx);
+            var staged = StageSettings(home, build, settings.Fitting(xmx is not null, hasOptiPatcher), ueIntelAtomics, hasOptiPatcher);
+            var plan = Plan(build, proxy, staged, xmx, patcherFile);
+
+            // Record the store's OptiPatcher tag only when the placed binary actually came from the store (not overridden by Extras\).
+            var placedPatcher = plan.FirstOrDefault(step => step.Path.Equals(OptiPatcherLayout.Plugin, StringComparison.OrdinalIgnoreCase));
+            manifest.OptiPatcher = patcher is not null && placedPatcher?.Sha256 == patcher.Release.Sha256
+                ? patcher.Release.Tag
+                : null;
 
             // Where the disk allows, the big libraries are not copied: the game gets a second name for Tsume's own file.
             var linking = Files.CanLink(Files.Inside(build.Folder, Program), target);
@@ -158,7 +207,7 @@ public sealed class Installer(UpscalingPaths paths)
                 }
 
                 if (step.SameAs is { } twin && Files.TryLink(Files.Inside(target, twin), destination)) continue;
-                if (linking && step.Shared && LinkFromStore(step, build, destination)) continue;
+                if (linking && step.Shared && LinkFromStore(step, build, patcher, destination)) continue;
 
                 Files.Place(step.Source, destination);
             }
@@ -206,7 +255,7 @@ public sealed class Installer(UpscalingPaths paths)
     /// Everything that goes into the game's folder: the build (OptiScaler.dll under the proxy name, the prepared
     /// settings file), the XMX upscaler with AMD's beside it, then the Extras\ files laid over OptiScaler\, replacing same-named files.
     /// </summary>
-    private List<Step> Plan(StoredBuild build, string proxy, string settingsFile, string? xmx)
+    private List<Step> Plan(StoredBuild build, string proxy, string settingsFile, string? xmx, string? optiPatcher)
     {
         var plan = new Dictionary<string, Step>(StringComparer.OrdinalIgnoreCase);
 
@@ -236,6 +285,11 @@ public sealed class Installer(UpscalingPaths paths)
                 plan[XmxLayout.Weights] = amd with { Path = XmxLayout.Weights, SameAs = XmxLayout.WeightsInBuild };
         }
 
+        if (optiPatcher is not null)
+        {
+            plan[OptiPatcherLayout.Plugin] = new Step(optiPatcher, OptiPatcherLayout.Plugin, new FileInfo(optiPatcher).Length, Files.Hash(optiPatcher)) { Shared = true };
+        }
+
         if (Directory.Exists(paths.Extras))
         {
             foreach (var extra in Directory.EnumerateFiles(paths.Extras, "*", SearchOption.AllDirectories))
@@ -256,11 +310,17 @@ public sealed class Installer(UpscalingPaths paths)
     /// The store's file is checked first: one changed through some game's link must not spread to another.
     /// </summary>
     /// <returns>False if it could not be linked; the caller copies instead.</returns>
-    private static bool LinkFromStore(Step step, StoredBuild build, string destination)
+    private static bool LinkFromStore(Step step, StoredBuild build, StoredOptiPatcher? patcher, string destination)
     {
         if (Files.Hash(step.Source) != step.Sha256)
         {
             Log.Write($"{step.Source} is no longer the file that was downloaded");
+            if (patcher is not null && step.Path.Equals(OptiPatcherLayout.Plugin, StringComparison.OrdinalIgnoreCase))
+            {
+                OptiPatcherStore.Distrust(patcher);
+                throw new UpscalingException(Trouble.OptiPatcherDamaged, step.Path);
+            }
+
             BuildStore.Distrust(build);
             throw new UpscalingException(Trouble.BuildDamaged, step.Path);
         }
@@ -272,12 +332,12 @@ public sealed class Installer(UpscalingPaths paths)
     /// The settings file to install: the one saved from an update (so overlay tuning survives),
     /// else the build's clean one, with Tsume's settings written into it.
     /// </summary>
-    private static string StageSettings(string home, StoredBuild build, UpscalerSettings settings, bool ueIntelAtomics)
+    private static string StageSettings(string home, StoredBuild build, UpscalerSettings settings, bool ueIntelAtomics, bool hasOptiPatcher)
     {
         var saved = Path.Combine(home, "Saved", SettingsFile);
         var ini = IniFile.Load(File.Exists(saved) ? saved : Path.Combine(build.Folder, SettingsFile));
 
-        settings.WriteTo(ini, ueIntelAtomics);
+        settings.WriteTo(ini, ueIntelAtomics, hasOptiPatcher);
 
         var staged = Path.Combine(home, "Staged", SettingsFile);
         ini.Save(staged);
@@ -434,7 +494,8 @@ public sealed class Installer(UpscalingPaths paths)
             var ini = IniFile.Load(file);
             var ueIntelAtomics = GameInspector.IsUnrealTarget(manifest.Target) && GpuVendor.HasIntelGpu();
 
-            settings.Fitting(HasXmx(manifest)).WriteTo(ini, ueIntelAtomics);
+            var hasOptiPatcher = HasOptiPatcher(manifest);
+            settings.Fitting(HasXmx(manifest), hasOptiPatcher).WriteTo(ini, ueIntelAtomics, hasOptiPatcher);
             ini.Save(file);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)

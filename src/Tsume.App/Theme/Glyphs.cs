@@ -49,6 +49,7 @@ public static class Glyphs
     public const string Drive       = "";
     public const string Up          = "";
     public const string Chip        = "";
+    public const string Plugin      = "\uEA86";   // puzzle piece (ASI plugin)
     public const string Counter     = "";   // heartbeat line
     public const string Overlay     = "\uE9D2";   // vertical metric bars (performance overlay)
     public const string Shield      = "\uEA18";   // shield (anti-cheat protection)

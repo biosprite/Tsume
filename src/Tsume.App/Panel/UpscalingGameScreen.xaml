@@ -39,8 +39,25 @@
           <StackPanel>
             <TextBlock Style="{StaticResource Text.Body}" TextWrapping="Wrap" TextTrimming="None"
                        Text="{Binding StateLine}" />
+            <Border Background="{x:Static theme:Accent.Tint}"
+                    BorderBrush="{x:Static theme:Accent.Wash}"
+                    BorderThickness="1" CornerRadius="8"
+                    Padding="8,3" Margin="0,8,0,0"
+                    HorizontalAlignment="Left"
+                    Visibility="{Binding OptiPatcherBadgeShown}">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Style="{StaticResource Text.Icon}" FontSize="12"
+                           Foreground="{x:Static theme:Accent.Brush}"
+                           Text="{x:Static theme:Glyphs.Plugin}"
+                           VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBlock Style="{StaticResource Text.Caption}" FontWeight="SemiBold"
+                           Foreground="{x:Static theme:Accent.Brush}"
+                           Text="{Binding OptiPatcherBadge}"
+                           VerticalAlignment="Center" />
+              </StackPanel>
+            </Border>
             <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
-                       Text="{Binding FoundLine}" Margin="0,4,0,0" />
+                       Text="{Binding FoundLine}" Margin="0,6,0,0" />
             <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text.Faint}"
                        TextWrapping="Wrap" TextTrimming="None"
                        Text="{Binding FolderLine}" Margin="0,4,0,0" />

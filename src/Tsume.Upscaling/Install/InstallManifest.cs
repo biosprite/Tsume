@@ -21,6 +21,9 @@ public sealed class InstallManifest
     /// <summary>The nightly it came from: "nightly-20261111".</summary>
     public string Build { get; set; } = "";
 
+    /// <summary>The OptiPatcher release placed alongside OptiScaler (e.g. "v0.42"), or null if none was installed.</summary>
+    public string? OptiPatcher { get; set; }
+
     public DateTimeOffset InstalledAt { get; set; }
 
     /// <summary>False until the last file is in place; a manifest found false means the install was cut short.</summary>

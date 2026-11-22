@@ -5,21 +5,25 @@ using System.Windows;
 using System.Windows.Input;
 using Tsume.App.Language;
 using Tsume.App.Mvvm;
+using Tsume.App.Theme;
 using Tsume.Upscaling.Install;
 using Tsume.Upscaling.Nightly;
+using Tsume.Upscaling.OptiPatcher;
 using Tsume.Upscaling.Xmx;
 
 namespace Tsume.App.ViewModels;
 
 /// <summary>
-/// The build page: the nightly on disk, checking for and downloading a newer one, updating installed games, XMX, and the extras folder.
-/// Tsume goes online only when asked: "Check for a newer build", or a first install with no build on disk.
+/// The build page: the nightly on disk, checking for and downloading a newer one, updating installed games, OptiPatcher, XMX, and the extras folder.
+/// Tsume goes online only when asked: "Check for a newer build", downloading OptiPatcher, or a first install with no build on disk.
 /// </summary>
 public sealed class UpscalingBuildViewModel : LayerViewModel
 {
     private readonly UpscalingViewModel _hub;
     private StoredBuild? _build;
     private NightlyBuild? _available;
+    private StoredOptiPatcher? _optiPatcher;
+    private OptiPatcherRelease? _availableOptiPatcher;
     private XmxUpscaler? _xmx;
     private CancellationTokenSource? _operationCancel;
     private bool _busyHere;
@@ -34,9 +38,19 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
         };
 
         CheckForNewer = new Command(() => _ = RunCancellableAsync(CheckForNewerAsync, Strings.CheckCancelled));
-        DownloadNewer = new Command(() => _ = RunCancellableAsync(DownloadNewerAsync, Strings.DownloadCancelled, clearAvailableOnCancel: true));
+        DownloadNewer = new Command(() => _ = RunCancellableAsync(DownloadNewerAsync, Strings.DownloadCancelled, onCancelled: () => _available = null));
         CancelUpdate = new Command(OnCancelUpdate);
         UpdateGames = new Command(() => _ = RunAsync(UpdateGamesAsync));
+        CheckOrDownloadOptiPatcher = new Command(() => _ = RunCancellableAsync(
+            CheckOrDownloadOptiPatcherAsync,
+            _optiPatcher is null ? Strings.DownloadCancelled : Strings.CheckCancelled,
+            isOptiPatcher: true));
+        DownloadOptiPatcher = new Command(() => _ = RunCancellableAsync(
+            DownloadOptiPatcherAsync,
+            Strings.DownloadCancelled,
+            onCancelled: () => _availableOptiPatcher = null,
+            isOptiPatcher: true));
+        CancelOptiPatcher = new Command(OnCancelOptiPatcher);
         AddXmx = new Command(() => _ = RunAsync(AddXmxAsync));
         RemoveOld = new Command(() => _ = RunAsync(RemoveOldAsync));
 
@@ -56,10 +70,16 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
     /// <summary>Raised after an action, when buttons may have come or gone.</summary>
     public event Action? Settled;
 
+    /// <summary>Raised when an OptiPatcher check, download, or cancel settles so focus stays in the OptiPatcher section.</summary>
+    public event Action? OptiPatcherSettled;
+
     public ICommand CheckForNewer { get; }
     public ICommand DownloadNewer { get; }
     public ICommand CancelUpdate { get; }
     public ICommand UpdateGames { get; }
+    public ICommand CheckOrDownloadOptiPatcher { get; }
+    public ICommand DownloadOptiPatcher { get; }
+    public ICommand CancelOptiPatcher { get; }
     public ICommand AddXmx { get; }
     public ICommand RemoveOld { get; }
     public ICommand OpenExtras { get; }
@@ -67,6 +87,7 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
     protected override void OnOpened()
     {
         if (!IsDownloading) _available = null;
+        if (!IsDownloadingOptiPatcher) _availableOptiPatcher = null;
         if (!_busyHere) Status = "";
 
         Look();
@@ -76,6 +97,14 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
     {
         _build = _hub.Builds.Current();
         if (_available is not null && _build?.Build.Tag == _available.Tag) _available = null;
+
+        _optiPatcher = _hub.OptiPatcher.Current();
+        if (_availableOptiPatcher is not null
+            && _optiPatcher?.Release.Tag == _availableOptiPatcher.Tag
+            && _optiPatcher.Release.Sha256 == _availableOptiPatcher.Sha256)
+        {
+            _availableOptiPatcher = null;
+        }
 
         _xmx = _hub.Xmx.Current();
         Outdated = _build is null ? [] : [.. GamesOnAnotherBuild(_build)];
@@ -175,6 +204,32 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
         ? Strings.XmxNotAdded
         : Strings.XmxHeld(_xmx.Version, _xmx.Added.ToString("d MMMM", CultureInfo.CurrentCulture));
 
+    public bool IsCheckingOptiPatcher { get; private set => Set(ref field, value); }
+    public bool IsDownloadingOptiPatcher { get; private set => Set(ref field, value); }
+    public bool IsOptiPatcherBusy => IsCheckingOptiPatcher || IsDownloadingOptiPatcher;
+    public string OptiPatcherProgress { get; private set => Set(ref field, value); } = "";
+
+    public string OptiPatcherLabel => _optiPatcher is null ? Strings.DownloadOptiPatcher : Strings.CheckForNewerOptiPatcher;
+    public string OptiPatcherActionGlyph => _optiPatcher is null ? Glyphs.Download : Glyphs.Inspect;
+
+    public string OptiPatcherLine => _optiPatcher is null
+        ? Strings.OptiPatcherNotDownloaded
+        : Strings.OptiPatcherHeld(_optiPatcher.Release.Tag, _optiPatcher.DownloadedAt.ToString("d MMMM", CultureInfo.CurrentCulture));
+
+    public Visibility OptiPatcherActionShown => !IsOptiPatcherBusy && _availableOptiPatcher is null ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility OptiPatcherBusyCardShown => IsOptiPatcherBusy && _availableOptiPatcher is null ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility OptiPatcherAvailableShown => _availableOptiPatcher is not null ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility OptiPatcherConfirmShown => _availableOptiPatcher is not null && !IsDownloadingOptiPatcher ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility OptiPatcherDownloadingShown => _availableOptiPatcher is not null && IsDownloadingOptiPatcher ? Visibility.Visible : Visibility.Collapsed;
+
+    public string OptiPatcherAvailableHeading => IsDownloadingOptiPatcher
+        ? Strings.DownloadingOptiPatcherHeading
+        : Strings.NewerOptiPatcherAvailableHeading;
+
+    public string OptiPatcherAvailableLine => _availableOptiPatcher is null ? "" : $"OptiPatcher {_availableOptiPatcher.Tag}";
+    public string OptiPatcherAvailableDetail => _availableOptiPatcher is { Size: > 0 } ? Strings.FormatSize(_availableOptiPatcher.Size) : "";
+    public Visibility OptiPatcherAvailableDetailShown => OptiPatcherAvailableDetail.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
     public string ExtrasLine { get; private set; } = "";
 
     public string Status { get; private set => Set(ref field, value); } = "";
@@ -203,7 +258,8 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
         }
     }
 
-    private async Task RunCancellableAsync(Func<CancellationToken, Task> action, string cancelledStatus, bool clearAvailableOnCancel = false)
+    private async Task RunCancellableAsync(Func<CancellationToken, Task> action, string cancelledStatus,
+        Action? onCancelled = null, bool isOptiPatcher = false)
     {
         if (_hub.IsBusy) return;
         _hub.IsBusy = true;
@@ -218,7 +274,7 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
         }
         catch (Exception) when (cancel.IsCancellationRequested)
         {
-            if (clearAvailableOnCancel) _available = null;
+            onCancelled?.Invoke();
             Status = cancelledStatus;
         }
         catch (Exception error)
@@ -231,11 +287,15 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
             IsChecking = false;
             IsDownloading = false;
             DownloadProgress = "";
+            IsCheckingOptiPatcher = false;
+            IsDownloadingOptiPatcher = false;
+            OptiPatcherProgress = "";
             _busyHere = false;
             _hub.IsBusy = false;
             Look();
             if (!IsOpen && _hub.IsOpen) _hub.ShowGames();
-            Settled?.Invoke();
+            if (isOptiPatcher) OptiPatcherSettled?.Invoke();
+            else Settled?.Invoke();
         }
     }
 
@@ -296,6 +356,82 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
         Settled?.Invoke();
     }
 
+    private async Task CheckOrDownloadOptiPatcherAsync(CancellationToken cancel)
+    {
+        _availableOptiPatcher = null;
+        Status = "";
+        IsCheckingOptiPatcher = true;
+        OptiPatcherProgress = Strings.CheckingOptiPatcher;
+        Notify("");
+        Settled?.Invoke();
+
+        var newest = await OptiPatcherFeed.NewestAsync(cancel);
+        cancel.ThrowIfCancellationRequested();
+
+        var current = _hub.OptiPatcher.Current();
+
+        // First download: fetch immediately since the user pressed "Download OptiPatcher".
+        if (current is null)
+        {
+            IsCheckingOptiPatcher = false;
+            IsDownloadingOptiPatcher = true;
+            OptiPatcherProgress = Strings.DownloadingOptiPatcher(newest.Tag);
+            Notify("");
+
+            await _hub.FetchOptiPatcherAsync(newest, text =>
+            {
+                if (IsDownloadingOptiPatcher && !cancel.IsCancellationRequested) OptiPatcherProgress = text;
+            }, cancel);
+
+            Status = Strings.GotOptiPatcher(newest.Tag);
+            return;
+        }
+
+        if (current.Release.Tag == newest.Tag && current.Release.Sha256 == newest.Sha256)
+        {
+            Status = Strings.HaveNewestOptiPatcher(newest.Tag);
+            return;
+        }
+
+        _availableOptiPatcher = newest;
+        Status = "";
+    }
+
+    private async Task DownloadOptiPatcherAsync(CancellationToken cancel)
+    {
+        if (_availableOptiPatcher is not { } target) return;
+
+        Status = "";
+        IsDownloadingOptiPatcher = true;
+        OptiPatcherProgress = Strings.DownloadingOptiPatcher(target.Tag);
+        Notify("");
+        Settled?.Invoke();
+
+        await _hub.FetchOptiPatcherAsync(target, text =>
+        {
+            if (IsDownloadingOptiPatcher && !cancel.IsCancellationRequested) OptiPatcherProgress = text;
+        }, cancel);
+
+        _availableOptiPatcher = null;
+        Status = Strings.GotOptiPatcher(target.Tag);
+    }
+
+    private void OnCancelOptiPatcher()
+    {
+        if (_operationCancel is { } cancel)
+        {
+            cancel.Cancel();
+            return;
+        }
+
+        if (_hub.IsBusy || _availableOptiPatcher is null) return;
+
+        _availableOptiPatcher = null;
+        Status = "";
+        Notify("");
+        OptiPatcherSettled?.Invoke();
+    }
+
     /// <summary>
     /// Imports the XMX upscaler from the newest valid archive on the Desktop or in Downloads.
     /// The archive itself is left in place.
@@ -353,6 +489,11 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
             Status = Strings.AllGamesCurrent;
             return;
         }
+
+        // Verify stored OptiPatcher up front so a damaged file aborts cleanly instead of
+        // uninstalling the first game and stripping OptiPatcher from the rest of the batch.
+        if (_hub.OptiPatcher.Current() is { } patcher)
+            await Task.Run(() => OptiPatcherStore.Verified(patcher));
 
         var updated = 0;
         var failures = new List<string>();

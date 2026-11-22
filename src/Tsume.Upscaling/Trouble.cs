@@ -40,6 +40,15 @@ public enum Trouble
 
     /// <summary>The archive offered as the XMX upscaler does not hold it.</summary>
     NotXmx,
+
+    /// <summary>GitHub answered, but with no OptiPatcher release Tsume can verify.</summary>
+    NoOptiPatcherPublished,
+
+    /// <summary>The downloaded OptiPatcher file is not a valid Windows plugin binary.</summary>
+    OptiPatcherInvalid,
+
+    /// <summary>The stored OptiPatcher file was changed on disk and has been set aside.</summary>
+    OptiPatcherDamaged,
 }
 
 /// <summary>A failure the panel can explain.</summary>

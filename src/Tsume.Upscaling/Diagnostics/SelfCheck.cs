@@ -4,6 +4,7 @@ using Tsume.Upscaling.Config;
 using Tsume.Upscaling.Games;
 using Tsume.Upscaling.Install;
 using Tsume.Upscaling.Nightly;
+using Tsume.Upscaling.OptiPatcher;
 using Tsume.Upscaling.Xmx;
 
 namespace Tsume.Upscaling.Diagnostics;
@@ -133,6 +134,24 @@ public static class SelfCheck
               && ini.Get("FrameGen", "FGOutput") == "xefg" && ini.Get("Spoofing", "UEIntelAtomics") == "true",
             "DLSS-FG input leaves FrameGen.Enabled on auto and UE Intel spoofing enables UEIntelAtomics");
         Check(new UpscalerSettings().CorrectedBy(ini) == dlssgFg, "and DLSS-FG reads back cleanly");
+
+        var opOn = new UpscalerSettings { OptiPatcher = true };
+        ini = IniFile.Parse(blank);
+        opOn.WriteTo(ini);
+        Check(ini.Get("Plugins", "LoadAsiPlugins") == "true" && new UpscalerSettings().CorrectedBy(ini) == opOn,
+            "OptiPatcher on writes [Plugins] LoadAsiPlugins=true and reads back cleanly");
+        Check(ini.ToString().Split('\n').Length == blank.Split('\n').Length,
+            "OptiPatcher edits LoadAsiPlugins in place without adding or dropping lines");
+        Check(!opOn.Fitting(hasXmx: true, hasOptiPatcher: false).OptiPatcher
+              && opOn.Fitting(hasXmx: true, hasOptiPatcher: true).OptiPatcher,
+            "OptiPatcher clamps to off when OptiPatcher.asi is not present");
+
+        // The user's own ASI plugins: LoadAsiPlugins=true set by hand survives a settings write in a game without OptiPatcher.
+        ini = IniFile.Parse(blank);
+        ini.Set("Plugins", "LoadAsiPlugins", "true");
+        new UpscalerSettings().CorrectedBy(ini).Fitting(hasXmx: true, hasOptiPatcher: false).WriteTo(ini, hasOptiPatcher: false);
+        Check(ini.Get("Plugins", "LoadAsiPlugins") == "true",
+            "without OptiPatcher, a LoadAsiPlugins=true set for the user's own plugins is kept");
         Say("");
 
         Say("Games the stores report (read only)");
@@ -406,6 +425,49 @@ public static class SelfCheck
                 installer.Remove(f.Id);
                 Check(Same(before, Snapshot(f.Folder)), "removed: the folder is as it was found");
             }
+
+            Say("");
+
+            Say("G. OptiPatcher");
+            var (g, gFacts) = MakeGame(bench, "Patched", folder => { });
+            before = Snapshot(g.Folder);
+
+            // Installed before OptiPatcher is downloaded: LoadAsiPlugins stays auto.
+            manifest = installer.Install(g, gFacts, build, new UpscalerSettings { OptiPatcher = true });
+            Check(!Installer.HasOptiPatcher(manifest) && !Installer.IsOptiPatcherEnabled(manifest)
+                  && IniFile.Load(Path.Combine(g.Folder, "OptiScaler.ini")).Get("Plugins", "LoadAsiPlugins") == "auto",
+                "installed before OptiPatcher is downloaded: LoadAsiPlugins stays auto");
+
+            var patcherStore = new OptiPatcherStore(paths);
+            clock.Restart();
+            var newestPatcher = await OptiPatcherFeed.NewestAsync();
+            var storedPatcher = await patcherStore.FetchAsync(newestPatcher);
+            Say($"        {newestPatcher.Tag} ({newestPatcher.AssetName}, {newestPatcher.Size / 1024} KB) fetched and verified in {clock.Elapsed.TotalSeconds:0.0} s");
+
+            Check(patcherStore.Current()?.Release.Tag == newestPatcher.Tag, "OptiPatcher is stored and readable");
+            Check(!installer.IsCurrent(manifest, build), "a game installed earlier now reads as due an update");
+
+            installer.Remove(g.Id);
+            manifest = installer.Install(g, gFacts, build, new UpscalerSettings { OptiPatcher = true });
+
+            var pluginPath = Path.Combine(g.Folder, OptiPatcherLayout.Plugin);
+            Check(File.Exists(pluginPath) && Files.Hash(pluginPath) == newestPatcher.Sha256,
+                $"installed: OptiPatcher is at {OptiPatcherLayout.Plugin} with verified hash");
+            Check(manifest.OptiPatcher == newestPatcher.Tag && Installer.HasOptiPatcher(manifest)
+                  && Installer.IsOptiPatcherEnabled(manifest) && installer.IsCurrent(manifest, build),
+                "manifest records the OptiPatcher tag, reports it enabled, and reads as up to date");
+
+            Installer.WriteSettings(manifest, new UpscalerSettings { OptiPatcher = false });
+            Check(!Installer.IsOptiPatcherEnabled(manifest)
+                  && IniFile.Load(Path.Combine(g.Folder, "OptiScaler.ini")).Get("Plugins", "LoadAsiPlugins") == "auto"
+                  && File.Exists(pluginPath),
+                "turning OptiPatcher off sets LoadAsiPlugins=auto while keeping OptiPatcher.asi ready");
+
+            Installer.WriteSettings(manifest, new UpscalerSettings { OptiPatcher = true });
+            Check(Installer.IsOptiPatcherEnabled(manifest), "turning OptiPatcher back on re-enables LoadAsiPlugins=true");
+
+            installer.Remove(g.Id);
+            Check(Same(before, Snapshot(g.Folder)), "removed: the game folder is as it was found");
 
             Say("");
         }

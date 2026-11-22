@@ -142,6 +142,104 @@
                          Command="{Binding RemoveOld}" />
         </StackPanel>
 
+        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.OptiPatcherHeading}"
+                   Margin="4,24,0,10" />
+
+        <!-- Checking or first-time downloading OptiPatcher. -->
+        <Border Style="{StaticResource Card.Info}"
+                Background="{x:Static theme:Accent.Tint}"
+                BorderBrush="{x:Static theme:Accent.Wash}"
+                Padding="16,12"
+                Visibility="{Binding OptiPatcherBusyCardShown}">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <controls:ProgressRing Grid.Column="0" Width="16" Height="16" RingThickness="2"
+                                   Margin="0,0,12,0" VerticalAlignment="Center"
+                                   Foreground="{x:Static theme:Accent.Brush}"
+                                   TrackBrush="{DynamicResource Switch.Groove}"
+                                   IsActive="{Binding IsOptiPatcherBusy}" />
+            <TextBlock Grid.Column="1" Style="{StaticResource Text.Body}"
+                       Text="{Binding OptiPatcherProgress}"
+                       TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <!-- Newer OptiPatcher release found (and download progress while fetching it). -->
+        <Border Style="{StaticResource Card.Info}"
+                Background="{x:Static theme:Accent.Tint}"
+                BorderBrush="{x:Static theme:Accent.Wash}"
+                Padding="16,12"
+                Visibility="{Binding OptiPatcherAvailableShown}">
+          <StackPanel>
+            <TextBlock Style="{StaticResource Text.Heading}"
+                       Foreground="{x:Static theme:Accent.Brush}"
+                       Text="{Binding OptiPatcherAvailableHeading}" Margin="0,0,0,4" />
+            <TextBlock Style="{StaticResource Text.Body}"
+                       TextWrapping="Wrap" TextTrimming="None"
+                       Text="{Binding OptiPatcherAvailableLine}" />
+            <TextBlock Style="{StaticResource Text.Caption}"
+                       Foreground="{DynamicResource Text}"
+                       TextWrapping="Wrap" TextTrimming="None"
+                       Text="{Binding OptiPatcherAvailableDetail}"
+                       Visibility="{Binding OptiPatcherAvailableDetailShown}" Margin="0,3,0,0" />
+
+            <Grid Margin="0,10,0,0" Visibility="{Binding OptiPatcherDownloadingShown}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <controls:ProgressRing Grid.Column="0" Width="16" Height="16" RingThickness="2"
+                                     Margin="0,0,10,0" VerticalAlignment="Center"
+                                     Foreground="{x:Static theme:Accent.Brush}"
+                                     TrackBrush="{DynamicResource Switch.Groove}"
+                                     IsActive="{Binding IsDownloadingOptiPatcher}" />
+              <TextBlock Grid.Column="1" Style="{StaticResource Text.Caption}"
+                         Foreground="{DynamicResource Text}"
+                         Text="{Binding OptiPatcherProgress}"
+                         TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center" />
+            </Grid>
+          </StackPanel>
+        </Border>
+
+        <controls:Tile x:Name="OptiPatcherActionTile" Style="{StaticResource Tile.Link}" Margin="0"
+                       Tag="{Binding OptiPatcherActionGlyph}"
+                       Glyph="{x:Static theme:Glyphs.Plugin}"
+                       Label="{Binding OptiPatcherLabel}"
+                       Detail="{Binding OptiPatcherLine}"
+                       IsEnabled="{Binding CanAct}"
+                       Visibility="{Binding OptiPatcherActionShown}"
+                       Command="{Binding CheckOrDownloadOptiPatcher}" />
+
+        <StackPanel Margin="-4,0,-4,0">
+          <controls:Tile Style="{StaticResource Tile.Row}" controls:Screen.TakesFocus="True"
+                         Glyph="{x:Static theme:Glyphs.Quit}" Label="{x:Static lang:Strings.Cancel}"
+                         Visibility="{Binding OptiPatcherBusyCardShown}"
+                         Command="{Binding CancelOptiPatcher}" />
+
+          <UniformGrid Columns="2" Visibility="{Binding OptiPatcherConfirmShown}">
+            <controls:Tile x:Name="OptiPatcherDownloadTile" Style="{StaticResource Tile.Row}"
+                           IsOn="True"
+                           Glyph="{x:Static theme:Glyphs.Download}" Label="{x:Static lang:Strings.DownloadBuild}"
+                           IsEnabled="{Binding CanAct}"
+                           Command="{Binding DownloadOptiPatcher}" />
+            <controls:Tile Style="{StaticResource Tile.Row}"
+                           Glyph="{x:Static theme:Glyphs.Quit}" Label="{x:Static lang:Strings.Cancel}"
+                           IsEnabled="{Binding CanAct}"
+                           Command="{Binding CancelOptiPatcher}" />
+          </UniformGrid>
+
+          <controls:Tile Style="{StaticResource Tile.Row}" controls:Screen.TakesFocus="True"
+                         Glyph="{x:Static theme:Glyphs.Quit}" Label="{x:Static lang:Strings.CancelDownload}"
+                         Visibility="{Binding OptiPatcherDownloadingShown}"
+                         Command="{Binding CancelOptiPatcher}" />
+        </StackPanel>
+
+        <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+                   Text="{x:Static lang:Strings.OptiPatcherExplained}" Margin="6,8,6,0" />
+
         <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.XmxHeading}"
                    Margin="4,24,0,10" />
 

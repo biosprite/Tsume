@@ -1,4 +1,6 @@
 using System.Windows;
+using System.Windows.Input;
+using System.Windows.Threading;
 using Tsume.App.ViewModels;
 
 namespace Tsume.App.Panel;
@@ -21,7 +23,23 @@ public partial class UpscalingBuildScreen
         // The focused "Update games" button disappears once they are updated.
         DataContextChanged += (_, _) =>
         {
-            if (DataContext is PanelViewModel panel) panel.Upscaling.Build.Settled += () => Controls.Screen.KeepFocus(this);
+            if (DataContext is PanelViewModel panel)
+            {
+                panel.Upscaling.Build.Settled += () => Controls.Screen.KeepFocus(this);
+                panel.Upscaling.Build.OptiPatcherSettled += () => Dispatcher.BeginInvoke(
+                    DispatcherPriority.Input, () =>
+                    {
+                        if (!panel.Upscaling.Build.IsOpen) return;
+                        if (Keyboard.FocusedElement is UIElement { IsVisible: true, IsEnabled: true } now && IsAncestorOf(now)) return;
+
+                        if (OptiPatcherDownloadTile is { IsVisible: true, IsEnabled: true })
+                            OptiPatcherDownloadTile.Focus();
+                        else if (OptiPatcherActionTile is { IsVisible: true, IsEnabled: true })
+                            OptiPatcherActionTile.Focus();
+                        else
+                            Controls.Screen.KeepFocus(this);
+                    });
+            }
         };
     }
 }

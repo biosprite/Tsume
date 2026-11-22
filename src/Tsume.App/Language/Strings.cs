@@ -196,7 +196,9 @@ public static class Strings
 
     /// <summary>"Installed · nightly of 11 November"</summary>
     public static string GameInstalled(string night) => Fill(Find(), night);
+    public static string GameInstalledWithOptiPatcher(string night) => Fill(Find(), night);
     public static string GameUpdateReady => Find();
+    public static string GameUpdateReadyWithOptiPatcher => Find();
     public static string GameNeedsRepair => Find();
     public static string GameCutShort => Find();
     public static string GameFolderGone => Find();
@@ -270,6 +272,13 @@ public static class Strings
     public static string InGameHeading => Find();
     public static string SpoofNvidia => Find();
     public static string SpoofNvidiaDetail => Find();
+    public static string OptiPatcher => Find();
+    public static string OptiPatcherDetailOn => Find();
+    public static string OptiPatcherDetailOff => Find();
+    public static string OptiPatcherLockedBuild => Find();
+    public static string OptiPatcherLockedUpdate => Find();
+    public static string OptiPatcherBadge => Find();
+    public static string OptiPatcherBadgeVersion(string tag) => Fill(Find(), tag);
 
     public static string InstallAs => Find();
 
@@ -321,7 +330,9 @@ public static class Strings
 
     private static string Size(long bytes) => bytes >= 1L << 30
         ? Fill(Find("SizeGB"), bytes / (double)(1L << 30))
-        : Fill(Find("SizeMB"), Math.Max(1, bytes >> 20));
+        : bytes >= 1L << 20
+            ? Fill(Find("SizeMB"), bytes >> 20)
+            : Fill(Find("SizeKB"), Math.Max(1, bytes >> 10));
     public static string GamesUpToDate => Find();
     public static string UpdatedGames(int count) => Fill(Find(), count);
 
@@ -347,6 +358,23 @@ public static class Strings
     public static string XmxSame => Find();
     public static string XmxReady => Find();
     public static string XmxNotInGame => Find();
+
+    public static string OptiPatcherHeading => Find();
+    public static string OptiPatcherExplained => Find();
+    public static string DownloadOptiPatcher => Find();
+    public static string CheckForNewerOptiPatcher => Find();
+    public static string OptiPatcherNotDownloaded => Find();
+    public static string OptiPatcherHeld(string tag, string day) => Fill(Find(), tag, day);
+    public static string CheckingOptiPatcher => Find();
+    public static string DownloadingOptiPatcher(string tag) => Fill(Find(), tag);
+    public static string NewerOptiPatcherAvailableHeading => Find();
+    public static string DownloadingOptiPatcherHeading => Find();
+    public static string HaveNewestOptiPatcher(string tag) => Fill(Find(), tag);
+    public static string GotOptiPatcher(string tag) => Fill(Find(), tag);
+    public static string OptiPatcherReady(string tag) => Fill(Find(), tag);
+    public static string OptiPatcherUpdateReady(string tag) => Fill(Find(), tag);
+    public static string OptiPatcherNotInGame => Find();
+    public static string BuildLineWithOptiPatcher(string buildLine, string tag) => Fill(Find(), buildLine, tag);
 
     public static string DefaultsExplained => Find();
     public static string BrowseHint => Find();

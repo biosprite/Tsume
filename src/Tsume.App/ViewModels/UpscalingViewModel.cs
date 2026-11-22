@@ -10,6 +10,7 @@ using Tsume.Upscaling.Config;
 using Tsume.Upscaling.Games;
 using Tsume.Upscaling.Install;
 using Tsume.Upscaling.Nightly;
+using Tsume.Upscaling.OptiPatcher;
 using Tsume.Upscaling.Xmx;
 
 namespace Tsume.App.ViewModels;
@@ -29,6 +30,7 @@ public sealed class UpscalingViewModel : LayerViewModel
         Builds = new BuildStore(Paths);
         Installer = new Installer(Paths);
         Xmx = new XmxStore(Paths);
+        OptiPatcher = new OptiPatcherStore(Paths);
 
         Game = new UpscalingGameViewModel(this, dismiss);
         Build = new UpscalingBuildViewModel(this, dismiss);
@@ -51,6 +53,9 @@ public sealed class UpscalingViewModel : LayerViewModel
 
     /// <summary>The XMX build of FSR 4, if Tsume has been given it.</summary>
     public XmxStore Xmx { get; }
+
+    /// <summary>The OptiPatcher ASI plugin, if downloaded from GitHub.</summary>
+    public OptiPatcherStore OptiPatcher { get; }
 
     /// <summary>The games and their settings, loaded from disk on first use.</summary>
     public GameList List => _list ??= GameList.Load(Paths);
@@ -87,7 +92,8 @@ public sealed class UpscalingViewModel : LayerViewModel
 
     /// <summary>
     /// The build to install from: the one on disk, or the newest, downloaded now, if there is none.
-    /// Never goes online when a build is already on disk.
+    /// Never goes online when a build is already on disk. When downloading for the first time, also fetches
+    /// OptiPatcher best-effort so games can enable it right away.
     /// </summary>
     public async Task<StoredBuild> NeedBuildAsync(Action<string> say)
     {
@@ -96,7 +102,31 @@ public sealed class UpscalingViewModel : LayerViewModel
         say(Strings.CheckingBuild);
         var newest = await NightlyFeed.NewestAsync();
 
-        return await FetchAsync(newest, say);
+        var stored = await FetchAsync(newest, say);
+
+        if (await Task.Run(OptiPatcher.Current) is null)
+        {
+            try
+            {
+                say(Strings.CheckingOptiPatcher);
+                var patcher = await OptiPatcherFeed.NewestAsync();
+                say(Strings.DownloadingOptiPatcher(patcher.Tag));
+                await Task.Run(() => OptiPatcher.FetchAsync(patcher));
+            }
+            catch (Exception error) when (error is UpscalingException or System.IO.IOException or UnauthorizedAccessException)
+            {
+                // OptiPatcher is optional: do not block OptiScaler installation if its fetch fails.
+            }
+        }
+
+        return stored;
+    }
+
+    public async Task<StoredOptiPatcher> FetchOptiPatcherAsync(OptiPatcherRelease release, Action<string> say,
+        CancellationToken cancel = default)
+    {
+        say(Strings.DownloadingOptiPatcher(release.Tag));
+        return await Task.Run(() => OptiPatcher.FetchAsync(release, cancel: cancel), cancel);
     }
 
     public async Task<StoredBuild> FetchAsync(NightlyBuild build, Action<string> say, CancellationToken cancel = default)
@@ -125,7 +155,14 @@ public sealed class UpscalingViewModel : LayerViewModel
             && remembered.Upscaler == UpscalerChoice.Fsr4Xmx
             && current.Upscaler == UpscalerChoice.Fsr4)
         {
-            return current with { Upscaler = UpscalerChoice.Fsr4Xmx, Model = remembered.Model };
+            current = current with { Upscaler = UpscalerChoice.Fsr4Xmx, Model = remembered.Model };
+        }
+
+        if (!Installer.HasOptiPatcher(manifest) && OptiPatcher.Current() is not null
+            && remembered.OptiPatcher
+            && !current.OptiPatcher)
+        {
+            current = current with { OptiPatcher = true };
         }
 
         return current;
@@ -138,6 +175,10 @@ public sealed class UpscalingViewModel : LayerViewModel
     /// <returns>What the removal, if there was one, left alone.</returns>
     public RemovalReport? PutIn(ListedGame listed, StoredBuild build, UpscalerSettings settings)
     {
+        // Verify stored OptiPatcher before removing an existing healthy install so a damaged
+        // file on disk fails cleanly instead of leaving the game uninstalled.
+        if (OptiPatcher.Current() is { } patcher) OptiPatcherStore.Verified(patcher);
+
         RemovalReport? removed = null;
 
         if (Installer.Find(listed.Game.Id) is { } old)
@@ -282,7 +323,11 @@ public sealed class UpscalingViewModel : LayerViewModel
     public void ShowGames()
     {
         var build = Builds.Current();
-        BuildLine = build is null ? Strings.NoBuildOnDisk : Strings.NightlyOf(Night(build.Build.Tag));
+        var patcher = OptiPatcher.Current();
+        var baseBuildLine = build is null ? Strings.NoBuildOnDisk : Strings.NightlyOf(Night(build.Build.Tag));
+        BuildLine = patcher is null
+            ? baseBuildLine
+            : Strings.BuildLineWithOptiPatcher(baseBuildLine, patcher.Release.Tag);
 
         var changed = false;
 
@@ -305,7 +350,9 @@ public sealed class UpscalingViewModel : LayerViewModel
             }
 
             var manifest = Installer.Find(listed.Game.Id);
-            row.Describe(manifest, Installer.Check(manifest), manifest is null || Installer.IsCurrent(manifest, build));
+            var state = Installer.Check(manifest);
+            var optiPatcherOn = manifest is not null && state == InstallState.Healthy && Installer.IsOptiPatcherEnabled(manifest);
+            row.Describe(manifest, state, manifest is null || Installer.IsCurrent(manifest, build), optiPatcherOn);
         }
 
         EmptyNote = Games.Count > 0 ? "" : _looking ? Strings.LookingForGames : Strings.NoGamesYet;
@@ -330,18 +377,20 @@ public sealed class UpscalingGameRow(ListedGame listed, Action open) : Observabl
     /// <summary>True when OptiScaler is in this game; lights the row's icon.</summary>
     public bool IsInstalled { get; private set => Set(ref field, value); }
 
-    public void Describe(InstallManifest? manifest, InstallState state, bool isCurrent)
+    public void Describe(InstallManifest? manifest, InstallState state, bool isCurrent, bool optiPatcherOn)
     {
         var facts = Listed.Facts;
 
         IsInstalled = state is InstallState.Healthy;
         Detail = state switch
         {
-            InstallState.Healthy when !isCurrent => Strings.GameUpdateReady,
-            InstallState.Healthy    => Strings.GameInstalled(UpscalingViewModel.Night(manifest!.Build)),
-            InstallState.Replaced   => Strings.GameNeedsRepair,
-            InstallState.CutShort   => Strings.GameCutShort,
-            InstallState.FolderGone => Strings.GameFolderGone,
+            InstallState.Healthy when !isCurrent && optiPatcherOn => Strings.GameUpdateReadyWithOptiPatcher,
+            InstallState.Healthy when !isCurrent                  => Strings.GameUpdateReady,
+            InstallState.Healthy when optiPatcherOn               => Strings.GameInstalledWithOptiPatcher(UpscalingViewModel.Night(manifest!.Build)),
+            InstallState.Healthy                                  => Strings.GameInstalled(UpscalingViewModel.Night(manifest!.Build)),
+            InstallState.Replaced                                 => Strings.GameNeedsRepair,
+            InstallState.CutShort                                 => Strings.GameCutShort,
+            InstallState.FolderGone                               => Strings.GameFolderGone,
 
             _ when facts is null                    => Strings.GameNothingToRun,
             _ when facts.AntiCheat is { } antiCheat => Strings.GameBlocked(antiCheat),

@@ -9,6 +9,7 @@ using Tsume.Upscaling.Config;
 using Tsume.Upscaling.Games;
 using Tsume.Upscaling.Install;
 using Tsume.Upscaling.Nightly;
+using Tsume.Upscaling.OptiPatcher;
 
 namespace Tsume.App.ViewModels;
 
@@ -24,7 +25,9 @@ public sealed class UpscalingGameViewModel : LayerViewModel
     private InstallManifest? _manifest;
     private InstallState _state;
     private StoredBuild? _build;
+    private StoredOptiPatcher? _patcher;
     private bool _hasXmx;
+    private bool _hasOptiPatcher;
     private string? _existingFolder;
 
     /// <param name="dismiss">Closes the panel and completes once it is fully off screen.</param>
@@ -130,9 +133,11 @@ public sealed class UpscalingGameViewModel : LayerViewModel
         _manifest = _hub.Installer.Find(listed.Game.Id);
         _state = Installer.Check(_manifest);
         _build = _hub.Builds.Current();
+        _patcher = _hub.OptiPatcher.Current();
 
         var isHealthy = _manifest is not null && _state == InstallState.Healthy;
         var storeHasXmx = _hub.Xmx.Current() is not null;
+        var storeHasOptiPatcher = _patcher is not null;
 
         // An installed game's settings come from its own file: OptiScaler's
         // in-game overlay may have changed them.
@@ -141,17 +146,22 @@ public sealed class UpscalingGameViewModel : LayerViewModel
             ? Installer.ReadSettings(_manifest!, remembered)
             : remembered;
 
-        // XMX is selectable if it is already in the game, or would go in with an install.
+        // XMX and OptiPatcher are selectable if already in the game, or would go in with an install.
         _hasXmx = isHealthy
             ? Installer.HasXmx(_manifest!)
             : storeHasXmx;
+        _hasOptiPatcher = isHealthy
+            ? Installer.HasOptiPatcher(_manifest!)
+            : storeHasOptiPatcher;
 
         // Lock the proxy only while cleanly installed, or when someone else's OptiScaler sits in an uninstalled game.
         // Broken installs (Replaced / CutShort) can pick a new proxy before repairing.
         var lockedProxy = isHealthy ? _manifest!.Proxy : _manifest is null ? Facts?.ExistingProxy : null;
 
         _existingFolder = ExistingFolder();
-        Tuning.Load(settings, _hasXmx, isInstalled: isHealthy, lockedProxy, xmxAvailableToAdd: isHealthy && storeHasXmx);
+        Tuning.Load(settings, _hasXmx, _hasOptiPatcher, isInstalled: isHealthy, lockedProxy,
+            xmxAvailableToAdd: isHealthy && storeHasXmx,
+            optiPatcherAvailableToAdd: isHealthy && storeHasOptiPatcher);
         Notify("");
     }
 
@@ -171,6 +181,19 @@ public sealed class UpscalingGameViewModel : LayerViewModel
 
     /// <summary>The nightly in the game is not the one on disk.</summary>
     private bool IsOlderBuild => _build is not null && _manifest is not null && _manifest.Build != _build.Build.Tag;
+
+    /// <summary>True when OptiPatcher is installed in this game and enabled in OptiScaler.ini.</summary>
+    public bool IsOptiPatcherActive => _state == InstallState.Healthy && _hasOptiPatcher && Tuning.OptiPatcher;
+
+    /// <summary>Badge shown in the status card while OptiPatcher is active on this game.</summary>
+    public string OptiPatcherBadge => string.IsNullOrEmpty(_manifest?.OptiPatcher)
+        ? Strings.OptiPatcherBadge
+        : Strings.OptiPatcherBadgeVersion(_manifest.OptiPatcher);
+
+    public Visibility OptiPatcherBadgeShown => IsOptiPatcherActive ? Visibility.Visible : Visibility.Collapsed;
+
+    private bool IsOptiPatcherOutdated =>
+        _patcher is not null && _manifest is not null && !_hub.Installer.IsOptiPatcherCurrent(_manifest, _patcher);
 
     /// <summary>OptiScaler is not offered: an anti-cheat, or nothing to run.</summary>
     private bool IsBlocked => _state == InstallState.None && Facts is not { AntiCheat: null };
@@ -205,6 +228,10 @@ public sealed class UpscalingGameViewModel : LayerViewModel
     public string Notice =>
         _state == InstallState.None && Facts is { AntiCheat: null, ExistingProxy: { } proxy } ? Strings.SomeoneElsesOptiScaler(proxy)
         : _state == InstallState.Healthy && IsOlderBuild ? Strings.NewerBuildReady(UpscalingViewModel.Night(_build!.Build.Tag))
+        : _state == InstallState.Healthy && IsOptiPatcherOutdated
+            ? (Installer.HasOptiPatcher(_manifest!)
+                ? Strings.OptiPatcherUpdateReady(_patcher!.Release.Tag)
+                : Strings.OptiPatcherReady(_patcher!.Release.Tag))
         : _state == InstallState.Healthy && !IsCurrent ? Strings.XmxReady
         : "";
 
@@ -347,13 +374,26 @@ public sealed class UpscalingGameViewModel : LayerViewModel
         {
             Installer.WriteSettings(_manifest!, Tuning.Settings);
             Status = Strings.SettingsSaved;
+            Notify(nameof(IsOptiPatcherActive));
+            Notify(nameof(OptiPatcherBadge));
+            Notify(nameof(OptiPatcherBadgeShown));
 
             if (Tuning.Settings.Upscaler == UpscalerChoice.Fsr4Xmx && !_hasXmx)
             {
                 // XMX is not in this game yet: show what was actually written instead.
-                Tuning.Load(Installer.ReadSettings(_manifest!, Tuning.Settings), hasXmx: false, isInstalled: true,
-                    lockedProxy: _manifest!.Proxy, xmxAvailableToAdd: _hub.Xmx.Current() is not null);
+                Tuning.Load(Installer.ReadSettings(_manifest!, Tuning.Settings), hasXmx: false, hasOptiPatcher: _hasOptiPatcher,
+                    isInstalled: true, lockedProxy: _manifest!.Proxy,
+                    xmxAvailableToAdd: _hub.Xmx.Current() is not null,
+                    optiPatcherAvailableToAdd: _hub.OptiPatcher.Current() is not null);
                 Status = Strings.XmxNotInGame;
+            }
+            else if (Tuning.Settings.OptiPatcher && !_hasOptiPatcher)
+            {
+                Tuning.Load(Installer.ReadSettings(_manifest!, Tuning.Settings), hasXmx: _hasXmx, hasOptiPatcher: false,
+                    isInstalled: true, lockedProxy: _manifest!.Proxy,
+                    xmxAvailableToAdd: _hub.Xmx.Current() is not null,
+                    optiPatcherAvailableToAdd: _hub.OptiPatcher.Current() is not null);
+                Status = Strings.OptiPatcherNotInGame;
             }
         }
         catch (Exception error)

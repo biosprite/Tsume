@@ -23,10 +23,16 @@ public sealed class UpscalerTuningViewModel : Observable
     private bool _loading;
     private string? _lockedProxy;
     private bool _xmxAvailableToAdd;
+    private bool _optiPatcherAvailableToAdd;
 
     public UpscalerTuningViewModel()
     {
         ToggleSpoof = new Command(() => Change(Settings with { SpoofNvidia = !Settings.SpoofNvidia }));
+        ToggleOptiPatcher = new Command(() =>
+        {
+            if (!HasOptiPatcher) return;
+            Change(Settings with { OptiPatcher = !Settings.OptiPatcher });
+        });
 
         ProxyOptions = BuildProxyOptions();
     }
@@ -37,6 +43,7 @@ public sealed class UpscalerTuningViewModel : Observable
     public UpscalerSettings Settings { get; private set; } = new();
 
     /// <param name="hasXmx">True if the XMX upscaler is in the game, or would go in with an install.</param>
+    /// <param name="hasOptiPatcher">True if OptiPatcher.asi is in the game, or would go in with an install.</param>
     /// <param name="isInstalled">True once OptiScaler is cleanly installed in this game (locks install-time choices).</param>
     /// <param name="lockedProxy">
     /// The fixed proxy DLL name when already installed (or already placed by another tool); null when editable.
@@ -44,15 +51,20 @@ public sealed class UpscalerTuningViewModel : Observable
     /// <param name="xmxAvailableToAdd">
     /// True when the game is installed without XMX while Tsume holds an XMX archive that Update can add.
     /// </param>
-    public void Load(UpscalerSettings settings, bool hasXmx, bool isInstalled = false, string? lockedProxy = null,
-        bool xmxAvailableToAdd = false)
+    /// <param name="optiPatcherAvailableToAdd">
+    /// True when the game is installed without OptiPatcher while Tsume holds OptiPatcher that Update can add.
+    /// </param>
+    public void Load(UpscalerSettings settings, bool hasXmx, bool hasOptiPatcher = false, bool isInstalled = false,
+        string? lockedProxy = null, bool xmxAvailableToAdd = false, bool optiPatcherAvailableToAdd = false)
     {
         _loading = true;
         HasXmx = hasXmx;
+        HasOptiPatcher = hasOptiPatcher;
         IsInstalled = isInstalled;
         _lockedProxy = lockedProxy;
         _xmxAvailableToAdd = xmxAvailableToAdd;
-        Settings = settings.Fitting(hasXmx);
+        _optiPatcherAvailableToAdd = optiPatcherAvailableToAdd;
+        Settings = settings.Fitting(hasXmx, hasOptiPatcher);
         Notify("");   // every control reads its value again
         _loading = false;
     }
@@ -203,6 +215,19 @@ public sealed class UpscalerTuningViewModel : Observable
     public ICommand ToggleSpoof { get; }
 
     public bool SpoofNvidia => Settings.SpoofNvidia;
+
+    public ICommand ToggleOptiPatcher { get; }
+
+    /// <summary>False while Tsume has not downloaded OptiPatcher, or the game was installed without it.</summary>
+    public bool HasOptiPatcher { get; private set; }
+
+    public bool OptiPatcher => HasOptiPatcher && Settings.OptiPatcher;
+
+    public string OptiPatcherDetail => !HasOptiPatcher
+        ? (_optiPatcherAvailableToAdd ? Strings.OptiPatcherLockedUpdate : Strings.OptiPatcherLockedBuild)
+        : Settings.OptiPatcher
+            ? Strings.OptiPatcherDetailOn
+            : Strings.OptiPatcherDetailOff;
 
     public IReadOnlyList<ProxyOption> ProxyOptions { get; }
 

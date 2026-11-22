@@ -5,6 +5,7 @@ namespace Tsume.Upscaling;
 /// <code>
 ///   games.json            the games Tsume knows, and the settings chosen for each
 ///   Builds\&lt;tag&gt;\         the nightly build, downloaded and unpacked
+///   OptiPatcher\&lt;tag&gt;\    OptiPatcher.asi, downloaded and verified
 ///   Extras\               your own files, laid over the build at every install
 ///   Xmx\                  the XMX build of FSR 4, kept as the archive it came in
 ///   Installs\&lt;game&gt;\
@@ -21,6 +22,7 @@ public sealed class UpscalingPaths(string? root = null)
 
     public string GameList => Path.Combine(Root, "games.json");
     public string Builds => Path.Combine(Root, "Builds");
+    public string OptiPatcher => Path.Combine(Root, "OptiPatcher");
     public string Extras => Path.Combine(Root, "Extras");
     public string Xmx => Path.Combine(Root, "Xmx");
 

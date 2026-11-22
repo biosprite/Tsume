@@ -270,7 +270,12 @@
     <value>Installed · nightly of {0}</value>
     <comment>{0} = the night the build was made, e.g. "11 November"</comment>
   </data>
+  <data name="GameInstalledWithOptiPatcher" xml:space="preserve">
+    <value>Installed · nightly of {0} · OptiPatcher on</value>
+    <comment>{0} = the night the build was made, e.g. "11 November"</comment>
+  </data>
   <data name="GameUpdateReady" xml:space="preserve"><value>Installed · a newer build is ready</value></data>
+  <data name="GameUpdateReadyWithOptiPatcher" xml:space="preserve"><value>Installed · OptiPatcher on · update ready</value></data>
   <data name="GameNeedsRepair" xml:space="preserve"><value>Needs repair</value></data>
   <data name="GameCutShort" xml:space="preserve"><value>Install interrupted</value></data>
   <data name="GameFolderGone" xml:space="preserve"><value>Its folder is gone</value></data>
@@ -355,6 +360,16 @@
   <data name="InGameHeading" xml:space="preserve"><value>IN THE GAME</value></data>
   <data name="SpoofNvidia" xml:space="preserve"><value>Pose as an Nvidia card</value></data>
   <data name="SpoofNvidiaDetail" xml:space="preserve"><value>So the game offers DLSS for OptiScaler to take over</value></data>
+  <data name="OptiPatcher" xml:space="preserve"><value>OptiPatcher</value></data>
+  <data name="OptiPatcherDetailOn" xml:space="preserve"><value>On · loads OptiPatcher.asi to unlock DLSS without GPU spoofing</value></data>
+  <data name="OptiPatcherDetailOff" xml:space="preserve"><value>Off · unlocks DLSS/DLSS-FG in supported games without GPU spoofing</value></data>
+  <data name="OptiPatcherLockedBuild" xml:space="preserve"><value>Download OptiPatcher on the OptiScaler build page first</value></data>
+  <data name="OptiPatcherLockedUpdate" xml:space="preserve"><value>Not in this game yet. Press Update above to add it</value></data>
+  <data name="OptiPatcherBadge" xml:space="preserve"><value>OptiPatcher · On</value></data>
+  <data name="OptiPatcherBadgeVersion" xml:space="preserve">
+    <value>OptiPatcher {0} · On</value>
+    <comment>{0} = OptiPatcher release tag, e.g. "v0.42"</comment>
+  </data>
   <data name="InstallAs" xml:space="preserve"><value>Install as</value></data>
   <data name="LoadsAs" xml:space="preserve">
     <value>Loads as {0}</value>
@@ -421,6 +436,7 @@
     <comment>{0} = disk space, e.g. "283 MB"</comment>
   </data>
   <data name="OldBuildsInUse" xml:space="preserve"><value>The old builds could not be removed: their files are in use.</value></data>
+  <data name="SizeKB" xml:space="preserve"><value>{0} KB</value></data>
   <data name="SizeMB" xml:space="preserve"><value>{0} MB</value></data>
   <data name="SizeGB" xml:space="preserve"><value>{0:0.0} GB</value></data>
   <data name="GamesUpToDate" xml:space="preserve"><value>Every game is on this build</value></data>
@@ -484,7 +500,47 @@
   <data name="XmxSame" xml:space="preserve"><value>That is the XMX upscaler Tsume already has.</value></data>
   <data name="XmxReady" xml:space="preserve"><value>The XMX upscaler is not in this game yet: Update adds it.</value></data>
   <data name="XmxNotInGame" xml:space="preserve"><value>The XMX upscaler is not in this game, so FSR 4 was set. Update adds it.</value></data>
+  <data name="OptiPatcherHeading" xml:space="preserve"><value>OPTIPATCHER</value></data>
+  <data name="OptiPatcherExplained" xml:space="preserve"><value>Official OptiScaler ASI plugin that exposes DLSS and DLSS-FG inputs in supported games without DXGI spoofing. Turn it on per game.</value></data>
+  <data name="DownloadOptiPatcher" xml:space="preserve"><value>Download OptiPatcher</value></data>
+  <data name="CheckForNewerOptiPatcher" xml:space="preserve"><value>Check for a newer OptiPatcher</value></data>
+  <data name="OptiPatcherNotDownloaded" xml:space="preserve"><value>Not downloaded yet</value></data>
+  <data name="OptiPatcherHeld" xml:space="preserve">
+    <value>{0} · downloaded {1}</value>
+    <comment>{0} = release tag such as "v0.42", {1} = a date</comment>
+  </data>
+  <data name="CheckingOptiPatcher" xml:space="preserve"><value>Checking GitHub for OptiPatcher…</value></data>
+  <data name="DownloadingOptiPatcher" xml:space="preserve">
+    <value>Downloading OptiPatcher {0}…</value>
+    <comment>{0} = release tag such as "v0.42"</comment>
+  </data>
+  <data name="NewerOptiPatcherAvailableHeading" xml:space="preserve"><value>NEWER OPTIPATCHER AVAILABLE</value></data>
+  <data name="DownloadingOptiPatcherHeading" xml:space="preserve"><value>DOWNLOADING OPTIPATCHER</value></data>
+  <data name="HaveNewestOptiPatcher" xml:space="preserve">
+    <value>OptiPatcher {0} is the newest release.</value>
+    <comment>{0} = release tag such as "v0.42"</comment>
+  </data>
+  <data name="GotOptiPatcher" xml:space="preserve">
+    <value>Downloaded OptiPatcher {0}. Turn it on per game; installed games get it on Update.</value>
+    <comment>{0} = release tag such as "v0.42"</comment>
+  </data>
+  <data name="OptiPatcherReady" xml:space="preserve">
+    <value>OptiPatcher {0} is not in this game yet: Update adds it.</value>
+    <comment>{0} = release tag such as "v0.42"</comment>
+  </data>
+  <data name="OptiPatcherUpdateReady" xml:space="preserve">
+    <value>OptiPatcher {0} is downloaded: Update installs it.</value>
+    <comment>{0} = release tag such as "v0.42"</comment>
+  </data>
+  <data name="OptiPatcherNotInGame" xml:space="preserve"><value>OptiPatcher is not in this game yet. Press Update to add it.</value></data>
+  <data name="BuildLineWithOptiPatcher" xml:space="preserve">
+    <value>{0} · OptiPatcher {1}</value>
+    <comment>{0} = OptiScaler build line, {1} = OptiPatcher release tag such as "v0.42"</comment>
+  </data>
   <data name="TroubleNotXmx" xml:space="preserve"><value>That archive does not hold the XMX upscaler.</value></data>
+  <data name="TroubleNoOptiPatcherPublished" xml:space="preserve"><value>GitHub listed no OptiPatcher release that Tsume can verify.</value></data>
+  <data name="TroubleOptiPatcherInvalid" xml:space="preserve"><value>The downloaded OptiPatcher file is not a valid plugin binary.</value></data>
+  <data name="TroubleOptiPatcherDamaged" xml:space="preserve"><value>The downloaded OptiPatcher file was changed on disk, so Tsume set it aside. Download it again on the build page.</value></data>
   <data name="TroubleNotInstalled" xml:space="preserve"><value>OptiScaler is not installed here.</value></data>
   <data name="TroubleAntiCheat" xml:space="preserve"><value>This game has an anti-cheat. OptiScaler is not offered for it.</value></data>
   <data name="TroubleOther" xml:space="preserve">
