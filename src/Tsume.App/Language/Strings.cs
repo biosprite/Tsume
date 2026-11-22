@@ -228,6 +228,7 @@ public static class Strings
     public static string RemoveOptiScaler => Find();
     public static string ForgetInstall => Find();
     public static string TakeOffList => Find();
+    public static string OpenGameFolder => Find();
 
     public static string CheckingBuild => Find();
 

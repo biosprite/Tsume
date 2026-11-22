@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using Tsume.App.Language;
@@ -23,8 +25,10 @@ public sealed class UpscalingGameViewModel : LayerViewModel
     private InstallState _state;
     private StoredBuild? _build;
     private bool _hasXmx;
+    private string? _existingFolder;
 
-    public UpscalingGameViewModel(UpscalingViewModel hub)
+    /// <param name="dismiss">Closes the panel and completes once it is fully off screen.</param>
+    public UpscalingGameViewModel(UpscalingViewModel hub, Func<Task> dismiss)
     {
         _hub = hub;
         _hub.PropertyChanged += (_, e) =>
@@ -55,6 +59,32 @@ public sealed class UpscalingGameViewModel : LayerViewModel
             _hub.SaveList();
             IsOpen = false;
         });
+
+        OpenFolder = new Command(async () =>
+        {
+            if (ExistingFolder() is not { } folder)
+            {
+                _existingFolder = null;
+                Notify(nameof(CanOpenFolder));
+                Status = Strings.CannotOpenFolder;
+                Settled?.Invoke();
+                return;
+            }
+
+            // Started while the panel is still in front: Windows lets only the foreground program
+            // bring a new window forward, so after dismissing the folder would open behind the game.
+            try
+            {
+                Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                Status = Strings.CannotOpenFolder;
+                return;
+            }
+
+            await dismiss();
+        });
     }
 
     /// <summary>Raised after an action, when buttons may have come or gone.</summary>
@@ -65,6 +95,7 @@ public sealed class UpscalingGameViewModel : LayerViewModel
     public ICommand Primary { get; }
     public ICommand Remove { get; }
     public ICommand TakeOffList { get; }
+    public ICommand OpenFolder { get; }
 
     public async void Show(ListedGame listed)
     {
@@ -115,8 +146,16 @@ public sealed class UpscalingGameViewModel : LayerViewModel
         var isInstalled = _manifest is not null;
         var lockedProxy = _manifest?.Proxy ?? Facts?.ExistingProxy;
 
+        _existingFolder = ExistingFolder();
         Tuning.Load(settings, _hasXmx, isInstalled, lockedProxy);
         Notify("");
+    }
+
+    private string? ExistingFolder()
+    {
+        foreach (var candidate in new[] { _manifest?.Target, Facts?.Target, _listed?.Game.Folder })
+            if (!string.IsNullOrEmpty(candidate) && Directory.Exists(candidate)) return candidate;
+        return null;
     }
 
     public string Name => _listed?.Game.Name ?? "";
@@ -154,6 +193,9 @@ public sealed class UpscalingGameViewModel : LayerViewModel
 
     /// <summary>Where OptiScaler goes, or went.</summary>
     public string FolderLine => _manifest?.Target ?? Facts?.Target ?? _listed?.Game.Folder ?? "";
+
+    /// <summary>True when the game's target or root folder exists on disk.</summary>
+    public bool CanOpenFolder => _existingFolder is not null;
 
     /// <summary>Something worth knowing before pressing a button; empty when there is nothing.</summary>
     public string Notice =>

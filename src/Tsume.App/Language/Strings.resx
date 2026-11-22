@@ -315,6 +315,7 @@
   <data name="RemoveOptiScaler" xml:space="preserve"><value>Remove OptiScaler</value></data>
   <data name="ForgetInstall" xml:space="preserve"><value>Forget this install</value></data>
   <data name="TakeOffList" xml:space="preserve"><value>Take off this list</value></data>
+  <data name="OpenGameFolder" xml:space="preserve"><value>Open game folder</value></data>
   <data name="CheckingBuild" xml:space="preserve"><value>Asking GitHub for the newest nightly…</value></data>
   <data name="Downloading" xml:space="preserve">
     <value>Downloading the build… {0} %</value>

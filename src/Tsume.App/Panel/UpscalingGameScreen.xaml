@@ -17,8 +17,15 @@
                      AutomationProperties.Name="{x:Static lang:Strings.Back}"
                      Command="{Binding Close}" />
 
+      <controls:Tile DockPanel.Dock="Right" Style="{StaticResource Tile.Icon}"
+                     Glyph="{x:Static theme:Glyphs.Folder}"
+                     ToolTip="{x:Static lang:Strings.OpenGameFolder}"
+                     AutomationProperties.Name="{x:Static lang:Strings.OpenGameFolder}"
+                     IsEnabled="{Binding CanOpenFolder}"
+                     Command="{Binding OpenFolder}" />
+
       <TextBlock Style="{StaticResource Text.Title}" Text="{Binding Name}"
-                 Margin="16,0,0,0" VerticalAlignment="Center" />
+                 Margin="16,0,12,0" VerticalAlignment="Center" />
     </DockPanel>
 
     <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"

@@ -30,7 +30,7 @@ public sealed class UpscalingViewModel : LayerViewModel
         Installer = new Installer(Paths);
         Xmx = new XmxStore(Paths);
 
-        Game = new UpscalingGameViewModel(this);
+        Game = new UpscalingGameViewModel(this, dismiss);
         Build = new UpscalingBuildViewModel(this, dismiss);
         Defaults = new UpscalingDefaultsViewModel(this);
         Browse = new UpscalingBrowseViewModel(this);
