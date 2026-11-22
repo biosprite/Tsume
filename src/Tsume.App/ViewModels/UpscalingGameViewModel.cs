@@ -193,11 +193,8 @@ public sealed class UpscalingGameViewModel : LayerViewModel
     /// <summary>False while files are being changed so settings cannot race an install or removal.</summary>
     public bool CanTune => !_hub.IsBusy;
 
-    /// <summary>Action buttons sit above the options once installed (Update / Repair / Remove / Forget).</summary>
-    public Visibility TopActionsShown => !IsBlocked && _state != InstallState.None ? Visibility.Visible : Visibility.Collapsed;
-
-    /// <summary>Before install, the Install button sits below the options so users configure what gets installed first.</summary>
-    public Visibility InstallBottomShown => !IsBlocked && _state == InstallState.None ? Visibility.Visible : Visibility.Collapsed;
+    /// <summary>Primary action (Install / Update / Repair / Remove / Forget), hidden only for blocked games.</summary>
+    public Visibility PrimaryShown => IsBlocked ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>Remove gets a button of its own while the first one says Update or Repair.</summary>
     public Visibility RemoveShown =>

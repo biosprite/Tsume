@@ -53,7 +53,7 @@ public static class SelfCheck
         var chosen = new UpscalerSettings
         {
             Upscaler = UpscalerChoice.Fsr4, Model = Fsr4Model.Int8,
-            FrameGen = FrameGenChoice.XeFG, Multiplier = 3, ShowFps = true,
+            FrameGen = FrameGenChoice.XeFG, Multiplier = 3, SpoofNvidia = false,
         };
         chosen.WriteTo(ini);
 
@@ -65,45 +65,56 @@ public static class SelfCheck
         Check(new UpscalerSettings().CorrectedBy(ini) == chosen, "and reads back as the same settings");
         Check(ini.ToString().Split('\n').Length == blank.Split('\n').Length, "without adding or dropping a line");
 
-        // The defaults: FSR 4.1.2 Lite on the XMX upscaler.
-        var defaults = new UpscalerSettings();
-        ini = IniFile.Parse(blank);
-        defaults.WriteTo(ini);
+        // GPU-based defaults: XeSS on Intel, FSR 4 on AMD, Auto elsewhere.
+        Check(UpscalerSettings.DefaultUpscaler(hasIntelGpu: true, hasAmdGpu: false) == UpscalerChoice.XeSS,
+            "Intel devices default to XeSS");
+        Check(UpscalerSettings.DefaultUpscaler(hasIntelGpu: false, hasAmdGpu: true) == UpscalerChoice.Fsr4,
+            "AMD devices default to FSR 4");
+        Check(UpscalerSettings.DefaultUpscaler(hasIntelGpu: false, hasAmdGpu: false) == UpscalerChoice.Auto,
+            "other devices default to Auto");
 
-        Check(defaults is { Upscaler: UpscalerChoice.Fsr4Xmx, Model: Fsr4Model.Lite }, "the defaults are FSR 4 XMX with the 4.1.2 Lite network");
+        var defaults = new UpscalerSettings();
+        var expectedDefault = UpscalerSettings.DefaultUpscaler(GpuVendor.HasIntelGpu(), GpuVendor.HasAmdGpu());
+        Check(defaults.Upscaler == expectedDefault, $"on this machine the default upscaler is {expectedDefault}");
+
+        // FSR 4.1.2 Lite on the XMX upscaler.
+        var xmxSettings = new UpscalerSettings { Upscaler = UpscalerChoice.Fsr4Xmx, Model = Fsr4Model.Lite };
+        ini = IniFile.Parse(blank);
+        xmxSettings.WriteTo(ini);
+
         Check(ini.Get("Upscalers", "Dx12Upscaler") == XmxLayout.Name && ini.Get(XmxLayout.Name, "UpscalerIndex") == "3"
               && ini.Get("FSR", "Fsr4GpuSupport") == "auto" && ini.Get("FSR", "UpscalerIndex") == "auto",
-            $"written as Dx12Upscaler={XmxLayout.Name} and [{XmxLayout.Name}] UpscalerIndex=3, with the stock FSR 4 lines left on auto");
+            $"XMX 4.1.2 Lite is written as Dx12Upscaler={XmxLayout.Name} and [{XmxLayout.Name}] UpscalerIndex=3, with the stock FSR 4 lines left on auto");
         Check(ini.Get(XmxLayout.Section, "Model") is null, "and nothing is written to the XMX upscaler's own Run-as setting");
         Check(ini.Get("Inputs", "EnableXeSSInputs") == "false", "with it, a game's XeSS is left to the game (EnableXeSSInputs=false)");
 
-        (defaults with { Upscaler = UpscalerChoice.Fsr4 }).WriteTo(ini);
+        (xmxSettings with { Upscaler = UpscalerChoice.Fsr4 }).WriteTo(ini);
         Check(ini.Get("Inputs", "EnableXeSSInputs") == "auto", "and taken over again once another upscaler is chosen");
-        defaults.WriteTo(ini);
-        Check(new UpscalerSettings { Upscaler = UpscalerChoice.XeSS }.CorrectedBy(ini) == defaults, "and read back as the same settings");
+        xmxSettings.WriteTo(ini);
+        Check(new UpscalerSettings { Upscaler = UpscalerChoice.XeSS }.CorrectedBy(ini) == xmxSettings, "and read back as the same settings");
 
-        (defaults with { Model = Fsr4Model.Int8 }).WriteTo(ini);
+        (xmxSettings with { Model = Fsr4Model.Int8 }).WriteTo(ini);
         Check(ini.Get(XmxLayout.Name, "UpscalerIndex") == "2", "the full 4.1.2 network is UpscalerIndex=2");
 
         ini.Set(XmxLayout.Name, "UpscalerIndex", "8");   // a DLSS model, picked in the overlay
-        (defaults with { Model = Fsr4Model.Auto, ShowFps = true }).WriteTo(ini);
+        (xmxSettings with { Model = Fsr4Model.Auto, SpoofNvidia = false }).WriteTo(ini);
         Check(ini.Get(XmxLayout.Name, "UpscalerIndex") == "8", "a version picked in the overlay is not written over by another change in Tsume");
 
         // A file as Tsume 0.5.1 wrote it (Run as only), then as the overlay saved it in a real game.
         ini = IniFile.Parse(blank);
         ini.Set("Upscalers", "Dx12Upscaler", XmxLayout.Name);
         ini.Set(XmxLayout.Section, "Model", "3");
-        Check(defaults.CorrectedBy(ini).Model == Fsr4Model.Auto, "a file from 0.5.1, which set only Run as, reads as no version chosen");
+        Check(xmxSettings.CorrectedBy(ini).Model == Fsr4Model.Auto, "a file from 0.5.1, which set only Run as, reads as no version chosen");
 
         ini.Set(XmxLayout.Name, "UpscalerIndex", "3");
-        Check(defaults.CorrectedBy(ini) == defaults, "once 4.1.2X Lite is picked in the overlay it reads as 4.1.2 Lite");
+        Check(xmxSettings.CorrectedBy(ini) == xmxSettings, "once 4.1.2X Lite is picked in the overlay it reads as 4.1.2 Lite");
 
-        defaults.WriteTo(ini);
+        xmxSettings.WriteTo(ini);
         Check(ini.Get(XmxLayout.Section, "Model") == "0" && ini.Get(XmxLayout.Name, "UpscalerIndex") == "3",
             "and Tsume's next write puts Run as back to the game's choice, leaving the version");
 
-        var without = defaults.Fitting(hasXmx: false);
-        Check(without is { Upscaler: UpscalerChoice.Fsr4, Model: Fsr4Model.Int8 } && defaults.Fitting(hasXmx: true) == defaults,
+        var without = xmxSettings.Fitting(hasXmx: false);
+        Check(without is { Upscaler: UpscalerChoice.Fsr4, Model: Fsr4Model.Int8 } && xmxSettings.Fitting(hasXmx: true) == xmxSettings,
             "for a game without the XMX upscaler in it, plain FSR 4 stands in");
 
         var fsr4Lite = new UpscalerSettings { Upscaler = UpscalerChoice.Fsr4, Model = Fsr4Model.Lite };
@@ -158,7 +169,14 @@ public static class SelfCheck
             Check(File.Exists(Path.Combine(a.Folder, "OptiScaler", "libxess.dll")), "with its companion files");
             Check(!File.Exists(Path.Combine(a.Folder, "setup_windows.bat")), "and without the setup scripts");
             Check(Installer.Check(installer.Find(a.Id)) == InstallState.Healthy, "the install reads as healthy");
-            Check(IniFile.Load(Path.Combine(a.Folder, "OptiScaler.ini")).Get("FSR", "Fsr4GpuSupport") == "2", "its settings file carries Tsume's settings");
+            var expectedDx12 = defaults.Upscaler switch
+            {
+                UpscalerChoice.XeSS => "xess",
+                UpscalerChoice.Fsr4 => "ffx",
+                _                   => "auto",
+            };
+            Check(IniFile.Load(Path.Combine(a.Folder, "OptiScaler.ini")).Get("Upscalers", "Dx12Upscaler") == expectedDx12,
+                "its settings file carries Tsume's settings");
 
             // The big libraries are shared with the store where the disk can link; the two files that get written to never are.
             var shared = Path.Combine(a.Folder, "OptiScaler", "libxess.dll");
@@ -184,7 +202,7 @@ public static class SelfCheck
             var (twin, twinFacts) = MakeGame(bench, "Twin", folder => { });
             var twinManifest = installer.Install(twin, twinFacts, build, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS });
 
-            Installer.WriteSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.Fsr4, ShowFps = true });
+            Installer.WriteSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.Fsr4, SpoofNvidia = false });
             Check(IniFile.Load(Path.Combine(twin.Folder, "OptiScaler.ini")).Get("Upscalers", "Dx12Upscaler") == "xess"
                   && IniFile.Load(Path.Combine(a.Folder, "OptiScaler.ini")).Get("Upscalers", "Dx12Upscaler") == "ffx",
                 "two games keep different settings");
@@ -202,10 +220,10 @@ public static class SelfCheck
 
             var live = IniFile.Load(Path.Combine(a.Folder, "OptiScaler.ini"));
             live.Set("Sharpness", "Sharpness", "0.55");   // tuned in the overlay; not a setting Tsume manages
-            live.Set("Menu", "ShowFps", "true");          // one that it does
+            live.Set("Spoofing", "Dxgi", "false");        // one that it does
             live.Save(Path.Combine(a.Folder, "OptiScaler.ini"));
 
-            Check(Installer.ReadSettings(manifest, new UpscalerSettings()).ShowFps, "a change made in the overlay is read back");
+            Check(!Installer.ReadSettings(manifest, new UpscalerSettings()).SpoofNvidia, "a change made in the overlay is read back");
 
             Installer.WriteSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS });
             live = IniFile.Load(Path.Combine(a.Folder, "OptiScaler.ini"));
@@ -225,7 +243,7 @@ public static class SelfCheck
             var saved = Path.Combine(paths.InstallFolder(a.Id), "Saved", "OptiScaler.ini");
             Check(File.Exists(saved) && IniFile.Load(saved).Get("Sharpness", "Sharpness") == "0.55", "an update removal saves the settings file");
 
-            manifest = installer.Install(a, GameInspector.Inspect(a)!, build, new UpscalerSettings());
+            manifest = installer.Install(a, GameInspector.Inspect(a)!, build, new UpscalerSettings { Upscaler = UpscalerChoice.Fsr4 });
             live = IniFile.Load(Path.Combine(a.Folder, "OptiScaler.ini"));
             Check(live.Get("Sharpness", "Sharpness") == "0.55" && live.Get("Upscalers", "Dx12Upscaler") == "ffx",
                 "installed again: the saved tuning is back, under the settings chosen now");
@@ -321,7 +339,7 @@ public static class SelfCheck
                 before = Snapshot(f.Folder);
 
                 // Before Tsume has the upscaler: asking for it must not leave the game without one.
-                manifest = installer.Install(f, fFacts, build, new UpscalerSettings());
+                manifest = installer.Install(f, fFacts, build, xmxSettings);
                 Check(!Installer.HasXmx(manifest) && IniFile.Load(Path.Combine(f.Folder, "OptiScaler.ini")).Get("Upscalers", "Dx12Upscaler") == "ffx",
                     "installed before Tsume has it: plain FSR 4 was written instead");
 
@@ -346,7 +364,7 @@ public static class SelfCheck
                 Check(!installer.IsCurrent(manifest, build), "the game installed earlier now reads as due an update");
 
                 installer.Remove(f.Id);
-                manifest = installer.Install(f, fFacts, build, new UpscalerSettings());
+                manifest = installer.Install(f, fFacts, build, xmxSettings);
                 live = IniFile.Load(Path.Combine(f.Folder, "OptiScaler.ini"));
 
                 var upscaler = Path.Combine(f.Folder, XmxLayout.Upscaler);
@@ -359,8 +377,8 @@ public static class SelfCheck
                 Check(live.Get("Upscalers", "Dx12Upscaler") == XmxLayout.Name && live.Get(XmxLayout.Name, "UpscalerIndex") == "3",
                     "and the settings file selects it, with 4.1.2 Lite");
                 Check(Installer.HasXmx(manifest) && installer.IsCurrent(manifest, build), "the install reads as up to date");
-                Check(Installer.ReadSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS }) == new UpscalerSettings(),
-                    "its settings read back as the defaults");
+                Check(Installer.ReadSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS }) == xmxSettings,
+                    "its settings read back as XMX 4.1.2 Lite");
 
                 Installer.WriteSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS });
                 live = IniFile.Load(Path.Combine(f.Folder, "OptiScaler.ini"));

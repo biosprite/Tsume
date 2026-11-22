@@ -257,7 +257,9 @@ public static class Strings
     public static string XmxModelFullDetail => Find();
     public static string XmxModelLiteDetail => Find();
 
-    public static string FrameGenHeading => Find();
+    public static string FrameGenOutputHeading => Find();
+    public static string FrameGenInputHeading => Find();
+    public static string FrameGenMultiplierHeading => Find();
     public static string ChoiceOff => Find();
     public static string SourceAny => Find();
     public static string SourceAnyDetail => Find();
@@ -267,8 +269,6 @@ public static class Strings
     public static string InGameHeading => Find();
     public static string SpoofNvidia => Find();
     public static string SpoofNvidiaDetail => Find();
-    public static string ShowFps => Find();
-    public static string ShowFpsDetail => Find();
 
     public static string InstallAs => Find();
 

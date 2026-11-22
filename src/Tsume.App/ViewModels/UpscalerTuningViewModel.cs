@@ -24,7 +24,6 @@ public sealed class UpscalerTuningViewModel : Observable
     public UpscalerTuningViewModel()
     {
         ToggleSpoof = new Command(() => Change(Settings with { SpoofNvidia = !Settings.SpoofNvidia }));
-        ToggleFps = new Command(() => Change(Settings with { ShowFps = !Settings.ShowFps }));
 
         ProxyOptions = BuildProxyOptions();
     }
@@ -173,10 +172,8 @@ public sealed class UpscalerTuningViewModel : Observable
     }
 
     public ICommand ToggleSpoof { get; }
-    public ICommand ToggleFps { get; }
 
     public bool SpoofNvidia => Settings.SpoofNvidia;
-    public bool ShowFps => Settings.ShowFps;
 
     public IReadOnlyList<ProxyOption> ProxyOptions { get; }
 

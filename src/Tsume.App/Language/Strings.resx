@@ -343,7 +343,9 @@
   <data name="ModelAutoDetail" xml:space="preserve"><value>OptiScaler picks the network it thinks the GPU supports</value></data>
   <data name="ModelInt8Detail" xml:space="preserve"><value>The full network, for the best picture</value></data>
   <data name="ModelLiteDetail" xml:space="preserve"><value>A smaller network, faster and a little softer</value></data>
-  <data name="FrameGenHeading" xml:space="preserve"><value>FRAME GENERATION</value></data>
+  <data name="FrameGenOutputHeading" xml:space="preserve"><value>FRAME GENERATION · OUTPUT</value></data>
+  <data name="FrameGenInputHeading" xml:space="preserve"><value>FRAME GENERATION · INPUT</value></data>
+  <data name="FrameGenMultiplierHeading" xml:space="preserve"><value>MULTIPLIER</value></data>
   <data name="ChoiceOff" xml:space="preserve"><value>Off</value></data>
   <data name="SourceAny" xml:space="preserve"><value>Any game</value></data>
   <data name="SourceAnyDetail" xml:space="preserve"><value>Built from the upscaler. Works in any game; the HUD may shimmer.</value></data>
@@ -352,8 +354,6 @@
   <data name="InGameHeading" xml:space="preserve"><value>IN THE GAME</value></data>
   <data name="SpoofNvidia" xml:space="preserve"><value>Pose as an Nvidia card</value></data>
   <data name="SpoofNvidiaDetail" xml:space="preserve"><value>So the game offers DLSS for OptiScaler to take over</value></data>
-  <data name="ShowFps" xml:space="preserve"><value>Frame-rate counter</value></data>
-  <data name="ShowFpsDetail" xml:space="preserve"><value>OptiScaler's own, in a corner of the game</value></data>
   <data name="InstallAs" xml:space="preserve"><value>Install as</value></data>
   <data name="LoadsAs" xml:space="preserve">
     <value>Loads as {0}</value>

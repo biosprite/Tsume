@@ -26,7 +26,10 @@
 
     <ScrollViewer x:Name="List" Focusable="False"
                   VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
-      <panel:UpscalerTuningView DataContext="{Binding Tuning}" />
+      <StackPanel>
+        <panel:UpscalerProxyCard DataContext="{Binding Tuning}" Margin="0,0,0,20" />
+        <panel:UpscalerTuningView DataContext="{Binding Tuning}" />
+      </StackPanel>
     </ScrollViewer>
 
   </DockPanel>

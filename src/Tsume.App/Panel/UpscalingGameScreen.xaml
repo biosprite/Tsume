@@ -50,10 +50,15 @@
                      TextWrapping="Wrap" TextTrimming="None" Text="{x:Static lang:Strings.OnlineGameCaution}" />
         </Border>
 
-        <!-- Once installed, Update / Repair / Remove / Forget sit at the top for quick access. -->
-        <StackPanel Margin="-4,0,-4,0" Visibility="{Binding TopActionsShown}">
+        <!-- Install-time proxy choice and install/update/remove actions sit above the tuning options. -->
+        <panel:UpscalerProxyCard DataContext="{Binding Tuning}" Margin="0,0,0,8"
+                                 IsEnabled="{Binding DataContext.CanTune, RelativeSource={RelativeSource AncestorType=DockPanel}}"
+                                 Visibility="{Binding DataContext.TuningShown, RelativeSource={RelativeSource AncestorType=DockPanel}}" />
+
+        <StackPanel Margin="-4,0,-4,0">
           <controls:Tile Style="{StaticResource Tile.Row}" controls:Screen.TakesFocus="True"
                          Glyph="{Binding PrimaryGlyph}" Label="{Binding PrimaryLabel}"
+                         Visibility="{Binding PrimaryShown}"
                          IsEnabled="{Binding CanAct}"
                          Command="{Binding Primary}" />
 
@@ -62,19 +67,6 @@
                          Visibility="{Binding RemoveShown}"
                          IsEnabled="{Binding CanAct}"
                          Command="{Binding Remove}" />
-        </StackPanel>
-
-        <panel:UpscalerTuningView DataContext="{Binding Tuning}" Margin="0,20,0,0"
-                                  IsEnabled="{Binding DataContext.CanTune, RelativeSource={RelativeSource AncestorType=DockPanel}}"
-                                  Visibility="{Binding DataContext.TuningShown, RelativeSource={RelativeSource AncestorType=DockPanel}}" />
-
-        <!-- Before install, the Install button sits below the options so users pick what gets installed first. -->
-        <StackPanel Margin="-4,16,-4,0">
-          <controls:Tile Style="{StaticResource Tile.Row}"
-                         Glyph="{Binding PrimaryGlyph}" Label="{Binding PrimaryLabel}"
-                         Visibility="{Binding InstallBottomShown}"
-                         IsEnabled="{Binding CanAct}"
-                         Command="{Binding Primary}" />
 
           <controls:Tile Style="{StaticResource Tile.Row}"
                          Glyph="{x:Static theme:Glyphs.Quit}" Label="{x:Static lang:Strings.TakeOffList}"
@@ -82,6 +74,10 @@
                          IsEnabled="{Binding CanAct}"
                          Command="{Binding TakeOffList}" />
         </StackPanel>
+
+        <panel:UpscalerTuningView DataContext="{Binding Tuning}" Margin="0,20,0,0"
+                                  IsEnabled="{Binding DataContext.CanTune, RelativeSource={RelativeSource AncestorType=DockPanel}}"
+                                  Visibility="{Binding DataContext.TuningShown, RelativeSource={RelativeSource AncestorType=DockPanel}}" />
 
       </StackPanel>
     </ScrollViewer>

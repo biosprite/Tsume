@@ -46,15 +46,18 @@
       </StackPanel>
     </controls:Reveal>
 
-    <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.FrameGenHeading}"
+    <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.FrameGenOutputHeading}"
                Margin="4,24,0,10" />
 
-    <controls:SegmentedControl AutomationProperties.Name="{x:Static lang:Strings.FrameGenHeading}"
+    <controls:SegmentedControl AutomationProperties.Name="{x:Static lang:Strings.FrameGenOutputHeading}"
                                Segments="{Binding FrameGens}" SelectedIndex="{Binding FrameGenIndex}" />
 
     <controls:Reveal IsOpen="{Binding ShowsSource}">
       <StackPanel>
-        <controls:SegmentedControl Margin="0,8,0,0"
+        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.FrameGenInputHeading}"
+                   Margin="4,14,0,8" />
+
+        <controls:SegmentedControl AutomationProperties.Name="{x:Static lang:Strings.FrameGenInputHeading}"
                                    Segments="{Binding Sources}" SelectedIndex="{Binding SourceIndex}" />
 
         <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
@@ -63,71 +66,24 @@
     </controls:Reveal>
 
     <controls:Reveal IsOpen="{Binding ShowsMultiplier}">
-      <controls:SegmentedControl Margin="0,10,0,0"
-                                 Segments="{Binding Multipliers}" SelectedIndex="{Binding MultiplierIndex}" />
+      <StackPanel>
+        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.FrameGenMultiplierHeading}"
+                   Margin="4,14,0,8" />
+
+        <controls:SegmentedControl AutomationProperties.Name="{x:Static lang:Strings.FrameGenMultiplierHeading}"
+                                   Segments="{Binding Multipliers}" SelectedIndex="{Binding MultiplierIndex}" />
+      </StackPanel>
     </controls:Reveal>
 
     <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.InGameHeading}"
                Margin="4,24,0,10" />
 
-    <controls:Tile Style="{StaticResource Tile.Switch}"
+    <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0"
                    Glyph="{x:Static theme:Glyphs.Chip}"
                    Label="{x:Static lang:Strings.SpoofNvidia}"
                    Detail="{x:Static lang:Strings.SpoofNvidiaDetail}"
                    IsOn="{Binding SpoofNvidia}"
                    Command="{Binding ToggleSpoof}" />
-
-    <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0,0,0,8"
-                   Glyph="{x:Static theme:Glyphs.Counter}"
-                   Label="{x:Static lang:Strings.ShowFps}"
-                   Detail="{x:Static lang:Strings.ShowFpsDetail}"
-                   IsOn="{Binding ShowFps}"
-                   Command="{Binding ToggleFps}" />
-
-    <!-- Controls & Layout-style dropdown for what DLL name OptiScaler installs as; greyed out once installed. -->
-    <Border Background="{DynamicResource Surface}" CornerRadius="{StaticResource Radius.Control}"
-            Padding="16,14,16,14" Margin="0">
-      <StackPanel>
-        <DockPanel Margin="0,0,0,10">
-          <DockPanel.Style>
-            <Style TargetType="DockPanel">
-              <Style.Triggers>
-                <DataTrigger Binding="{Binding IsProxyEditable}" Value="False">
-                  <Setter Property="Opacity" Value="0.55" />
-                </DataTrigger>
-              </Style.Triggers>
-            </Style>
-          </DockPanel.Style>
-
-          <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Icon}" FontSize="20" Width="22"
-                     TextAlignment="Center" VerticalAlignment="Center"
-                     Text="{x:Static theme:Glyphs.Proxy}" />
-
-          <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
-            <TextBlock Style="{StaticResource Text.Body}" Text="{x:Static lang:Strings.InstallAs}" />
-            <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
-                       Text="{Binding ProxyDetail}" Margin="0,2,0,0" />
-          </StackPanel>
-        </DockPanel>
-
-        <controls:KeyDropdown ItemsSource="{Binding ProxyOptions}"
-                              SelectedItem="{Binding SelectedProxyOption, Mode=TwoWay}"
-                              IsEnabled="{Binding IsProxyEditable}"
-                              AutomationProperties.Name="{x:Static lang:Strings.InstallAs}">
-          <controls:KeyDropdown.ItemTemplate>
-            <DataTemplate>
-              <DockPanel>
-                <TextBlock DockPanel.Dock="Right" Style="{StaticResource Text.Caption}" FontSize="11"
-                           Foreground="{DynamicResource Text.Faint}" VerticalAlignment="Center"
-                           Margin="8,0,0,0" Text="{Binding Hint}" />
-                <TextBlock Style="{StaticResource Text.Body}" VerticalAlignment="Center"
-                           Text="{Binding Label}" />
-              </DockPanel>
-            </DataTemplate>
-          </controls:KeyDropdown.ItemTemplate>
-        </controls:KeyDropdown>
-      </StackPanel>
-    </Border>
 
   </StackPanel>
 

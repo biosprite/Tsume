@@ -61,8 +61,20 @@ public enum FrameGenSource
 /// </summary>
 public sealed record UpscalerSettings
 {
-    public UpscalerChoice Upscaler { get; init; } = UpscalerChoice.Fsr4Xmx;
-    public Fsr4Model Model { get; init; } = Fsr4Model.Lite;
+    /// <summary>
+    /// The default upscaler for the detected GPU: XeSS on Intel devices, FSR 4 on AMD devices,
+    /// and Auto elsewhere.
+    /// </summary>
+    public static UpscalerChoice DefaultUpscaler(bool hasIntelGpu, bool hasAmdGpu) =>
+        hasAmdGpu ? UpscalerChoice.Fsr4
+        : hasIntelGpu ? UpscalerChoice.XeSS
+        : UpscalerChoice.Auto;
+
+    public static UpscalerChoice DefaultUpscaler() =>
+        DefaultUpscaler(GpuVendor.HasIntelGpu(), GpuVendor.HasAmdGpu());
+
+    public UpscalerChoice Upscaler { get; init; } = DefaultUpscaler();
+    public Fsr4Model Model { get; init; } = Fsr4Model.Int8;
 
     public FrameGenChoice FrameGen { get; init; } = FrameGenChoice.Off;
     public FrameGenSource Source { get; init; } = FrameGenSource.Upscaler;
@@ -72,8 +84,6 @@ public sealed record UpscalerSettings
 
     /// <summary>Tell the game an Nvidia card is fitted, so it offers DLSS for OptiScaler to take over.</summary>
     public bool SpoofNvidia { get; init; } = true;
-
-    public bool ShowFps { get; init; }
 
     /// <summary>The file name OptiScaler is installed under. Empty: Tsume chooses.</summary>
     public string Proxy { get; init; } = "";
@@ -186,7 +196,6 @@ public sealed record UpscalerSettings
 
         ini.Set("Spoofing", "Dxgi", SpoofNvidia ? Auto : "false");
         if (ueIntelAtomics) ini.Set("Spoofing", "UEIntelAtomics", SpoofNvidia ? "true" : Auto);
-        ini.Set("Menu", "ShowFps", ShowFps ? "true" : Auto);
     }
 
     /// <summary>
@@ -249,7 +258,6 @@ public sealed record UpscalerSettings
                 : Multiplier,
 
             SpoofNvidia = !Is(ini.Get("Spoofing", "Dxgi"), "false"),
-            ShowFps = Is(ini.Get("Menu", "ShowFps"), "true"),
         };
 
         static bool Is(string? value, string word) => string.Equals(value, word, StringComparison.OrdinalIgnoreCase);
