@@ -566,7 +566,7 @@ public static class DiscoveryReportBuilder
             sb.AppendLine($"- **Power overlay:** {pp.EffectiveOverlayLabel ?? "unknown"} (`{pp.EffectiveOverlayGuid ?? "?"}`)");
             sb.AppendLine($"- **CPU Boost Mode (AC / DC):** {pp.CpuBoostModeAcLabel ?? "?"} ({pp.CpuBoostModeAc}) / {pp.CpuBoostModeDcLabel ?? "?"} ({pp.CpuBoostModeDc})");
             if (pp.CpuBoostModeAc == 0 || pp.CpuBoostModeDc == 0)
-                sb.AppendLine("  - **WARNING:** Processor performance boost mode is Disabled — power limits above base-clock wattage will not engage under load.");
+                sb.AppendLine("  - **WARNING:** Processor performance boost mode is Disabled. Power limits above base-clock wattage will not engage under load.");
         }
 
         if (bundle.Display is { } disp)
@@ -648,7 +648,7 @@ public static class DiscoveryReportBuilder
                 sb.AppendLine("### ACPI / PCI Power Devices");
                 sb.AppendLine();
                 foreach (var dev in inv.AcpiPowerDevices)
-                    sb.AppendLine($"- `{dev.ScrubbedDeviceId}` — {dev.Name} (svc: `{dev.Service}`, {dev.Status})");
+                    sb.AppendLine($"- `{dev.ScrubbedDeviceId}`: {dev.Name} (svc: `{dev.Service}`, {dev.Status})");
                 sb.AppendLine();
             }
         }

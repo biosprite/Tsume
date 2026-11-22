@@ -139,7 +139,7 @@ public static class DeviceSupportExporter
         if (snapshot.Ok)
             findings.Add(new("ok", "Helper", $"Online and driving {deviceName}."));
         else if (snapshot.Unsupported)
-            findings.Add(new("warn", "Helper", $"Online, but this board ({deviceName}) is not yet supported — read-only discovery works normally."));
+            findings.Add(new("warn", "Helper", $"Online, but this board ({deviceName}) is not yet supported. Read-only discovery works normally."));
         else
             findings.Add(new("warn", "Helper", $"Offline ({snapshot.Error ?? "no answer"}). Install/start TsumeHelper for elevated firmware reads."));
 

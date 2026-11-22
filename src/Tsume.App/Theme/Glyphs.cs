@@ -71,4 +71,6 @@ public static class Glyphs
     public const string Lock        = "";
     public const string Back        = "";
     public const string Charging    = "";
+    public const string Undo        = "\uE7A7";   // curved arrow left
+    public const string Redo        = "\uE7A6";   // curved arrow right
 }

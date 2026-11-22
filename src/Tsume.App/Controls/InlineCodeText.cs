@@ -89,7 +89,7 @@ public static class InlineCodeText
             BorderBrush = isAction ? Accent.Wash : CodeEdge,
             BorderThickness = isAction ? new Thickness(1) : new Thickness(1, 1, 1, 1.5),
             CornerRadius = new CornerRadius(5),
-            Padding = new Thickness(5.5, 0.5, 5.5, 1),
+            Padding = new Thickness(6, 1.5, 6, 1.5),
             Margin = new Thickness(1, 0, 1, 0),
             SnapsToDevicePixels = true,
             Child = new TextBlock
@@ -100,6 +100,9 @@ public static class InlineCodeText
                 FontWeight = FontWeights.SemiBold,
                 Foreground = isAction ? Accent.Brush : CodeInk,
                 TextTrimming = TextTrimming.None,
+                LineHeight = double.NaN,
+                LineStackingStrategy = LineStackingStrategy.MaxHeight,
+                HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             },
         };

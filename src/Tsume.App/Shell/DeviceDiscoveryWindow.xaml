@@ -17,6 +17,7 @@
 
   <Window.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    <SolidColorBrush x:Key="Dev.SubCard" Color="#40080A0E" />
 
     <Style x:Key="Dev.Button" TargetType="Button">
       <Setter Property="Background" Value="{DynamicResource Surface}" />
@@ -134,11 +135,6 @@
             <TextBlock Style="{StaticResource Text.Icon}" Text="{x:Static theme:Glyphs.Developer}"
                        Foreground="{x:Static theme:Accent.Brush}" FontSize="20" Margin="0,0,10,0" />
             <TextBlock Style="{StaticResource Text.Title}" Text="{x:Static lang:Strings.HardwareDiscoveryTitle}" />
-            <Border Background="{x:Static theme:Accent.Tint}" BorderBrush="{x:Static theme:Accent.Wash}"
-                    BorderThickness="1" CornerRadius="8" Padding="8,2" Margin="12,0,0,0" VerticalAlignment="Center">
-              <TextBlock Style="{StaticResource Text.Caption}" Text="100% READ-ONLY"
-                         Foreground="{x:Static theme:Accent.Brush}" FontWeight="Bold" FontSize="10" />
-            </Border>
           </StackPanel>
           <TextBlock Style="{StaticResource Text.Caption}" Text="{x:Static lang:Strings.HardwareDiscoverySubtitle}"
                      Margin="0,4,0,0" />
@@ -157,7 +153,7 @@
 
       <!-- Persistent Bottom Action Bar -->
       <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Surface.Divider}" BorderThickness="0,1,0,0"
-              Padding="0,12,0,0" Margin="0,12,0,0">
+              Padding="0,14,0,0" Margin="0,12,0,0">
         <DockPanel>
           <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center">
             <Button Style="{StaticResource Dev.Button}" Content="Environment Check" Margin="0,0,8,0"
@@ -167,9 +163,121 @@
           </StackPanel>
 
           <StackPanel VerticalAlignment="Center">
-            <TextBlock Style="{StaticResource Text.Body}" Text="{Binding SummaryPill}" FontSize="12.5" />
+            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+              <!-- Quick Scan status chip -->
+              <Border CornerRadius="7" Padding="8,3" Margin="0,2,6,2" BorderThickness="1" VerticalAlignment="Center">
+                <Border.Style>
+                  <Style TargetType="Border">
+                    <Setter Property="Background" Value="{DynamicResource Surface}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Surface.Divider}" />
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding HasQuickScan}" Value="True">
+                        <Setter Property="Background" Value="#1A3DDC97" />
+                        <Setter Property="BorderBrush" Value="#443DDC97" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </Border.Style>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                  <TextBlock Text="{x:Static theme:Glyphs.Tick}" FontFamily="{StaticResource Font.Icons}"
+                             FontSize="10" FontWeight="Bold" Foreground="{StaticResource Signal.Good}"
+                             VerticalAlignment="Center" Margin="0,0,5,0"
+                             Visibility="{Binding HasQuickScan, Converter={StaticResource BoolToVis}}" />
+                  <TextBlock FontFamily="{StaticResource Font.Words}" FontSize="11.5" FontWeight="SemiBold"
+                             Text="Quick Scan" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource Text.Faint}" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding HasQuickScan}" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource Signal.Good}" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                </StackPanel>
+              </Border>
+
+              <!-- Guided count chip -->
+              <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Surface.Divider}"
+                      BorderThickness="1" CornerRadius="7" Padding="8,3" Margin="0,2,6,2" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding SummaryGuidedCount}" FontFamily="Cascadia Mono, Consolas"
+                             FontSize="11.5" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,5,0">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource Text.Faint}" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding HasSummaryGuided}" Value="True">
+                            <Setter Property="Foreground" Value="{x:Static theme:Accent.Brush}" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                  <TextBlock Style="{StaticResource Text.Caption}" Text="guided" FontSize="11.5"
+                             Foreground="{DynamicResource Text.Muted}" VerticalAlignment="Center" />
+                </StackPanel>
+              </Border>
+
+              <!-- Watch diffs chip -->
+              <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Surface.Divider}"
+                      BorderThickness="1" CornerRadius="7" Padding="8,3" Margin="0,2,6,2" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding SummaryWatchCount}" FontFamily="Cascadia Mono, Consolas"
+                             FontSize="11.5" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,5,0">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource Text.Faint}" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding HasSummaryWatch}" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource Signal.Warn}" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                  <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding SummaryWatchLabel}" FontSize="11.5"
+                             Foreground="{DynamicResource Text.Muted}" VerticalAlignment="Center" />
+                </StackPanel>
+              </Border>
+
+              <!-- Button events chip -->
+              <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Surface.Divider}"
+                      BorderThickness="1" CornerRadius="7" Padding="8,3" Margin="0,2,10,2" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding SummaryButtonCount}" FontFamily="Cascadia Mono, Consolas"
+                             FontSize="11.5" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,5,0">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource Text.Faint}" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding HasSummaryButtons}" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                  <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding SummaryButtonLabel}" FontSize="11.5"
+                             Foreground="{DynamicResource Text.Muted}" VerticalAlignment="Center" />
+                </StackPanel>
+              </Border>
+
+              <!-- Privacy scrubbed indicator -->
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2,0,2">
+                <TextBlock Text="{x:Static theme:Glyphs.Shield}" FontFamily="{StaticResource Font.Icons}"
+                           FontSize="11.5" Foreground="{StaticResource Signal.Good}" Opacity="0.85"
+                           VerticalAlignment="Center" Margin="0,0,5,0" />
+                <TextBlock Style="{StaticResource Text.Caption}" Text="Privacy scrubbed" FontSize="11.5"
+                           Foreground="{DynamicResource Text.Muted}" VerticalAlignment="Center" />
+              </StackPanel>
+            </WrapPanel>
+
             <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding ExportMessage}"
-                       Foreground="{StaticResource Signal.Good}" Margin="0,2,0,0" />
+                       Foreground="{StaticResource Signal.Good}" Margin="0,4,0,0"
+                       Visibility="{Binding HasExportMessage, Converter={StaticResource BoolToVis}}" />
           </StackPanel>
         </DockPanel>
       </Border>
@@ -277,6 +385,36 @@
                   </ProgressBar.Template>
                 </ProgressBar>
               </StackPanel>
+
+              <!-- Guided Undo / Redo bar -->
+              <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Surface.Divider}" BorderThickness="0,1,0,0"
+                      Padding="4,8,4,2" Margin="2,6,2,0">
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="6" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <Button Grid.Column="0" Style="{StaticResource Dev.Button}" Padding="10,6"
+                          IsEnabled="{Binding CanUndoGuided}" Command="{Binding UndoGuidedCommand}"
+                          ToolTip="{Binding UndoGuidedTooltip}" ToolTipService.ShowOnDisabled="True">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <TextBlock Text="{x:Static theme:Glyphs.Undo}" FontFamily="{StaticResource Font.Icons}"
+                                 FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0" />
+                      <TextBlock Text="Undo" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
+                  <Button Grid.Column="2" Style="{StaticResource Dev.Button}" Padding="10,6"
+                          IsEnabled="{Binding CanRedoGuided}" Command="{Binding RedoGuidedCommand}"
+                          ToolTip="{Binding RedoGuidedTooltip}" ToolTipService.ShowOnDisabled="True">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <TextBlock Text="{x:Static theme:Glyphs.Redo}" FontFamily="{StaticResource Font.Icons}"
+                                 FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0" />
+                      <TextBlock Text="Redo" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
+                </Grid>
+              </Border>
 
               <ListBox ItemsSource="{Binding Steps}" SelectedItem="{Binding SelectedStep, Mode=TwoWay}"
                        Background="Transparent" BorderThickness="0"
@@ -432,47 +570,12 @@
             <StackPanel>
               <Border Style="{StaticResource Dev.Card}">
                 <StackPanel>
-                  <!-- Step metadata & status badges -->
-                  <DockPanel Margin="0,0,0,10">
-                    <Border DockPanel.Dock="Right" Background="#1F3DDC97" BorderBrush="#553DDC97"
-                            BorderThickness="1" CornerRadius="8" Padding="8,2" VerticalAlignment="Center"
-                            Visibility="{Binding SelectedStep.IsCaptured, Converter={StaticResource BoolToVis}}">
-                      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="{x:Static theme:Glyphs.Tick}" FontFamily="{StaticResource Font.Icons}"
-                                   FontSize="10" FontWeight="Bold" Foreground="{StaticResource Signal.Good}"
-                                   VerticalAlignment="Center" Margin="0,0,5,0" />
-                        <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding SelectedStep.Status}"
-                                   Foreground="{StaticResource Signal.Good}" FontWeight="SemiBold" FontSize="11" />
-                      </StackPanel>
-                    </Border>
-                    <Border DockPanel.Dock="Right" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Panel.Edge}"
-                            BorderThickness="1" CornerRadius="8" Padding="8,2" VerticalAlignment="Center"
-                            Visibility="{Binding SelectedStep.IsSkipped, Converter={StaticResource BoolToVis}}">
-                      <TextBlock Style="{StaticResource Text.Caption}" Text="Skipped" FontSize="11" />
-                    </Border>
-                    <Border DockPanel.Dock="Right" Background="{x:Static theme:Accent.Tint}" BorderBrush="{x:Static theme:Accent.Wash}"
-                            BorderThickness="1" CornerRadius="8" Padding="8,2" VerticalAlignment="Center"
-                            Visibility="{Binding SelectedStep.ShowStartBadge, Converter={StaticResource BoolToVis}}">
-                      <TextBlock Style="{StaticResource Text.Caption}" Text="START HERE"
-                                 Foreground="{x:Static theme:Accent.Brush}" FontWeight="Bold" FontSize="10" />
-                    </Border>
-                    <Border DockPanel.Dock="Right" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Panel.Edge}"
-                            BorderThickness="1" CornerRadius="8" Padding="8,2" VerticalAlignment="Center"
-                            Visibility="{Binding SelectedStep.ShowOptionalBadge, Converter={StaticResource BoolToVis}}">
-                      <TextBlock Style="{StaticResource Text.Caption}" Text="OPTIONAL"
-                                 Foreground="{DynamicResource Text.Muted}" FontWeight="SemiBold" FontSize="10" />
-                    </Border>
-
-                    <TextBlock Style="{StaticResource Text.Heading}" Margin="0" VerticalAlignment="Center">
-                      <Run Text="STEP " /><Run Text="{Binding SelectedStep.Number, Mode=OneWay}" /><Run Text=" OF " /><Run Text="{Binding Steps.Count, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding SelectedStep.Category, Mode=OneWay}" />
-                    </TextBlock>
-                  </DockPanel>
-
-                  <!-- Step title header with icon & plain-English goal -->
+                  <!-- Step title header with icon, plain-English goal & status badges -->
                   <Grid Margin="0,0,0,12">
                     <Grid.ColumnDefinitions>
                       <ColumnDefinition Width="Auto" />
                       <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10"
                             Background="{x:Static theme:Accent.Tint}" BorderBrush="{x:Static theme:Accent.Wash}"
@@ -488,6 +591,30 @@
                                  Foreground="{DynamicResource Text.Muted}" Text="{Binding SelectedStep.Subtitle}"
                                  TextWrapping="Wrap" LineHeight="18" Margin="0,3,0,0" />
                     </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
+                      <Border Background="#1F3DDC97" BorderBrush="#553DDC97"
+                              BorderThickness="1" CornerRadius="8" Padding="8,2" Margin="10,2,0,0" VerticalAlignment="Center"
+                              Visibility="{Binding SelectedStep.IsCaptured, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                          <TextBlock Text="{x:Static theme:Glyphs.Tick}" FontFamily="{StaticResource Font.Icons}"
+                                     FontSize="10" FontWeight="Bold" Foreground="{StaticResource Signal.Good}"
+                                     VerticalAlignment="Center" Margin="0,0,5,0" />
+                          <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding SelectedStep.Status}"
+                                     Foreground="{StaticResource Signal.Good}" FontWeight="SemiBold" FontSize="11" />
+                        </StackPanel>
+                      </Border>
+                      <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Panel.Edge}"
+                              BorderThickness="1" CornerRadius="8" Padding="8,2" Margin="10,2,0,0" VerticalAlignment="Center"
+                              Visibility="{Binding SelectedStep.IsSkipped, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Style="{StaticResource Text.Caption}" Text="Skipped" FontSize="11" />
+                      </Border>
+                      <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Panel.Edge}"
+                              BorderThickness="1" CornerRadius="8" Padding="8,2" Margin="10,2,0,0" VerticalAlignment="Center"
+                              Visibility="{Binding SelectedStep.ShowOptionalBadge, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Style="{StaticResource Text.Caption}" Text="OPTIONAL"
+                                   Foreground="{DynamicResource Text.Muted}" FontWeight="SemiBold" FontSize="10" />
+                      </Border>
+                    </StackPanel>
                   </Grid>
 
                   <!-- Quick-glance target values to apply -->
@@ -501,7 +628,7 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
-                        <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Panel.Edge}"
+                        <Border Background="{DynamicResource Dev.SubCard}" BorderBrush="{DynamicResource Panel.Edge}"
                                 BorderThickness="1" CornerRadius="8" Padding="9,4,6,4" Margin="0,0,8,6">
                           <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Style="{StaticResource Text.Caption}" FontSize="11.5"
@@ -526,7 +653,7 @@
                   </ItemsControl>
 
                   <!-- Structured numbered checklist ("What to do") -->
-                  <Border Background="#0AFFFFFF" BorderBrush="{DynamicResource Surface.Divider}"
+                  <Border Background="{DynamicResource Dev.SubCard}" BorderBrush="{DynamicResource Surface.Divider}"
                           BorderThickness="1" CornerRadius="11" Padding="14,11,14,5" Margin="0,2,0,10">
                     <StackPanel>
                       <TextBlock Style="{StaticResource Text.Heading}" Text="WHAT TO DO" FontSize="10.5" Margin="0,0,0,9" />
@@ -668,6 +795,13 @@
                                          Foreground="{DynamicResource Text.Muted}" Text="{Binding CodeTag}"
                                          VerticalAlignment="Center" />
                             </Border>
+                            <Border Background="#223DDC97" BorderBrush="#663DDC97" BorderThickness="1"
+                                    CornerRadius="8" Padding="5,0.5" Margin="6,0,0,0" VerticalAlignment="Center"
+                                    Visibility="{Binding HasCaptured, Converter={StaticResource BoolToVis}}">
+                              <TextBlock FontFamily="{StaticResource Font.Words}" FontSize="10" FontWeight="Bold"
+                                         Foreground="{StaticResource Signal.Good}" Text="{Binding CountText}"
+                                         VerticalAlignment="Center" />
+                            </Border>
                           </StackPanel>
                         </DataTemplate>
                       </ListBox.ItemTemplate>
@@ -677,6 +811,20 @@
                       <ListBox ItemsSource="{Binding ButtonFeed}" Background="Transparent" BorderThickness="0"
                                Foreground="#FFE6ECF5" FontFamily="Consolas" FontSize="11.5" />
                     </Border>
+                    <WrapPanel Orientation="Horizontal" Margin="0,8,0,0">
+                      <Button Style="{StaticResource Dev.Button}" Padding="11,6" Margin="0,0,8,4"
+                              Content="Undo Last Event"
+                              ToolTip="Remove the most recently captured button event"
+                              ToolTipService.ShowOnDisabled="True"
+                              IsEnabled="{Binding CanUndoLastButtonEvent}"
+                              Command="{Binding UndoLastButtonEventCommand}" />
+                      <Button Style="{StaticResource Dev.Button}" Padding="11,6" Margin="0,0,0,4"
+                              Content="{Binding ClearSelectedPromptLabel}"
+                              ToolTip="Clear captured events for the selected button prompt so you can record it again"
+                              ToolTipService.ShowOnDisabled="True"
+                              IsEnabled="{Binding CanClearSelectedButtonPrompt}"
+                              Command="{Binding ClearSelectedButtonPromptCommand}" />
+                    </WrapPanel>
                   </StackPanel>
 
                   <!-- Optional note (for non-button steps) -->
@@ -699,8 +847,9 @@
                              BorderBrush="{DynamicResource Panel.Edge}" Padding="10,7" Margin="0,0,0,12" FontSize="13" />
                   </StackPanel>
 
-                  <StackPanel Orientation="Horizontal">
-                    <Button Content="Capture Step" Margin="0,0,8,0"
+                  <WrapPanel Orientation="Horizontal">
+                    <Button Content="{Binding CaptureButtonLabel}" Margin="0,0,8,6"
+                            ToolTip="{Binding CaptureButtonTooltip}"
                             IsEnabled="{Binding IsNotBusy}" Command="{Binding CaptureStepCommand}">
                       <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource Dev.PrimaryButton}">
@@ -713,13 +862,17 @@
                         </Style>
                       </Button.Style>
                     </Button>
-                    <Button Style="{StaticResource Dev.Button}" Content="Skip Step" Margin="0,0,8,0"
+                    <Button Style="{StaticResource Dev.Button}" Content="{Binding ClearStepButtonLabel}" Margin="0,0,8,6"
+                            ToolTip="Remove this step's captured or skipped state so you can redo it cleanly"
+                            Visibility="{Binding ShowClearSelectedStep, Converter={StaticResource BoolToVis}}"
+                            IsEnabled="{Binding CanClearSelectedStep}" Command="{Binding ClearStepCommand}" />
+                    <Button Style="{StaticResource Dev.Button}" Content="Skip Step" Margin="0,0,8,6"
                             IsEnabled="{Binding IsNotBusy}" Command="{Binding SkipStepCommand}" />
-                    <Button Style="{StaticResource Dev.Button}" Content="Previous" Margin="0,0,8,0"
+                    <Button Style="{StaticResource Dev.Button}" Content="Previous" Margin="0,0,8,6"
                             IsEnabled="{Binding CanGoPrevious}" Command="{Binding PreviousStepCommand}" />
-                    <Button Style="{StaticResource Dev.Button}" Content="Next"
+                    <Button Style="{StaticResource Dev.Button}" Content="Next" Margin="0,0,0,6"
                             IsEnabled="{Binding CanGoNext}" Command="{Binding NextStepCommand}" />
-                  </StackPanel>
+                  </WrapPanel>
                 </StackPanel>
               </Border>
 

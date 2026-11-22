@@ -55,6 +55,8 @@ public sealed class GuidedStepItem : Observable
 
     public string Detail { get; set => Set(ref field, value); } = "";
 
+    public string UserNote { get; set => Set(ref field, value); } = "";
+
     public bool IsCaptured
     {
         get;
@@ -63,7 +65,6 @@ public sealed class GuidedStepItem : Observable
             if (Set(ref field, value))
             {
                 Notify(nameof(SidebarStatus));
-                Notify(nameof(ShowStartBadge));
                 Notify(nameof(ShowOptionalBadge));
             }
         }
@@ -77,7 +78,6 @@ public sealed class GuidedStepItem : Observable
             if (Set(ref field, value))
             {
                 Notify(nameof(SidebarStatus));
-                Notify(nameof(ShowStartBadge));
                 Notify(nameof(ShowOptionalBadge));
             }
         }
@@ -91,7 +91,6 @@ public sealed class GuidedStepItem : Observable
         IsOptional ? "Pending · Optional" :
         Status;
 
-    public bool ShowStartBadge => IsBaselineStep && !IsCaptured && !IsSkipped;
     public bool ShowOptionalBadge => IsOptional && !IsCaptured && !IsSkipped;
 }
 
@@ -103,6 +102,24 @@ public sealed class GuidedStepItem : Observable
 public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 {
     private const int MaxButtonEvents = 5000;
+    private const int MaxHistoryEntries = 50;
+    private const string LiveWatchPromptId = "live_watch";
+
+    private sealed record GuidedStepState(
+        bool IsCaptured,
+        bool IsSkipped,
+        string Status,
+        string Detail,
+        string UserNote);
+
+    private sealed record GuidedHistoryEntry(
+        string Description,
+        int SelectedStepIndex,
+        CombinedStateSnapshot? Baseline,
+        Dictionary<string, CombinedStateSnapshot> GuidedSnapshots,
+        Dictionary<string, CaptureDiffEntry> GuidedDiffs,
+        Dictionary<string, GuidedStepState> StepStates,
+        List<CapturedButtonEvent> GuidedButtonEvents);
 
     private readonly HelperClient _helper;
     private readonly Dispatcher _dispatcher;
@@ -114,17 +131,22 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
     private DisplayInventorySnapshot? _display;
     private HardwareEnvironmentCheck? _envCheck;
     private CombinedStateSnapshot? _baseline;
+    private CombinedStateSnapshot? _fallbackBaseline;
     private CombinedStateSnapshot? _watchPrevious;
 
     private readonly HashSet<string> _volatileFirmwareKeys = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<int> _volatileEcOffsets = [];
+    private readonly Dictionary<string, CombinedStateSnapshot> _guidedSnapshots = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CaptureDiffEntry> _guidedDiffs = new(StringComparer.Ordinal);
     private readonly List<CaptureDiffEntry> _watchDiffs = [];
     private readonly List<CapturedButtonEvent> _buttonEvents = [];
+    private readonly List<GuidedHistoryEntry> _undoStack = [];
+    private readonly List<GuidedHistoryEntry> _redoStack = [];
 
     private ButtonCaptureSession? _buttonSession;
     private CancellationTokenSource? _watchCts;
     private int _watchChangeIndex;
+    private bool _listeningUndoRecorded;
     private bool _disposed;
 
     public DeviceDiscoveryViewModel(HelperClient helper, Dispatcher dispatcher)
@@ -151,7 +173,12 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 
         RunQuickScanCommand = new Command(async () => await RunQuickScanAsync());
         CaptureStepCommand = new Command(async () => await CaptureCurrentStepAsync());
+        ClearStepCommand = new Command(ClearCurrentStep);
         SkipStepCommand = new Command(SkipCurrentStep);
+        UndoGuidedCommand = new Command(UndoGuided);
+        RedoGuidedCommand = new Command(RedoGuided);
+        UndoLastButtonEventCommand = new Command(UndoLastButtonEvent);
+        ClearSelectedButtonPromptCommand = new Command(ClearSelectedButtonPrompt);
         PreviousStepCommand = new Command(() => SelectStepIndex(SelectedStepIndex - 1));
         NextStepCommand = new Command(() => SelectStepIndex(SelectedStepIndex + 1));
         ToggleButtonListeningCommand = new Command(ToggleButtonListening);
@@ -175,8 +202,16 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         get;
         set
         {
-            if (Set(ref field, value) && _buttonSession is not null)
-                _buttonSession.ActivePromptId = value.Id;
+            if (value is null) return;
+            if (Set(ref field, value))
+            {
+                if (_buttonSession is not null && !IsWatching)
+                {
+                    _buttonSession.ActivePromptId = value.Id;
+                    _listeningUndoRecorded = false;
+                }
+                NotifyButtonActionState();
+            }
         }
     }
 
@@ -209,7 +244,13 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         get;
         private set
         {
-            if (Set(ref field, value)) Notify(nameof(IsNotBusy));
+            if (Set(ref field, value))
+            {
+                Notify(nameof(IsNotBusy));
+                NotifyGuidedActionState();
+                NotifyHistoryState();
+                NotifyButtonActionState();
+            }
         }
     }
 
@@ -218,8 +259,25 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
     public string StatusBanner { get; private set => Set(ref field, value); } =
         "100% read-only. Nothing is written to firmware, registers, or controller flash.";
 
-    public string SummaryPill { get; private set => Set(ref field, value); } = "No data collected yet";
-    public string ExportMessage { get; private set => Set(ref field, value); } = "";
+    public int SummaryGuidedCount { get; private set => Set(ref field, value); }
+    public bool HasSummaryGuided => SummaryGuidedCount > 0;
+    public int SummaryWatchCount { get; private set => Set(ref field, value); }
+    public bool HasSummaryWatch => SummaryWatchCount > 0;
+    public string SummaryWatchLabel => SummaryWatchCount == 1 ? "watch diff" : "watch diffs";
+    public int SummaryButtonCount { get; private set => Set(ref field, value); }
+    public bool HasSummaryButtons => SummaryButtonCount > 0;
+    public string SummaryButtonLabel => SummaryButtonCount == 1 ? "button event" : "button events";
+
+    public string ExportMessage
+    {
+        get;
+        private set
+        {
+            if (Set(ref field, value)) Notify(nameof(HasExportMessage));
+        }
+    } = "";
+
+    public bool HasExportMessage => !string.IsNullOrWhiteSpace(ExportMessage);
 
     // Quick scan summary fields
     public bool HasQuickScan { get; private set => Set(ref field, value); }
@@ -246,6 +304,9 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
                 Notify(nameof(CanGoNext));
                 Notify(nameof(SelectedStepDiffPreview));
                 Notify(nameof(IsButtonStepSelected));
+                Notify(nameof(StepUserNote));
+                NotifyGuidedActionState();
+                NotifyButtonActionState();
             }
         }
     }
@@ -254,6 +315,31 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
     public bool CanGoPrevious => SelectedStepIndex > 0;
     public bool CanGoNext => SelectedStepIndex < Steps.Count - 1;
     public bool IsButtonStepSelected => SelectedStep.IsButtonCaptureStep;
+
+    public string CaptureButtonLabel => SelectedStep.IsCaptured ? "Recapture Step" : "Capture Step";
+    public string CaptureButtonTooltip => SelectedStep.IsCaptured
+        ? "Re-run read-only capture for this step and replace its previous snapshot"
+        : "Capture read-only hardware state for this step";
+
+    public bool ShowClearSelectedStep => SelectedStep.IsCaptured || SelectedStep.IsSkipped;
+    public bool CanClearSelectedStep => IsNotBusy && ShowClearSelectedStep;
+    public string ClearStepButtonLabel => SelectedStep.IsSkipped ? "Undo Skip" : "Clear Capture";
+
+    public bool CanUndoGuided => IsNotBusy && _undoStack.Count > 0;
+    public bool CanRedoGuided => IsNotBusy && _redoStack.Count > 0;
+    public string UndoGuidedTooltip => _undoStack.Count > 0
+        ? $"Undo {_undoStack[^1].Description} (Ctrl+Z)"
+        : "Nothing to undo (Ctrl+Z)";
+    public string RedoGuidedTooltip => _redoStack.Count > 0
+        ? $"Redo {_redoStack[^1].Description} (Ctrl+Y)"
+        : "Nothing to redo (Ctrl+Y)";
+
+    private int GuidedButtonEventCount => _buttonEvents.Count(e => !IsLiveWatchEvent(e));
+    public bool CanUndoLastButtonEvent => IsNotBusy && GuidedButtonEventCount > 0;
+    public bool CanClearSelectedButtonPrompt => IsNotBusy && SelectedButtonPrompt.CapturedCount > 0;
+    public string ClearSelectedPromptLabel => SelectedButtonPrompt.CapturedCount > 0
+        ? $"Clear Selected ({SelectedButtonPrompt.CapturedCount})"
+        : "Clear Selected";
 
     public int GuidedCapturedCount => Steps.Count(s => s.IsCaptured);
     public bool HasGuidedProgress => GuidedCapturedCount > 0;
@@ -269,16 +355,43 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         }
     }
 
-    public string StepUserNote { get; set => Set(ref field, value); } = "";
+    public string StepUserNote
+    {
+        get => SelectedStep.UserNote;
+        set
+        {
+            if (SelectedStep.UserNote == value) return;
+            SelectedStep.UserNote = value;
+            Notify(nameof(StepUserNote));
+
+            if (!SelectedStep.IsButtonCaptureStep && _guidedDiffs.TryGetValue(SelectedStep.Id, out var existing))
+            {
+                var trimmed = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+                if (!string.Equals(existing.UserNote, trimmed, StringComparison.Ordinal))
+                    _guidedDiffs[SelectedStep.Id] = existing with { UserNote = trimmed };
+            }
+        }
+    }
 
     public string SelectedStepDiffPreview
     {
         get
         {
             if (SelectedStep.IsButtonCaptureStep)
-                return _buttonEvents.Count == 0
-                    ? "Start listening and press each dedicated hardware button on the handheld."
-                    : $"{_buttonEvents.Count} button event(s) captured across WMI / Keyboard / HID / XInput.";
+            {
+                var guidedCount = GuidedButtonEventCount;
+                if (guidedCount == 0)
+                    return SelectedStep.IsSkipped
+                        ? "Step skipped."
+                        : "Start listening and press each dedicated hardware button on the handheld.";
+
+                var breakdown = ButtonPrompts
+                    .Where(p => p.CapturedCount > 0)
+                    .Select(p => $"{p.Label} ({p.CodeTag}): {p.CapturedCount}");
+                return $"{guidedCount} button event(s) captured across WMI / Keyboard / HID / XInput."
+                    + Environment.NewLine
+                    + string.Join(" · ", breakdown);
+            }
 
             if (!_guidedDiffs.TryGetValue(SelectedStep.Id, out var diff))
                 return SelectedStep.IsBaselineStep
@@ -319,7 +432,12 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 
     public ICommand RunQuickScanCommand { get; }
     public ICommand CaptureStepCommand { get; }
+    public ICommand ClearStepCommand { get; }
     public ICommand SkipStepCommand { get; }
+    public ICommand UndoGuidedCommand { get; }
+    public ICommand RedoGuidedCommand { get; }
+    public ICommand UndoLastButtonEventCommand { get; }
+    public ICommand ClearSelectedButtonPromptCommand { get; }
     public ICommand PreviousStepCommand { get; }
     public ICommand NextStepCommand { get; }
     public ICommand ToggleButtonListeningCommand { get; }
@@ -331,7 +449,6 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
     public void SelectStepIndex(int index)
     {
         if (index < 0 || index >= Steps.Count) return;
-        StepUserNote = "";
         SelectedStep = Steps[index];
     }
 
@@ -363,10 +480,10 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 
             AbsorbVolatileMask(_inventory);
 
-            // Also seed baseline automatically if not yet captured.
-            if (_baseline is null)
+            // Also seed fallback baseline automatically if not yet captured.
+            if (_fallbackBaseline is null || _baseline is null)
             {
-                _baseline = new CombinedStateSnapshot
+                var quickBaseline = new CombinedStateSnapshot
                 {
                     CapturedAtUtc = DateTimeOffset.UtcNow,
                     Elevated = await DeviceSupportExporter.CollectFastStateAsync(_helper, cancel),
@@ -374,13 +491,15 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
                     CurrentRefreshHz = _display.CurrentRefreshHz,
                 };
                 if (_disposed) return;
+                _fallbackBaseline ??= quickBaseline;
+                _baseline ??= quickBaseline;
             }
 
             PopulateQuickSummary();
             HasQuickScan = true;
             StatusBanner = _inventory.Elevated
                 ? "Quick scan complete (elevated firmware + full HID/WMI/OEM capture)."
-                : "Quick scan complete (unelevated fallback — start TsumeHelper service for full EC/WMI reads).";
+                : "Quick scan complete (unelevated fallback; start TsumeHelper service for full EC/WMI reads).";
         }
         catch (OperationCanceledException) when (_disposed)
         {
@@ -438,8 +557,11 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         IsBusy = true;
 
         var step = SelectedStep;
+        var wasCaptured = step.IsCaptured;
         var note = string.IsNullOrWhiteSpace(StepUserNote) ? null : StepUserNote.Trim();
-        StatusBanner = $"Capturing {step.Title} (read-only)…";
+        StatusBanner = wasCaptured
+            ? $"Recapturing {step.Title} (read-only)…"
+            : $"Capturing {step.Title} (read-only)…";
 
         var cancel = _lifetimeCts.Token;
         try
@@ -461,6 +583,9 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             if (_disposed) return;
             _hid = current.Hid ?? _hid;
 
+            PushUndoState(wasCaptured ? $"recapture {step.Title}" : $"capture {step.Title}");
+            _guidedSnapshots[step.Id] = current;
+
             if (step.IsBaselineStep || _baseline is null)
             {
                 _baseline = current;
@@ -477,7 +602,13 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
                 step.IsSkipped = false;
                 step.Status = "Captured";
                 step.Detail = current.Elevated is null ? "HID/Display baseline (helper offline)" : "Baseline recorded";
-                StatusBanner = "Baseline captured. Proceed to the next step.";
+
+                var recomputed = step.IsBaselineStep ? RecomputeGuidedDiffsAgainstBaseline() : 0;
+                StatusBanner = recomputed > 0
+                    ? $"Baseline {(wasCaptured ? "recaptured" : "captured")}. Recomputed diffs for {recomputed} other captured step(s)."
+                    : wasCaptured
+                        ? "Baseline recaptured. Proceed to the next step."
+                        : "Baseline captured. Proceed to the next step.";
             }
             else
             {
@@ -497,9 +628,12 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
                 var count = diff.NonVolatileChangeCount;
                 step.Status = count > 0 ? $"Captured (+{count})" : "Captured (0 diffs)";
                 step.Detail = count > 0 ? $"{count} non-volatile change(s)" : "No non-volatile changes";
-                StatusBanner = $"{step.Title}: {count} non-volatile difference(s) recorded.";
+                StatusBanner = wasCaptured
+                    ? $"{step.Title} recaptured: {count} non-volatile difference(s) recorded."
+                    : $"{step.Title}: {count} non-volatile difference(s) recorded.";
             }
 
+            NotifyGuidedActionState();
             Notify(nameof(SelectedStepDiffPreview));
         }
         catch (OperationCanceledException) when (_disposed)
@@ -519,15 +653,80 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         }
     }
 
-    private void SkipCurrentStep()
+    private void ClearCurrentStep()
     {
+        if (IsBusy || _disposed) return;
         var step = SelectedStep;
+        if (!step.IsCaptured && !step.IsSkipped) return;
+
+        var wasSkipped = step.IsSkipped;
         if (step.IsButtonCaptureStep)
         {
             StopButtonListening();
+            PushUndoState(wasSkipped ? $"clear skip for {step.Title}" : $"clear {step.Title}");
+            var removed = _buttonEvents.RemoveAll(e => !IsLiveWatchEvent(e));
+            step.IsCaptured = false;
+            step.IsSkipped = false;
+            step.Status = "Pending";
+            step.Detail = "";
+            RebuildButtonFeedAndCounts();
+            StatusBanner = wasSkipped
+                ? $"Cleared skip for {step.Title}."
+                : $"Cleared {removed} guided button event(s).";
         }
         else
         {
+            PushUndoState(wasSkipped ? $"clear skip for {step.Title}" : $"clear {step.Title}");
+            _guidedDiffs.Remove(step.Id);
+            var hadSnapshot = _guidedSnapshots.Remove(step.Id, out var removedSnapshot);
+            step.IsCaptured = false;
+            step.IsSkipped = false;
+            step.Status = "Pending";
+            step.Detail = "";
+            step.UserNote = "";
+            Notify(nameof(StepUserNote));
+
+            if (step.IsBaselineStep || (hadSnapshot && ReferenceEquals(_baseline, removedSnapshot)))
+            {
+                _baseline = _fallbackBaseline;
+                var recomputed = _baseline is not null ? RecomputeGuidedDiffsAgainstBaseline() : 0;
+                StatusBanner = _baseline is null && _guidedSnapshots.Count > 0
+                    ? "Baseline cleared. Recapture Step 1 to re-diff your other captured steps."
+                    : recomputed > 0
+                        ? $"Baseline cleared. Recomputed {recomputed} step(s) against Quick Scan baseline."
+                        : wasSkipped
+                            ? $"Cleared skip for {step.Title}."
+                            : $"Cleared capture for {step.Title}.";
+            }
+            else
+            {
+                StatusBanner = wasSkipped
+                    ? $"Cleared skip for {step.Title}."
+                    : $"Cleared capture for {step.Title}.";
+            }
+        }
+
+        NotifyGuidedActionState();
+        NotifyButtonActionState();
+        Notify(nameof(SelectedStepDiffPreview));
+        UpdateSummaryPill();
+    }
+
+    private void SkipCurrentStep()
+    {
+        if (IsBusy || _disposed) return;
+        var step = SelectedStep;
+        PushUndoState($"skip {step.Title}");
+
+        if (step.IsButtonCaptureStep)
+        {
+            StopButtonListening();
+            _buttonEvents.RemoveAll(e => !IsLiveWatchEvent(e));
+            RebuildButtonFeedAndCounts();
+        }
+        else
+        {
+            var hadSnapshot = _guidedSnapshots.Remove(step.Id, out var removedSnapshot);
             _guidedDiffs[step.Id] = new CaptureDiffEntry
             {
                 StepId = step.Id,
@@ -535,17 +734,270 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
                 Kind = "skipped",
                 UserNote = string.IsNullOrWhiteSpace(StepUserNote) ? null : StepUserNote.Trim(),
             };
+
+            if (step.IsBaselineStep || (hadSnapshot && ReferenceEquals(_baseline, removedSnapshot)))
+            {
+                _baseline = _fallbackBaseline;
+                if (_baseline is not null) RecomputeGuidedDiffsAgainstBaseline();
+            }
         }
 
         step.IsSkipped = true;
         step.IsCaptured = false;
         step.Status = "Skipped";
         step.Detail = "Skipped";
+        NotifyGuidedActionState();
+        NotifyButtonActionState();
         Notify(nameof(SelectedStepDiffPreview));
         UpdateSummaryPill();
+        StatusBanner = $"Skipped {step.Title}.";
 
         if (CanGoNext) SelectStepIndex(SelectedStepIndex + 1);
     }
+
+    private void UndoGuided()
+    {
+        if (IsBusy || _disposed || _undoStack.Count == 0) return;
+        if (IsButtonListening) StopButtonListening();
+
+        var previous = _undoStack[^1];
+        _undoStack.RemoveAt(_undoStack.Count - 1);
+
+        _redoStack.Add(CaptureHistoryEntry(previous.Description));
+        if (_redoStack.Count > MaxHistoryEntries) _redoStack.RemoveAt(0);
+
+        RestoreHistoryEntry(previous);
+        StatusBanner = $"Undid {previous.Description}.";
+    }
+
+    private void RedoGuided()
+    {
+        if (IsBusy || _disposed || _redoStack.Count == 0) return;
+        if (IsButtonListening) StopButtonListening();
+
+        var next = _redoStack[^1];
+        _redoStack.RemoveAt(_redoStack.Count - 1);
+
+        _undoStack.Add(CaptureHistoryEntry(next.Description));
+        if (_undoStack.Count > MaxHistoryEntries) _undoStack.RemoveAt(0);
+
+        RestoreHistoryEntry(next);
+        StatusBanner = $"Redid {next.Description}.";
+    }
+
+    private void UndoLastButtonEvent()
+    {
+        if (IsBusy || _disposed) return;
+
+        var lastIndex = _buttonEvents.FindLastIndex(e => !IsLiveWatchEvent(e));
+        if (lastIndex < 0) return;
+
+        var removed = _buttonEvents[lastIndex];
+        PushUndoState($"remove button event ({removed.PromptId})");
+        _buttonEvents.RemoveAt(lastIndex);
+        _listeningUndoRecorded = false;
+
+        RebuildButtonFeedAndCounts();
+        SyncButtonStepStatus();
+        NotifyGuidedActionState();
+        NotifyButtonActionState();
+        Notify(nameof(SelectedStepDiffPreview));
+        UpdateSummaryPill();
+        StatusBanner = $"Removed last button event ({removed.PromptId} · {removed.Source}).";
+    }
+
+    private void ClearSelectedButtonPrompt()
+    {
+        if (IsBusy || _disposed) return;
+        var prompt = SelectedButtonPrompt;
+        if (prompt.CapturedCount == 0) return;
+
+        PushUndoState($"clear {prompt.Label} ({prompt.CodeTag})");
+        var removed = _buttonEvents.RemoveAll(e => string.Equals(e.PromptId, prompt.Id, StringComparison.Ordinal));
+        _listeningUndoRecorded = false;
+
+        RebuildButtonFeedAndCounts();
+        SyncButtonStepStatus();
+        NotifyGuidedActionState();
+        NotifyButtonActionState();
+        Notify(nameof(SelectedStepDiffPreview));
+        UpdateSummaryPill();
+        StatusBanner = $"Cleared {removed} event(s) for {prompt.Label} ({prompt.CodeTag}).";
+    }
+
+    private int RecomputeGuidedDiffsAgainstBaseline()
+    {
+        if (_baseline is null) return 0;
+
+        var recomputed = 0;
+        foreach (var step in Steps)
+        {
+            if (step.IsBaselineStep || step.IsButtonCaptureStep) continue;
+            if (!_guidedSnapshots.TryGetValue(step.Id, out var snap)) continue;
+
+            var note = string.IsNullOrWhiteSpace(step.UserNote) ? null : step.UserNote.Trim();
+            var diff = DiscoveryDiffEngine.Compute(
+                step.Id,
+                step.Title,
+                kind: "guided",
+                _baseline,
+                snap,
+                _volatileFirmwareKeys,
+                _volatileEcOffsets,
+                note);
+
+            _guidedDiffs[step.Id] = diff;
+            step.IsCaptured = true;
+            step.IsSkipped = false;
+            var count = diff.NonVolatileChangeCount;
+            step.Status = count > 0 ? $"Captured (+{count})" : "Captured (0 diffs)";
+            step.Detail = count > 0 ? $"{count} non-volatile change(s)" : "No non-volatile changes";
+            recomputed++;
+        }
+
+        return recomputed;
+    }
+
+    private GuidedHistoryEntry CaptureHistoryEntry(string description)
+    {
+        var stepStates = new Dictionary<string, GuidedStepState>(Steps.Count, StringComparer.Ordinal);
+        foreach (var step in Steps)
+        {
+            stepStates[step.Id] = new GuidedStepState(
+                step.IsCaptured,
+                step.IsSkipped,
+                step.Status,
+                step.Detail,
+                step.UserNote);
+        }
+
+        return new GuidedHistoryEntry(
+            description,
+            SelectedStepIndex,
+            _baseline,
+            new Dictionary<string, CombinedStateSnapshot>(_guidedSnapshots, StringComparer.Ordinal),
+            new Dictionary<string, CaptureDiffEntry>(_guidedDiffs, StringComparer.Ordinal),
+            stepStates,
+            _buttonEvents.Where(e => !IsLiveWatchEvent(e)).ToList());
+    }
+
+    private void PushUndoState(string description)
+    {
+        _undoStack.Add(CaptureHistoryEntry(description));
+        if (_undoStack.Count > MaxHistoryEntries)
+            _undoStack.RemoveAt(0);
+        _redoStack.Clear();
+        NotifyHistoryState();
+    }
+
+    private void RestoreHistoryEntry(GuidedHistoryEntry entry)
+    {
+        _baseline = entry.Baseline;
+
+        _guidedSnapshots.Clear();
+        foreach (var kv in entry.GuidedSnapshots) _guidedSnapshots[kv.Key] = kv.Value;
+
+        _guidedDiffs.Clear();
+        foreach (var kv in entry.GuidedDiffs) _guidedDiffs[kv.Key] = kv.Value;
+
+        foreach (var step in Steps)
+        {
+            if (!entry.StepStates.TryGetValue(step.Id, out var st)) continue;
+            step.IsCaptured = st.IsCaptured;
+            step.IsSkipped = st.IsSkipped;
+            step.Status = st.Status;
+            step.Detail = st.Detail;
+            step.UserNote = st.UserNote;
+        }
+
+        var watchEvents = _buttonEvents.Where(IsLiveWatchEvent).ToList();
+        _buttonEvents.Clear();
+        _buttonEvents.AddRange(watchEvents);
+        _buttonEvents.AddRange(entry.GuidedButtonEvents);
+        _buttonEvents.Sort((a, b) => a.TimestampUtc.CompareTo(b.TimestampUtc));
+
+        RebuildButtonFeedAndCounts();
+
+        if (entry.SelectedStepIndex >= 0 && entry.SelectedStepIndex < Steps.Count)
+            SelectedStep = Steps[entry.SelectedStepIndex];
+
+        Notify(nameof(StepUserNote));
+        Notify(nameof(SelectedStepDiffPreview));
+        NotifyGuidedActionState();
+        NotifyButtonActionState();
+        NotifyHistoryState();
+        UpdateSummaryPill();
+    }
+
+    private void RebuildButtonFeedAndCounts()
+    {
+        ButtonFeed.Clear();
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        var guidedEvents = _buttonEvents.Where(e => !IsLiveWatchEvent(e)).ToList();
+
+        foreach (var ev in guidedEvents)
+            counts[ev.PromptId] = counts.TryGetValue(ev.PromptId, out var c) ? c + 1 : 1;
+
+        for (var i = guidedEvents.Count - 1; i >= 0 && ButtonFeed.Count < 200; i--)
+            ButtonFeed.Add(FormatButtonEventLine(guidedEvents[i]));
+
+        foreach (var prompt in ButtonPrompts)
+            prompt.CapturedCount = counts.TryGetValue(prompt.Id, out var c) ? c : 0;
+    }
+
+    private void SyncButtonStepStatus()
+    {
+        var buttonStep = Steps.FirstOrDefault(s => s.IsButtonCaptureStep);
+        if (buttonStep is null) return;
+
+        var count = GuidedButtonEventCount;
+        if (count == 0)
+        {
+            buttonStep.IsCaptured = false;
+            if (!buttonStep.IsSkipped)
+            {
+                buttonStep.Status = "Pending";
+                buttonStep.Detail = "";
+            }
+        }
+        else
+        {
+            buttonStep.IsCaptured = true;
+            buttonStep.IsSkipped = false;
+            buttonStep.Status = count == 1 ? "Captured (1 event)" : $"Captured ({count} events)";
+            buttonStep.Detail = $"{count} event(s)";
+        }
+    }
+
+    private void NotifyGuidedActionState()
+    {
+        Notify(nameof(CaptureButtonLabel));
+        Notify(nameof(CaptureButtonTooltip));
+        Notify(nameof(ShowClearSelectedStep));
+        Notify(nameof(CanClearSelectedStep));
+        Notify(nameof(ClearStepButtonLabel));
+    }
+
+    private void NotifyHistoryState()
+    {
+        Notify(nameof(CanUndoGuided));
+        Notify(nameof(CanRedoGuided));
+        Notify(nameof(UndoGuidedTooltip));
+        Notify(nameof(RedoGuidedTooltip));
+    }
+
+    private void NotifyButtonActionState()
+    {
+        Notify(nameof(CanUndoLastButtonEvent));
+        Notify(nameof(CanClearSelectedButtonPrompt));
+        Notify(nameof(ClearSelectedPromptLabel));
+    }
+
+    private static bool IsLiveWatchEvent(CapturedButtonEvent ev) =>
+        string.Equals(ev.PromptId, LiveWatchPromptId, StringComparison.Ordinal);
+
+    private static string FormatButtonEventLine(CapturedButtonEvent ev) =>
+        $"[+{ev.ElapsedMs,6} ms] [{ev.PromptId}] [{ev.Source}] {ev.Summary}";
 
     private void ToggleButtonListening()
     {
@@ -558,6 +1010,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
     private void StartButtonListening(string promptId)
     {
         StopButtonListening();
+        _listeningUndoRecorded = false;
 
         var wmiEvents = _inventory?.WmiClasses.Where(c => c.IsEvent).Select(c => (c.Namespace, c.Name));
         var vendorPages = _hid?.Collections.Where(c => c.UsagePage >= 0xFF00).Select(c => c.UsagePage);
@@ -577,6 +1030,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         _buttonSession.EventCaptured -= OnButtonEventCaptured;
         _buttonSession.Dispose();
         _buttonSession = null;
+        _listeningUndoRecorded = false;
         IsButtonListening = false;
     }
 
@@ -586,31 +1040,49 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         {
             if (_disposed) return;
 
+            var isWatch = IsLiveWatchEvent(ev);
+            if (!isWatch && !_listeningUndoRecorded)
+            {
+                var prompt = ButtonPrompts.FirstOrDefault(p => string.Equals(p.Id, ev.PromptId, StringComparison.Ordinal));
+                var label = prompt is null ? ev.PromptId : $"{prompt.Label} ({prompt.CodeTag})";
+                PushUndoState($"button capture ({label})");
+                _listeningUndoRecorded = true;
+            }
+
             if (_buttonEvents.Count >= MaxButtonEvents)
+            {
+                var evicted = _buttonEvents[0];
                 _buttonEvents.RemoveAt(0);
+                if (!IsLiveWatchEvent(evicted))
+                {
+                    var evictedPrompt = ButtonPrompts.FirstOrDefault(p => string.Equals(p.Id, evicted.PromptId, StringComparison.Ordinal));
+                    if (evictedPrompt is not null && evictedPrompt.CapturedCount > 0)
+                        evictedPrompt.CapturedCount--;
+                }
+            }
+
             _buttonEvents.Add(ev);
-            var line = $"[+{ev.ElapsedMs,6} ms] [{ev.PromptId}] [{ev.Source}] {ev.Summary}";
+            var line = FormatButtonEventLine(ev);
 
-            ButtonFeed.Insert(0, line);
-            if (ButtonFeed.Count > 200) ButtonFeed.RemoveAt(ButtonFeed.Count - 1);
-
-            if (IsWatching)
+            if (isWatch)
             {
                 LiveFeed.Insert(0, line);
                 if (LiveFeed.Count > 300) LiveFeed.RemoveAt(LiveFeed.Count - 1);
             }
-
-            var buttonStep = Steps.FirstOrDefault(s => s.IsButtonCaptureStep);
-            if (buttonStep is not null)
+            else
             {
-                buttonStep.IsCaptured = true;
-                buttonStep.IsSkipped = false;
-                buttonStep.Status = _buttonEvents.Count == 1
-                    ? "Captured (1 event)"
-                    : $"Captured ({_buttonEvents.Count} events)";
+                ButtonFeed.Insert(0, line);
+                if (ButtonFeed.Count > 200) ButtonFeed.RemoveAt(ButtonFeed.Count - 1);
+
+                var prompt = ButtonPrompts.FirstOrDefault(p => string.Equals(p.Id, ev.PromptId, StringComparison.Ordinal));
+                if (prompt is not null) prompt.CapturedCount++;
+
+                SyncButtonStepStatus();
+                NotifyGuidedActionState();
+                NotifyButtonActionState();
+                Notify(nameof(SelectedStepDiffPreview));
             }
 
-            Notify(nameof(SelectedStepDiffPreview));
             UpdateSummaryPill();
         });
     }
@@ -645,9 +1117,10 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 
             _watchPrevious = await DeviceSupportExporter.CaptureCombinedStateAsync(_helper, readVendorProfiles: true, cancel);
             if (_disposed) return;
+            _fallbackBaseline ??= _watchPrevious;
             _baseline ??= _watchPrevious;
 
-            StartButtonListening("live_watch");
+            StartButtonListening(LiveWatchPromptId);
 
             _watchCts = CancellationTokenSource.CreateLinkedTokenSource(cancel);
             IsWatching = true;
@@ -882,11 +1355,14 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 
     private void UpdateSummaryPill()
     {
-        var scan = HasQuickScan ? "Quick Scan ✓" : "Quick Scan –";
-        var guidedCount = _guidedDiffs.Values.Count(d => d.Kind is "guided" or "baseline");
-        var watchCount = _watchDiffs.Count;
-        var btnCount = _buttonEvents.Count;
-        SummaryPill = $"{scan}  ·  {guidedCount} guided  ·  {watchCount} watch diffs  ·  {btnCount} button events  ·  Privacy scrubbed";
+        SummaryGuidedCount = _guidedDiffs.Values.Count(d => d.Kind is "guided" or "baseline");
+        SummaryWatchCount = _watchDiffs.Count;
+        SummaryButtonCount = _buttonEvents.Count;
+        Notify(nameof(HasSummaryGuided));
+        Notify(nameof(HasSummaryWatch));
+        Notify(nameof(SummaryWatchLabel));
+        Notify(nameof(HasSummaryButtons));
+        Notify(nameof(SummaryButtonLabel));
         Notify(nameof(GuidedCapturedCount));
         Notify(nameof(HasGuidedProgress));
         Notify(nameof(GuidedProgressText));
@@ -1046,8 +1522,8 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
                     "Only have one slider or different min/max limits? Pick any two unequal numbers and write them in the note box below."),
                 new(3, "Wait about `2 seconds`, then click [[Capture Step]] below"),
             ],
-            WhyItMatters = "Using two unusual, unequal numbers (17 and 23) makes it unmistakable which hardware setting controls sustained power versus short-term boost power — and how watts are scaled.",
-            NoteHint = "Optional note — if you couldn't set 17 W / 23 W, type the exact wattages you used:",
+            WhyItMatters = "Using two unusual, unequal numbers (17 and 23) makes it unmistakable which hardware setting controls sustained power versus short-term boost power, and how watts are scaled.",
+            NoteHint = "Optional note (if you couldn't set 17 W / 23 W, type the exact wattages you used):",
         },
         new()
         {
@@ -1104,7 +1580,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             Number = 7,
             Category = "CONTROLLER",
             Glyph = Glyphs.Cursor,
-            Title = "Controller Mode — Desktop / Mouse",
+            Title = "Controller Mode: Desktop / Mouse",
             Subtitle = "Switch built-in controls from Gamepad to Desktop mode to see how switching works.",
             IsOptional = true,
             Targets =
@@ -1130,7 +1606,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             Number = 8,
             Category = "LIGHTING",
             Glyph = Glyphs.Lighting,
-            Title = "RGB Lighting — Solid Red (100%)",
+            Title = "RGB Lighting: Solid Red (100%)",
             Subtitle = "Set stick or button LEDs to pure full-brightness Red as the first color test.",
             IsOptional = true,
             Targets =
@@ -1156,7 +1632,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             Number = 9,
             Category = "LIGHTING",
             Glyph = Glyphs.Lighting,
-            Title = "RGB Lighting — Solid Blue (50%)",
+            Title = "RGB Lighting: Solid Blue (50%)",
             Subtitle = "Switch LEDs to half-brightness pure Blue to separate color from brightness.",
             IsOptional = true,
             Targets =
@@ -1173,7 +1649,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
                 new(3, "Click [[Capture Step]] below"),
             ],
             SkipHint = "No RGB lighting on this handheld? Click [[Skip Step]].",
-            WhyItMatters = "Comparing 100% Red against 50% Blue separates which bytes control the color from which byte controls brightness — and shows whether brightness scales from 0–100 or 0–255.",
+            WhyItMatters = "Comparing 100% Red against 50% Blue separates which bytes control the color from which byte controls brightness, and shows whether brightness scales from 0 to 100 or 0 to 255.",
             NoteHint = "Optional note (e.g., if brightness uses fixed levels like Low / Medium / High):",
         },
         new()
@@ -1237,7 +1713,27 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
     }
 }
 
-public sealed record ButtonPromptOption(string Id, string Label, string CodeTag)
+public sealed class ButtonPromptOption(string id, string label, string codeTag) : Observable
 {
+    public string Id { get; } = id;
+    public string Label { get; } = label;
+    public string CodeTag { get; } = codeTag;
+
+    public int CapturedCount
+    {
+        get;
+        set
+        {
+            if (Set(ref field, value))
+            {
+                Notify(nameof(HasCaptured));
+                Notify(nameof(CountText));
+            }
+        }
+    }
+
+    public bool HasCaptured => CapturedCount > 0;
+    public string CountText => CapturedCount.ToString();
+
     public override string ToString() => Label;
 }
