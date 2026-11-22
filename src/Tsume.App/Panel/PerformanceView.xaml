@@ -48,7 +48,7 @@
                               Value="{Binding Sustained}" />
 
         <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Boost}" Label="{x:Static lang:Strings.Boost}" Unit=" W"
-                              Minimum="{Binding MinWatts}"
+                              Minimum="{Binding MinBoostWatts}"
                               Maximum="{Binding MaxBoostWatts}"
                               LargeChange="1"
                               Value="{Binding Boost}"

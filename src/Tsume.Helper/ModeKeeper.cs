@@ -35,8 +35,15 @@ public sealed class ModeKeeper(IDevice device)
     /// <param name="occasion">Why now — "start-up", "wake" — for the log.</param>
     public void RestoreIfForgotten(string occasion)
     {
+        lock (DiscoveryWorker.KeeperGate)
         lock (_gate)
         {
+            if (DiscoveryWorker.IsMutatingFirmwareCheckRunning)
+            {
+                Log.Write($"Skipped mode restore on {occasion}: a firmware check is running.");
+                return;
+            }
+
             try
             {
                 if (Recall() is not { } chosen || !device.Profile.Offers(chosen.Mode) || device.MakerToolIsRunning) return;

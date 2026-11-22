@@ -272,3 +272,17 @@ and it can be read without elevation.
 | Does package power follow the limits? | boost limit: yes (20.0 W under Endurance). Sustained limit after the burst window: not yet watched |
 | Are writes refused while MSI Center M runs? | unknown — every check ran with it paused |
 | Unelevated calls refused | yes — hence the helper |
+
+## Claw 8 AI+ (A2VM, MS-1T52 — Intel Core Ultra 7 258V / Lunar Lake)
+
+Cross-referenced from **HandheldCompanion** (`ClawA2VM.cs` / `ClawA1M.cs`), Linux `msi-wmi-platform` / **hhd**, and Intel Core Ultra 7 258V specifications. Pending on-device `probe`, `write-check` and `mode-check` runs on real `MS-1T52` hardware.
+
+Differences from the Claw 8 EX (`MS-1T91`):
+
+- **Board model:** `MS-1T52` (EC firmware prefix `1T52EMS1`). Same `MSI_ACPI` WMI bridge and EC register map (`0x50`, `0x51`, `0x68`, `0x98`, `0xD2`, `0xD4`, `0xD7`).
+- **Manual shift code (`0xD2`):** `0x03` (`0xC3`), not `0x06` (`0xC6`, which is EX-only). Endurance (`0xC2`), Balanced (`0xC1`), and Performance (`0xC4`) match the EX.
+- **Power limits (Core Ultra 7 258V / Lunar Lake):**
+  - Ceiling is **8–30 W sustained (PL1)** and **9–37 W boost (PL2)**.
+  - **PL2 headroom (`MinBoostHeadroom = 1`):** Lunar Lake requires `PL2 >= PL1 + 1`; setting `PL1 == PL2` triggers a firmware/power-management throttling quirk. Tsume enforces `PL2 >= PL1 + 1` in `PowerRange.Clamp` (helper) and in the Manual and Presets sliders.
+  - Tsume presets: Endurance `8 W / 12 W`, Balanced `17 W / 20 W` (258V Processor Base Power sweet spot), Performance `30 W / 37 W` (full 258V PL1 / MTP), Manual default `17 W / 20 W`.
+- **Hardware buttons & controller:** Same WMI event codes (`0x29`, `0x58`). Quick Settings triggers cover both `Win+G` (BIOS 10F+) and `F16` (older A2VM BIOSes). Rear-button (`M1`/`M2` at `186`/`355`) and lighting (`586`) profile offsets match the EX on controller firmware `>= 2.17` (`0x0217`); early launch firmware `2.11` (`0x0211`) used legacy offsets and is guarded off from writes.

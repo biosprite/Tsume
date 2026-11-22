@@ -49,11 +49,22 @@ public sealed class ClawController : IDisposable
     {
         _handle = handle;
         _stream = new FileStream(handle, FileAccess.ReadWrite, bufferSize: 0, isAsync: true);
+        FirmwareVersionRaw = version;
         FirmwareVersion = $"{version >> 8:X}.{version & 0xFF:X2}";
     }
 
+    /// <summary>Raw USB <c>bcdDevice</c> firmware version, e.g. <c>0x0414</c> or <c>0x0217</c>.</summary>
+    public ushort FirmwareVersionRaw { get; }
+
     /// <summary>"4.14" — the controller firmware, from the USB descriptor.</summary>
     public string FirmwareVersion { get; }
+
+    /// <summary>
+    /// True when the controller firmware version is unknown (<c>0</c>) or an early launch firmware
+    /// (A1M &lt;= 1.63, Claw 8 AI+ 2.xx &lt; 2.17) whose profile map sits at legacy offsets.
+    /// </summary>
+    public bool UsesLegacyProfileLayout =>
+        FirmwareVersionRaw <= 0x0163 || (FirmwareVersionRaw >= 0x0200 && FirmwareVersionRaw < 0x0217);
 
     /// <summary>
     /// Opens the Claw controller's vendor collection, or returns null if there is none.
@@ -180,6 +191,8 @@ public sealed class ClawController : IDisposable
     /// </summary>
     public async Task<bool> WriteLightingAsync(int offset, ReadOnlyMemory<byte> data)
     {
+        if (UsesLegacyProfileLayout) return false;
+
         // Safety guard: nothing outside the lighting block may ever be written.
         if (offset < ProfileMap.LightingStart || offset + data.Length > ProfileMap.LightingEnd)
             throw new ArgumentOutOfRangeException(nameof(offset), "Only the lighting block may be written.");
@@ -190,6 +203,8 @@ public sealed class ClawController : IDisposable
     /// <summary>Writes a back button's remap block to RAM; rejects offsets outside <paramref name="profile"/>.</summary>
     public Task<bool> WriteBackButtonAsync(BackButtonsProfile profile, BackButtonDefinition button, ReadOnlyMemory<byte> data)
     {
+        if (UsesLegacyProfileLayout) return Task.FromResult(false);
+
         if (!profile.Buttons.Contains(button))
             throw new ArgumentOutOfRangeException(nameof(button), "Back button is not declared in this device's verified profile.");
         if (data.Length != profile.BlockLength)

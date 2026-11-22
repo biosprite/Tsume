@@ -22,6 +22,71 @@ namespace Tsume.App.Platform;
 public static class DeviceSupportExporter
 {
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly Journal FirmwareChecksLog = new("firmware-checks");
+
+    /// <summary>
+    /// Runs an MSI firmware verification check (<c>--probe</c>, <c>--write-check</c>, or <c>--mode-check</c>)
+    /// through the elevated helper (falling back to a one-shot UAC CLI invocation if the service is offline),
+    /// and appends the full report to <c>firmware-checks.log</c> so Share logs bundles it automatically.
+    /// </summary>
+    public static async Task<(bool Ok, string Report, bool MsiCenterWasRunning)> RunFirmwareCheckAsync(
+        HelperClient helper,
+        FirmwareCheckKind kind,
+        CancellationToken cancel = default)
+    {
+        var msiRunning = await Task.Run(() => MsiCenter.IsRunning, cancel);
+        var maxWait = kind == FirmwareCheckKind.ModeCheck ? TimeSpan.FromSeconds(75) : TimeSpan.FromSeconds(25);
+
+        var startRequest = new RunFirmwareCheck(kind, PollOnly: false);
+        var startReply = await helper.SendAsync(startRequest, cancel);
+        if (!startReply.Ok && startReply.Unreachable && !cancel.IsCancellationRequested)
+        {
+            await Task.Delay(250, cancel);
+            startReply = await helper.SendAsync(startRequest, cancel);
+        }
+
+        string? report = null;
+        string? error = null;
+
+        if (!startReply.Ok && startReply.Unreachable)
+        {
+            // Only fall back to a one-shot UAC CLI run when the helper service could not be reached.
+            error = startReply.Error;
+            var flag = kind switch
+            {
+                FirmwareCheckKind.Probe      => "--probe",
+                FirmwareCheckKind.WriteCheck => "--write-check",
+                FirmwareCheckKind.ModeCheck  => "--mode-check",
+                _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
+            };
+            var cliTimeoutMs = kind == FirmwareCheckKind.ModeCheck ? 75_000 : 35_000;
+            report = await Task.Run(() => TryRunHelperCli(flag, ".txt", cliTimeoutMs), cancel);
+        }
+        else
+        {
+            var reply = startReply.Ok && startReply.Pending
+                ? await PollDiscoveryJobAsync(helper, new RunFirmwareCheck(kind, PollOnly: true), maxWait, cancel)
+                : startReply;
+
+            report = reply.Ok && !string.IsNullOrWhiteSpace(reply.Report) ? reply.Report : null;
+            error = reply.Ok ? null : reply.Error;
+        }
+
+        var msiLabel = msiRunning ? "running" : "paused";
+        var header = $"=== Firmware {kind} · Tsume {TsumeVersionLabel()} · MSI Center M: {msiLabel} ===";
+
+        if (!string.IsNullOrWhiteSpace(report))
+        {
+            FirmwareChecksLog.Write($"{header}{Environment.NewLine}{report.TrimEnd()}{Environment.NewLine}");
+            return (true, report.TrimEnd(), msiRunning);
+        }
+
+        var message = string.IsNullOrWhiteSpace(error)
+            ? "The helper did not return a report (is the TsumeHelper service running?)."
+            : error;
+        FirmwareChecksLog.Write($"{header}{Environment.NewLine}FAILED: {message}{Environment.NewLine}");
+        return (false, message, msiRunning);
+    }
 
     public static async Task<ElevatedInventory> CollectInventoryAsync(
         HelperClient helper,
@@ -73,8 +138,20 @@ public static class DeviceSupportExporter
         TimeSpan maxWait,
         CancellationToken cancel)
     {
-        var deadline = DateTime.UtcNow + maxWait;
         var reply = await helper.SendAsync(start, cancel);
+        return reply.Ok && reply.Pending
+            ? await PollDiscoveryJobAsync(helper, poll, maxWait, cancel)
+            : reply;
+    }
+
+    private static async Task<HelperReply> PollDiscoveryJobAsync(
+        HelperClient helper,
+        HelperRequest poll,
+        TimeSpan maxWait,
+        CancellationToken cancel)
+    {
+        var deadline = DateTime.UtcNow + maxWait;
+        var reply = new HelperReply { Ok = true, Pending = true };
         var transientErrors = 0;
 
         while (reply.Ok && reply.Pending)
@@ -87,7 +164,7 @@ public static class DeviceSupportExporter
 
             // The helper serves one pipe connection at a time; under 100% CPU load or panel polling
             // a single poll connect can transiently time out even while the scan is still running.
-            if (!reply.Ok && !reply.Unsupported && transientErrors < 3 && DateTime.UtcNow < deadline && !cancel.IsCancellationRequested)
+            if (!reply.Ok && !reply.Unsupported && reply.Unreachable && transientErrors < 3 && DateTime.UtcNow < deadline && !cancel.IsCancellationRequested)
             {
                 transientErrors++;
                 reply = new HelperReply { Ok = true, Pending = true };
@@ -388,12 +465,12 @@ public static class DeviceSupportExporter
         };
     }
 
-    private static string? TryRunHelperCli(string flag)
+    private static string? TryRunHelperCli(string flag, string extension = ".json", int timeoutMs = 35_000)
     {
         var helperPath = FindHelperExe();
         if (helperPath is null) return null;
 
-        var tempFile = Path.Combine(Path.GetTempPath(), $"tsume-discovery-{Guid.NewGuid():N}.json");
+        var tempFile = Path.Combine(Path.GetTempPath(), $"tsume-discovery-{Guid.NewGuid():N}{extension}");
         try
         {
             using var proc = Process.Start(new ProcessStartInfo(helperPath, $"{flag} \"{tempFile}\"")
@@ -402,7 +479,7 @@ public static class DeviceSupportExporter
                 Verb = "runas",
                 WindowStyle = ProcessWindowStyle.Hidden,
             });
-            if (proc is null || !proc.WaitForExit(35_000)) return null;
+            if (proc is null || !proc.WaitForExit(timeoutMs)) return null;
             return proc.ExitCode == 0 && File.Exists(tempFile) ? File.ReadAllText(tempFile) : null;
         }
         catch (Exception error) when (error is Win32Exception or IOException or UnauthorizedAccessException or InvalidOperationException)

@@ -32,6 +32,9 @@ public sealed class RequestHandler(Board machine, IDevice? device, ModeKeeper? k
                 case GetReadings:
                     return HelperReply.Success(device.Readings());
 
+                case SetPerformance or SetFan or SetChargeLimit when DiscoveryWorker.IsMutatingFirmwareCheckRunning:
+                    return HelperReply.Failure("A firmware check is running. Wait for it to finish before changing settings.");
+
                 case SetPerformance(var mode, var manual, var custom) chosen:
                     if (!profile.Offers(mode))
                         return HelperReply.Failure($"This device has no {mode} mode.");

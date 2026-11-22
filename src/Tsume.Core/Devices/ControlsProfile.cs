@@ -17,6 +17,10 @@ public sealed record BackButtonsProfile
     public int ProfileLength { get; init; }
     public int BlockLength { get; init; } = 8;
     public int MaxSimultaneousKeys { get; init; } = 3;
+
+    /// <summary>Minimum USB <c>bcdDevice</c> firmware version (e.g. <c>0x0217</c>) that uses these profile offsets; null if all versions do.</summary>
+    public ushort? MinFirmwareVersion { get; init; }
+
     public IReadOnlyList<BackButtonDefinition> Buttons { get; init; } = [];
 
     public bool Matches(BackButtonsProfile other) =>
@@ -26,6 +30,7 @@ public sealed record BackButtonsProfile
         && ProfileLength == other.ProfileLength
         && BlockLength == other.BlockLength
         && MaxSimultaneousKeys == other.MaxSimultaneousKeys
+        && MinFirmwareVersion == other.MinFirmwareVersion
         && Buttons.SequenceEqual(other.Buttons);
 }
 

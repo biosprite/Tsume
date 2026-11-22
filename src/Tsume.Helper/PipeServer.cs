@@ -74,7 +74,7 @@ public sealed class PipeServer(RequestHandler handler)
                 : HelperReply.Failure("The request could not be understood.");
 
             using var answering = CancellationTokenSource.CreateLinkedTokenSource(stop);
-            answering.CancelAfter(parsed is GetHardwareInventory or GetHardwareState ? TimeSpan.FromSeconds(15) : Patience);
+            answering.CancelAfter(parsed is GetHardwareInventory or GetHardwareState or RunFirmwareCheck ? TimeSpan.FromSeconds(15) : Patience);
 
             await writer.WriteLineAsync(HelperJson.Write(reply).AsMemory(), answering.Token);
         }
@@ -124,6 +124,9 @@ public sealed class PipeServer(RequestHandler handler)
 
         if (request is GetHardwareState state)
             return DiscoveryWorker.HandleState(state);
+
+        if (request is RunFirmwareCheck check)
+            return DiscoveryWorker.HandleFirmwareCheck(check);
 
         return handler.Handle(request);
     }

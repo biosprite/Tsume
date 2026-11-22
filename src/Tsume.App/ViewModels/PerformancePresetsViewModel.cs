@@ -154,7 +154,8 @@ public sealed class PresetLimits : Observable
 
     // Slider ranges, the same as Manual's; doubles to bind to Slider.Minimum/Maximum.
     public double MinWatts => _range.Min;
-    public double MaxSustainedWatts => _range.MaxSustained;
+    public double MinBoostWatts => _range.MinBoost;
+    public double MaxSustainedWatts => _range.EffectiveMaxSustained;
     public double MaxBoostWatts => _range.MaxBoost;
 
     public double Sustained
@@ -162,9 +163,15 @@ public sealed class PresetLimits : Observable
         get;
         set
         {
-            if (!Set(ref field, Math.Round(value))) return;
+            var clamped = Math.Clamp(Math.Round(value), _range.Min, _range.EffectiveMaxSustained);
+            if (!Set(ref field, clamped))
+            {
+                if (clamped != value) Notify();
+                return;
+            }
 
-            if (Boost < field) Boost = field;   // boost can never sit below sustained
+            var minBoost = _range.MinBoostFor((int)field);
+            if (Boost < minBoost) Boost = minBoost;
             OnChanged();
         }
     }
@@ -174,7 +181,11 @@ public sealed class PresetLimits : Observable
         get;
         set
         {
-            if (Set(ref field, Math.Max(Math.Round(value), Sustained))) OnChanged();
+            var clamped = Math.Clamp(Math.Round(value), _range.MinBoostFor((int)Sustained), _range.MaxBoost);
+            if (Set(ref field, clamped))
+                OnChanged();
+            else if (clamped != value)
+                Notify();
         }
     }
 
