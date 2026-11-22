@@ -15,7 +15,7 @@ public static class FirmwareProbe
         ("Get_Thermal",     [0, 1, 2, 3]),
         ("Get_AP",          [0, 1, 2, 3]),
         ("Get_Device",      [0, 1]),
-        ("Get_Power",       [0]),
+        ("Get_Power",       [0, 1, 2, 3]),
     ];
 
     public static string Run(MsiAcpiBridge acpi)

@@ -194,7 +194,6 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         ToggleWatchModeCommand = new Command(async () => await ToggleWatchModeAsync());
         RefreshPreviewCommand = new Command(RefreshPreview);
         ExportBundleCommand = new Command(async () => await ExportBundleAsync());
-        RunEnvCheckCommand = new Command(async () => await RunEnvCheckOnlyAsync());
 
         UpdateSummaryPill();
     }
@@ -245,7 +244,15 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
     public bool IsWatchTab => ActiveTabIndex == 2;
     public bool IsPreviewTab => ActiveTabIndex == 3;
 
-    public bool IncludeTimedLoad { get; set => Set(ref field, value); } = true;
+    public bool IncludeTimedLoad
+    {
+        get;
+        set
+        {
+            if (Set(ref field, value)) Notify(nameof(QuickScanRunningDetail));
+        }
+    } = true;
+
     public bool AllowUacFallback { get; set => Set(ref field, value); } = true;
 
     public bool IsBusy
@@ -294,11 +301,43 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         get;
         private set
         {
-            if (Set(ref field, value)) Notify(nameof(QuickScanButtonLabel));
+            if (Set(ref field, value))
+            {
+                Notify(nameof(QuickScanButtonLabel));
+                Notify(nameof(ShowQuickScanEmptyState));
+                Notify(nameof(ShowQuickScanFullLoader));
+                Notify(nameof(ShowQuickScanRefreshBanner));
+            }
         }
     }
 
-    public string QuickScanButtonLabel => HasQuickScan ? "Scan Again" : "Run Quick Scan";
+    public bool IsQuickScanning
+    {
+        get;
+        private set
+        {
+            if (Set(ref field, value))
+            {
+                Notify(nameof(QuickScanButtonLabel));
+                Notify(nameof(ShowQuickScanEmptyState));
+                Notify(nameof(ShowQuickScanFullLoader));
+                Notify(nameof(ShowQuickScanRefreshBanner));
+            }
+        }
+    }
+
+    public bool ShowQuickScanEmptyState => !HasQuickScan && !IsQuickScanning;
+    public bool ShowQuickScanFullLoader => !HasQuickScan && IsQuickScanning;
+    public bool ShowQuickScanRefreshBanner => HasQuickScan && IsQuickScanning;
+
+    public string QuickScanButtonLabel => IsQuickScanning
+        ? "Scanning…"
+        : HasQuickScan ? "Scan Again" : "Run Quick Scan";
+
+    public string QuickScanRunningDetail => IncludeTimedLoad
+        ? "Reading device specs, display, power settings, controllers, and running the 3-second CPU load test (100% read-only)."
+        : "Reading device specs, display, power settings, controllers, and OEM software (100% read-only).";
+
     public ObservableCollection<QuickScanSection> QuickScanSections { get; } = [];
 
     // Guided capture state
@@ -439,7 +478,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 
     public string WatchButtonLabel => IsWatching ? "Stop Watching" : "Start Watching";
     public string WatchStatusText { get; private set => Set(ref field, value); } =
-        "Click Start Watching, then freely toggle power modes, fans, charge limit, RGB or press hardware buttons.";
+        "Click Start Watching, then freely toggle power modes, manual power sliders (PL1/PL2 or SPL/SPPT/FPPT), fans, charge limit, RGB or press hardware buttons.";
 
     public string ReportPreviewText { get; private set => Set(ref field, value); } =
         "Run Quick Scan, Guided Capture, or Live Watch to generate the preview report.";
@@ -458,7 +497,6 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
     public ICommand ToggleWatchModeCommand { get; }
     public ICommand RefreshPreviewCommand { get; }
     public ICommand ExportBundleCommand { get; }
-    public ICommand RunEnvCheckCommand { get; }
 
     public void SelectStepIndex(int index)
     {
@@ -471,6 +509,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         if (IsBusy || _disposed) return;
         if (IsWatching) StopWatchMode();
         IsBusy = true;
+        IsQuickScanning = true;
         ExportMessage = "";
         StatusBanner = IncludeTimedLoad
             ? "Scanning your handheld (including 3-second load test, read-only)…"
@@ -526,40 +565,10 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         {
             if (!_disposed)
             {
+                IsQuickScanning = false;
                 IsBusy = false;
                 UpdateSummaryPill();
                 RefreshPreview();
-            }
-        }
-    }
-
-    private async Task RunEnvCheckOnlyAsync()
-    {
-        if (IsBusy || _disposed) return;
-        if (IsWatching) StopWatchMode();
-        IsBusy = true;
-        StatusBanner = "Checking helper, CPU boost mode, OEM software, and live read-back…";
-        try
-        {
-            _envCheck = await DeviceSupportExporter.RunEnvironmentCheckAsync(_helper, cancel: _lifetimeCts.Token);
-            if (_disposed) return;
-            StatusBanner = $"Environment check complete ({_envCheck.Findings.Count} checks). See Report Preview for details.";
-            RefreshPreview();
-            ActiveTabIndex = 3;
-        }
-        catch (OperationCanceledException) when (_disposed)
-        {
-        }
-        catch (Exception error)
-        {
-            if (!_disposed) StatusBanner = $"Environment check failed: {error.Message}";
-        }
-        finally
-        {
-            if (!_disposed)
-            {
-                IsBusy = false;
-                UpdateSummaryPill();
             }
         }
     }
@@ -1139,7 +1148,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             _watchCts = CancellationTokenSource.CreateLinkedTokenSource(cancel);
             IsWatching = true;
             WatchStatusText = "Watching live (polling read-only state every 600 ms + capturing all buttons)…";
-            StatusBanner = "Live Watch Mode active. Toggle modes/fans/charge/RGB in your OEM app or press hardware buttons.";
+            StatusBanner = "Live Watch Mode active. Toggle power modes, manual power sliders (PL1/PL2 or SPL/SPPT/FPPT), fans, charge limit, or RGB in your OEM app, or press hardware buttons.";
             LiveFeed.Insert(0, $"[{DateTime.Now:HH:mm:ss}] Watch Mode started (read-only).");
 
             IsBusy = false;
@@ -1467,14 +1476,29 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         if (td is null) return ("Load test skipped", true);
 
         var valid = td.EnergyMeters.Where(e => e.LoadWatts.HasValue || e.IdleWatts.HasValue).ToList();
-        if (valid.Count == 0) return ("Not exposed by Windows", true);
+        if (valid.Count == 0)
+        {
+            if (td.AcOnline == false && td.BatteryRateIdleMw is { } idleMw && td.BatteryRateLoadMw is { } loadMw
+                && (idleMw != 0 || loadMw != 0))
+            {
+                return ($"No Windows energy meter · Battery draw {Math.Abs(idleMw) / 1000.0:F1} W → {Math.Abs(loadMw) / 1000.0:F1} W", false);
+            }
+
+            return ("Not exposed by Windows", true);
+        }
 
         var pkg = valid.FirstOrDefault(e => e.InstanceName.EndsWith("_PKG", StringComparison.OrdinalIgnoreCase))
                   ?? valid.FirstOrDefault(e =>
                       e.InstanceName.Contains("Package", StringComparison.OrdinalIgnoreCase)
                       && !e.InstanceName.Contains("DRAM", StringComparison.OrdinalIgnoreCase)
                       && !e.InstanceName.Contains("PP0", StringComparison.OrdinalIgnoreCase)
-                      && !e.InstanceName.Contains("PP1", StringComparison.OrdinalIgnoreCase));
+                      && !e.InstanceName.Contains("PP1", StringComparison.OrdinalIgnoreCase))
+                  ?? valid.FirstOrDefault(e =>
+                      (e.InstanceName.Contains("Socket", StringComparison.OrdinalIgnoreCase)
+                       || e.InstanceName.Contains("APU", StringComparison.OrdinalIgnoreCase)
+                       || e.InstanceName.Contains("Total", StringComparison.OrdinalIgnoreCase))
+                      && !e.InstanceName.Contains("DRAM", StringComparison.OrdinalIgnoreCase))
+                  ?? valid.FirstOrDefault(e => e.LoadWatts.HasValue);
 
         var countNote = $"{CountLabel(valid.Count, "sensor")} logged";
         if (pkg?.LoadWatts is { } loadW)
@@ -1599,7 +1623,13 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 
         if (ec.Count > 0) parts.Add("EC " + string.Join(" ", ec.Take(6).Select(e => $"{e.OffsetHex}:{e.Before:X2}→{e.After:X2}")));
         if (fw.Count > 0) parts.Add("FW " + string.Join(" ", fw.Take(4).Select(f => $"{f.Key}:{f.After}")));
-        if (diff.RegistryChanges.Count > 0) parts.Add($"Reg({diff.RegistryChanges.Count})");
+        if (diff.PowerChanges.Count > 0) parts.Add("Power " + string.Join(" ", diff.PowerChanges.Select(p => $"{p.Key}={p.After}")));
+        if (diff.RegistryChanges.Count > 0)
+        {
+            var sample = string.Join(", ", diff.RegistryChanges.Take(3).Select(r => $"{r.Key.Split('\\').Last()}={r.After}"));
+            var extra = diff.RegistryChanges.Count > 3 ? $" +{diff.RegistryChanges.Count - 3}" : "";
+            parts.Add($"Reg({sample}{extra})");
+        }
         if (diff.ControllerMetaChanges.Count > 0) parts.Add("Ctrl " + string.Join(" ", diff.ControllerMetaChanges.Select(c => $"{c.Key}={c.After}")));
         if (diff.ControllerProfileChanges.Count > 0) parts.Add($"Profile({diff.ControllerProfileChanges.Count}B)");
         if (diff.HidAdded.Count > 0 || diff.HidRemoved.Count > 0) parts.Add($"HID(+{diff.HidAdded.Count}/-{diff.HidRemoved.Count})");
@@ -1646,7 +1676,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
                     "Gives the firmware a moment to finish switching power profiles."),
                 new(3, "Click [[Capture Step]] below"),
             ],
-            WhyItMatters = "Shows Tsume how your handheld signals its lowest-power preset, what default wattage cap it uses, and whether it changes the Windows power mode alongside it.",
+            WhyItMatters = "Shows Tsume how your handheld signals its lowest-power preset, what default wattage limits it uses, and whether it changes the Windows power mode alongside it.",
             NoteHint = "Optional note (e.g., the exact mode name in your OEM app, like \"Super Battery\"):",
         },
         new()
@@ -1665,7 +1695,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
                     "Gives the firmware time to raise wattage limits and update fan curves."),
                 new(3, "Click [[Capture Step]] below"),
             ],
-            WhyItMatters = "Shows Tsume the code your handheld uses for its top performance preset, its stock wattage ceiling, and any fan behavior tied to that mode.",
+            WhyItMatters = "Shows Tsume the code your handheld uses for its top performance preset, its stock wattage limits, and any fan behavior tied to that mode.",
             NoteHint = "Optional note (e.g., the exact preset name in your OEM app, like \"Extreme Performance\"):",
         },
         new()
@@ -1674,17 +1704,19 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             Number = 4,
             Category = "POWER MODES",
             Glyph = Glyphs.Sliders,
-            Title = "Manual Power Limits (17 W / 23 W)",
-            Subtitle = "Set two unequal wattages so Tsume can pinpoint sustained vs. boost power.",
+            Title = "Manual Power Limits (17 / 23 / 29 W)",
+            Subtitle = "Set distinct wattages on every power slider so Tsume can pinpoint each limit (2 sliders on Intel, 3 on AMD).",
             ActionSteps =
             [
                 new(1, "Switch to `Manual` / `Custom` power mode in your OEM app"),
-                new(2, "Set Sustained power to `17 W` and Boost power to `23 W`",
-                    "Only have one slider or different min/max limits? Pick any two unequal numbers and write them in the note box below."),
+                new(2, "Set `17 W` / `23 W` (2 sliders) or `17 W` / `23 W` / `29 W` (3 sliders)",
+                    "Intel (2 sliders): `PL1` (Sustained) to `17 W`, `PL2` (Boost) to `23 W`.\n" +
+                    "AMD (3 sliders — e.g. MSI Claw A8, ROG Ally, Legion Go): `SPL` (Sustained) to `17 W`, `SPPT` (Slow Boost) to `23 W`, `FPPT` (Fast Boost) to `29 W`.\n" +
+                    "Only 1 slider or different min/max limits? Pick distinct ascending values and write them in the note box below."),
                 new(3, "Wait about `2 seconds`, then click [[Capture Step]] below"),
             ],
-            WhyItMatters = "Using two unusual, unequal numbers (17 and 23) makes it unmistakable which hardware setting controls sustained power versus short-term boost power, and how watts are scaled.",
-            NoteHint = "Optional note (if you couldn't set 17 W / 23 W, type the exact wattages you used):",
+            WhyItMatters = "Using unusual, unequal numbers (17 / 23 W on 2-slider Intel chips, or 17 / 23 / 29 W on 3-slider AMD chips) makes it unmistakable which hardware register or setting controls Sustained (PL1 / SPL), Slow Boost (PL2 / SPPT), and Fast Boost (FPPT) power, and how watts are scaled.",
+            NoteHint = "Optional note (type the exact wattages you set — especially if you used 1 slider or values other than 17 / 23 W or 17 / 23 / 29 W):",
         },
         new()
         {

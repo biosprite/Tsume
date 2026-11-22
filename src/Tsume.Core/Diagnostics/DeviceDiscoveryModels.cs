@@ -605,6 +605,21 @@ public static class DiscoveryReportBuilder
                     foreach (var kv in fw.Values.OrderBy(k => k.Key, StringComparer.Ordinal))
                         sb.AppendLine($"| `{kv.Key}` | `{kv.Value}` |");
                 }
+                if (fw.Tables.Count > 0)
+                {
+                    var acceptedTables = fw.Tables
+                        .Where(kv => !string.Equals(kv.Value, "refused", StringComparison.OrdinalIgnoreCase))
+                        .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                        .ToList();
+                    if (acceptedTables.Count > 0)
+                    {
+                        sb.AppendLine();
+                        sb.AppendLine("| Table | Data |");
+                        sb.AppendLine("|---|---|");
+                        foreach (var kv in acceptedTables)
+                            sb.AppendLine($"| `{kv.Key}` | `{kv.Value}` |");
+                    }
+                }
                 if (fw.Capabilities.Count > 0)
                 {
                     sb.AppendLine();

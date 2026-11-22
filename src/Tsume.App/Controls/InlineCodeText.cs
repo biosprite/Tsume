@@ -77,8 +77,15 @@ public static class InlineCodeText
 
     private static void FlushPlain(TextBlock block, string text, int start, int end)
     {
-        if (end > start)
-            block.Inlines.Add(new Run(text.Substring(start, end - start)));
+        if (end <= start) return;
+
+        var chunk = text.Substring(start, end - start).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var lines = chunk.Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (i > 0) block.Inlines.Add(new LineBreak());
+            if (lines[i].Length > 0) block.Inlines.Add(new Run(lines[i]));
+        }
     }
 
     private static InlineUIContainer MakePill(string label, double fontSize, bool isAction)

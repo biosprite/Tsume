@@ -73,6 +73,7 @@ public partial class DeviceDiscoveryWindow
             : Color.FromArgb(0x40, 0x08, 0x0A, 0x0E));
         Resources["Dev.ScrollThumb"] = Freeze(text);
         Resources["Dev.ScrollTrack"] = Freeze(text);
+        Resources["Dev.RingTrack"] = Freeze(Color.FromArgb(isLight ? (byte)0x24 : (byte)0x28, text.R, text.G, text.B));
     }
 
     private static Color Mix(Color from, Color to, double amount)

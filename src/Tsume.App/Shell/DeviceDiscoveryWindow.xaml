@@ -20,6 +20,7 @@
     <SolidColorBrush x:Key="Dev.SubCard" Color="#40080A0E" />
     <SolidColorBrush x:Key="Dev.ScrollThumb" Color="#FFF4F6FA" />
     <SolidColorBrush x:Key="Dev.ScrollTrack" Color="#FFF4F6FA" />
+    <SolidColorBrush x:Key="Dev.RingTrack" Color="#28F4F6FA" />
 
     <!-- Modern Fluent-style slim pill scrollbars (no legacy arrow buttons, smooth hover expand) -->
     <Style x:Key="Dev.ScrollBar.PageButton" TargetType="RepeatButton">
@@ -498,8 +499,17 @@
       <!-- Status strip -->
       <Border DockPanel.Dock="Top" Background="{DynamicResource Surface}" CornerRadius="10" Padding="12,8" Margin="0,0,0,12">
         <DockPanel>
-          <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Icon}" Text="{x:Static theme:Glyphs.Info}"
-                     FontSize="14" Foreground="{x:Static theme:Accent.Brush}" Margin="0,0,8,0" />
+          <Grid DockPanel.Dock="Left" Width="16" Height="16" Margin="0,0,9,0" VerticalAlignment="Center">
+            <TextBlock Style="{StaticResource Text.Icon}" Text="{x:Static theme:Glyphs.Info}"
+                       FontSize="14" Foreground="{x:Static theme:Accent.Brush}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Visibility="{Binding IsNotBusy, Converter={StaticResource BoolToVis}}" />
+            <ctrl:ProgressRing Width="15" Height="15" RingThickness="2"
+                               Foreground="{x:Static theme:Accent.Brush}"
+                               TrackBrush="{DynamicResource Dev.RingTrack}"
+                               IsActive="{Binding IsBusy}"
+                               Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+          </Grid>
           <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
                      Text="{Binding StatusBanner}" TextWrapping="Wrap" VerticalAlignment="Center" />
         </DockPanel>
@@ -509,12 +519,9 @@
       <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Surface.Divider}" BorderThickness="0,1,0,0"
               Padding="0,14,0,0" Margin="0,12,0,0">
         <DockPanel>
-          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center">
-            <Button Style="{StaticResource Dev.Button}" Content="Environment Check" Margin="0,0,8,0"
-                    IsEnabled="{Binding IsNotBusy}" Command="{Binding RunEnvCheckCommand}" />
-            <Button Style="{StaticResource Dev.PrimaryButton}" Content="Export Support Bundle (.zip)"
-                    IsEnabled="{Binding IsNotBusy}" Command="{Binding ExportBundleCommand}" />
-          </StackPanel>
+          <Button DockPanel.Dock="Right" Style="{StaticResource Dev.PrimaryButton}"
+                  Content="Export Support Bundle (.zip)" Margin="16,0,0,0" VerticalAlignment="Center"
+                  IsEnabled="{Binding IsNotBusy}" Command="{Binding ExportBundleCommand}" />
 
           <StackPanel VerticalAlignment="Center">
             <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -646,8 +653,16 @@
             <Border Style="{StaticResource Dev.Card}">
               <DockPanel>
                 <Button DockPanel.Dock="Right" Style="{StaticResource Dev.PrimaryButton}"
-                        Content="{Binding QuickScanButtonLabel}" Padding="20,12" Margin="16,0,0,0" VerticalAlignment="Center"
-                        IsEnabled="{Binding IsNotBusy}" Command="{Binding RunQuickScanCommand}" />
+                        Padding="20,12" Margin="16,0,0,0" VerticalAlignment="Center"
+                        IsEnabled="{Binding IsNotBusy}" Command="{Binding RunQuickScanCommand}">
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <ctrl:ProgressRing Width="14" Height="14" RingThickness="2" Margin="0,0,8,0"
+                                       Foreground="#FF0B0D11" TrackBrush="#330B0D11"
+                                       IsActive="{Binding IsQuickScanning}"
+                                       Visibility="{Binding IsQuickScanning, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Text="{Binding QuickScanButtonLabel}" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
                 <StackPanel>
                   <TextBlock Style="{StaticResource Text.Body}" Text="Quick Hardware Scan (~10 seconds)" FontSize="15" FontWeight="SemiBold" />
                   <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,4,0,10" LineHeight="18"
@@ -665,17 +680,8 @@
             </Border>
 
             <!-- Empty state before first scan -->
-            <Border Padding="24,26" Margin="0,0,0,10">
-              <Border.Style>
-                <Style TargetType="Border" BasedOn="{StaticResource Dev.Card}">
-                  <Setter Property="Visibility" Value="Visible" />
-                  <Style.Triggers>
-                    <DataTrigger Binding="{Binding HasQuickScan}" Value="True">
-                      <Setter Property="Visibility" Value="Collapsed" />
-                    </DataTrigger>
-                  </Style.Triggers>
-                </Style>
-              </Border.Style>
+            <Border Style="{StaticResource Dev.Card}" Padding="24,26" Margin="0,0,0,10"
+                    Visibility="{Binding ShowQuickScanEmptyState, Converter={StaticResource BoolToVis}}">
               <StackPanel HorizontalAlignment="Center" MaxWidth="520">
                 <TextBlock Style="{StaticResource Text.Icon}" Text="{x:Static theme:Glyphs.Inspect}"
                            FontSize="24" Foreground="{x:Static theme:Accent.Brush}"
@@ -688,9 +694,59 @@
               </StackPanel>
             </Border>
 
+            <!-- Centered loading card during first scan -->
+            <Border Style="{StaticResource Dev.Card}" Padding="24,34" Margin="0,0,0,10"
+                    Visibility="{Binding ShowQuickScanFullLoader, Converter={StaticResource BoolToVis}}">
+              <StackPanel HorizontalAlignment="Center" MaxWidth="500">
+                <ctrl:ProgressRing Width="40" Height="40" RingThickness="3.2"
+                                   Foreground="{x:Static theme:Accent.Brush}"
+                                   TrackBrush="{DynamicResource Dev.RingTrack}"
+                                   IsActive="{Binding ShowQuickScanFullLoader}"
+                                   HorizontalAlignment="Center" Margin="0,0,0,14" />
+                <TextBlock Style="{StaticResource Text.Body}" Text="Scanning your handheld…"
+                           FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextAlignment="Center"
+                           LineHeight="18" Margin="0,5,0,0"
+                           Text="{Binding QuickScanRunningDetail}" />
+              </StackPanel>
+            </Border>
+
+            <!-- Compact inline loading banner when re-scanning over existing results -->
+            <Border Background="{x:Static theme:Accent.Tint}" BorderBrush="{x:Static theme:Accent.Wash}"
+                    BorderThickness="1" CornerRadius="12" Padding="14,11" Margin="0,0,0,10"
+                    Visibility="{Binding ShowQuickScanRefreshBanner, Converter={StaticResource BoolToVis}}">
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <ctrl:ProgressRing Grid.Column="0" Width="20" Height="20" RingThickness="2.4" Margin="0,0,12,0"
+                                   Foreground="{x:Static theme:Accent.Brush}"
+                                   TrackBrush="{DynamicResource Dev.RingTrack}"
+                                   IsActive="{Binding ShowQuickScanRefreshBanner}"
+                                   VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                  <TextBlock Style="{StaticResource Text.Body}" Text="Refreshing quick scan…"
+                             FontSize="13.5" FontWeight="SemiBold" />
+                  <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text.Muted}"
+                             Text="{Binding QuickScanRunningDetail}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                </StackPanel>
+              </Grid>
+            </Border>
+
             <!-- Structured scan summary cards -->
             <ItemsControl ItemsSource="{Binding QuickScanSections}"
                           Visibility="{Binding HasQuickScan, Converter={StaticResource BoolToVis}}">
+              <ItemsControl.Style>
+                <Style TargetType="ItemsControl">
+                  <Setter Property="Opacity" Value="1" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsQuickScanning}" Value="True">
+                      <Setter Property="Opacity" Value="0.52" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </ItemsControl.Style>
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
                   <Border Style="{StaticResource Dev.Card}" Padding="16,13">
@@ -1341,13 +1397,13 @@
           </Border>
         </DockPanel>
 
-        <!-- TAB 3: REPORT PREVIEW (PRIVACY AUDIT) -->
+        <!-- TAB 3: REPORT PREVIEW -->
         <DockPanel Visibility="{Binding IsPreviewTab, Converter={StaticResource BoolToVis}}">
           <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-            <TextBlock Style="{StaticResource Text.Caption}" VerticalAlignment="Center"
-                       Text="Audit exactly what will be saved in report.md before exporting. Serial numbers, usernames, and hostnames are scrubbed." />
             <Button DockPanel.Dock="Right" Style="{StaticResource Dev.Button}" Content="Refresh Preview"
-                    HorizontalAlignment="Right" Command="{Binding RefreshPreviewCommand}" />
+                    Margin="12,0,0,0" VerticalAlignment="Center" Command="{Binding RefreshPreviewCommand}" />
+            <TextBlock Style="{StaticResource Text.Caption}" VerticalAlignment="Center" TextWrapping="Wrap"
+                       Text="Read-only preview of report.md before exporting. Serial numbers, usernames, and hostnames are automatically removed." />
           </DockPanel>
           <TextBox Text="{Binding ReportPreviewText, Mode=OneWay}" IsReadOnly="True"
                    Background="#FF0A0C10" Foreground="#FFE6ECF5" BorderBrush="{DynamicResource Panel.Edge}"

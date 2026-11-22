@@ -21,8 +21,9 @@ public static partial class PrivacyScrubber
 
     private static readonly string[] AllowedRegistryFragments =
     [
-        "mode", "fan", "battery", "charge", "manual", "pl1", "pl2", "tdp",
-        "ppt", "stapm", "thermal", "power", "boost", "light", "rgb", "led",
+        "mode", "fan", "battery", "charge", "manual", "pl1", "pl2", "pl3", "tdp",
+        "spl", "ppt", "stapm", "sustained", "slow", "fast", "watt", "limit", "apu",
+        "thermal", "power", "boost", "light", "rgb", "led",
         "bright", "autoswitch", "controller", "gamepad", "deadzone", "gyro",
         "macro", "remap", "fps", "refresh", "version", "shift", "cooler",
         "scenario", "preset", "profile", "curve", "temp", "rpm",

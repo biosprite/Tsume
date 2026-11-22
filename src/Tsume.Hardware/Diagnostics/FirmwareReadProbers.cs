@@ -73,7 +73,16 @@ internal sealed class MsiReadProber : IFirmwareReadProber
         ("Get_Thermal",     [0, 1, 2, 3]),
         ("Get_AP",          [0, 1, 2, 3]),
         ("Get_Device",      [0, 1]),
-        ("Get_Power",       [0]),
+        ("Get_Power",       [0, 1, 2, 3]),
+    ];
+
+    private static readonly (string Method, byte[] Selectors)[] FastStateTables =
+    [
+        ("Get_Fan",         [0]),
+        ("Get_Temperature", [0]),
+        ("Get_Thermal",     [0, 1, 2, 3]),
+        ("Get_AP",          [0, 1, 2, 3]),
+        ("Get_Power",       [0, 1, 2, 3]),
     ];
 
     private readonly ManagementObject _acpi;
@@ -167,21 +176,15 @@ internal sealed class MsiReadProber : IFirmwareReadProber
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
         var ecBytes = DumpEcBytes();
 
-        var fan0 = Call("Get_Fan", 0);
-        if (fan0.Ok && fan0.Data.Length >= 4)
-            values["Get_Fan(0)"] = Hex(fan0.Data, 8);
-
-        var temp0 = Call("Get_Temperature", 0);
-        if (temp0.Ok && temp0.Data.Length >= 4)
-            values["Get_Temperature(0)"] = Hex(temp0.Data, 8);
-
-        var ap0 = Call("Get_AP", 0);
-        if (ap0.Ok && ap0.Data.Length >= 4)
-            values["Get_AP(0)"] = Hex(ap0.Data, 8);
-
-        var ap1 = Call("Get_AP", 1);
-        if (ap1.Ok && ap1.Data.Length >= 4)
-            values["Get_AP(1)"] = Hex(ap1.Data, 8);
+        foreach (var (method, selectors) in FastStateTables)
+        {
+            foreach (var selector in selectors)
+            {
+                var reply = Call(method, selector);
+                if (reply.Ok && reply.Data.Length > 0)
+                    values[$"{method}({selector})"] = Hex(reply.Data, 16);
+            }
+        }
 
         return (values, ecBytes is null ? null : Convert.ToHexString(ecBytes));
     }
@@ -443,7 +446,7 @@ internal sealed class LenovoReadProber : IFirmwareReadProber
         var values = QueryValues();
         if (_otherMethod is not null)
         {
-            foreach (var featureId in ExtractCapabilityIds().Take(32))
+            foreach (var featureId in ExtractCapabilityIds().Take(64))
             {
                 if (QueryOtherFeature(featureId) is { } val)
                     values[$"Feature(0x{featureId:X8})"] = $"{val} (0x{val:X8})";

@@ -274,9 +274,9 @@ public static class HardwareDiscoveryCollector
             using var search = new ManagementObjectSearcher(
                 "SELECT Name, PNPDeviceID, Manufacturer, Service, Status FROM Win32_PnPEntity " +
                 "WHERE PNPDeviceID LIKE 'ACPI\\\\PNP0C14%' OR PNPDeviceID LIKE 'ACPI\\\\INTC%' OR PNPDeviceID LIKE 'ACPI\\\\INT34%' " +
-                "OR PNPDeviceID LIKE 'ACPI\\\\AMDI%' OR PNPDeviceID LIKE 'ACPI\\\\ASUS%' OR PNPDeviceID LIKE 'ACPI\\\\MSI%' " +
+                "OR PNPDeviceID LIKE 'ACPI\\\\AMD%' OR PNPDeviceID LIKE 'ACPI\\\\ASUS%' OR PNPDeviceID LIKE 'ACPI\\\\MSI%' " +
                 "OR PNPDeviceID LIKE 'ACPI\\\\LEN%' OR PNPDeviceID LIKE 'PCI\\\\VEN_1022&DEV_14%' OR PNPDeviceID LIKE 'PCI\\\\VEN_1022&DEV_15%' " +
-                "OR PNPDeviceID LIKE 'PCI\\\\VEN_8086&DEV_64%' OR PNPDeviceID LIKE 'PCI\\\\VEN_8086&DEV_7D%'");
+                "OR PNPDeviceID LIKE 'PCI\\\\VEN_1022&DEV_16%' OR PNPDeviceID LIKE 'PCI\\\\VEN_8086&DEV_64%' OR PNPDeviceID LIKE 'PCI\\\\VEN_8086&DEV_7D%'");
             using var rows = search.Get();
             foreach (var row in rows)
             {
@@ -417,6 +417,8 @@ public static class HardwareDiscoveryCollector
             || name.Contains("AYANEO", StringComparison.OrdinalIgnoreCase)
             || name.Contains("ONEX", StringComparison.OrdinalIgnoreCase)
             || name.Contains("ZOTAC", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("AMD", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("PMF", StringComparison.OrdinalIgnoreCase)
             || name.Contains("ACPI", StringComparison.OrdinalIgnoreCase)
             || name.Contains("WMI_Event", StringComparison.OrdinalIgnoreCase)
             || name.Contains("GameZone", StringComparison.OrdinalIgnoreCase)
