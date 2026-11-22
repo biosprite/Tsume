@@ -316,6 +316,58 @@
     </DoubleAnimation>
   </Storyboard>
 
+  <!-- Compact pill-like button for secondary links (e.g. external compatibility lists). -->
+  <Style x:Key="Tile.Mini" TargetType="controls:Tile">
+    <Setter Property="Height" Value="36" />
+    <Setter Property="Margin" Value="4,2" />
+    <Setter Property="AutomationProperties.Name" Value="{Binding Label, RelativeSource={RelativeSource Self}}" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="controls:Tile">
+          <Grid x:Name="Body" RenderTransformOrigin="0.5,0.5">
+            <Grid.RenderTransform>
+              <ScaleTransform />
+            </Grid.RenderTransform>
+
+            <Border x:Name="Face" Background="{DynamicResource Surface}" CornerRadius="12" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="10,0" IsHitTestVisible="False">
+              <TextBlock Style="{StaticResource Text.Icon}" FontSize="12"
+                         Foreground="{DynamicResource Text.Muted}"
+                         Text="{TemplateBinding Glyph}" VerticalAlignment="Center" />
+              <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
+                         Text="{TemplateBinding Label}" Margin="7,0,0,0" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <Border x:Name="Ring" Style="{StaticResource Focus.Ring}" CornerRadius="12"
+                    BorderBrush="{x:Static theme:Accent.Brush}" />
+          </Grid>
+
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Face" Property="Background" Value="{DynamicResource Surface.Hover}" />
+            </Trigger>
+
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Trigger.EnterActions><BeginStoryboard Storyboard="{StaticResource Ring.Show}" /></Trigger.EnterActions>
+              <Trigger.ExitActions><BeginStoryboard Storyboard="{StaticResource Ring.Hide}" /></Trigger.ExitActions>
+            </Trigger>
+
+            <Trigger Property="IsPressed" Value="True">
+              <Trigger.EnterActions><BeginStoryboard Storyboard="{StaticResource Press.Down}" /></Trigger.EnterActions>
+              <Trigger.ExitActions><BeginStoryboard Storyboard="{StaticResource Press.Up}" /></Trigger.ExitActions>
+            </Trigger>
+
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.4" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <!-- Switch card: icon, name, a detail line, and a switch driven by IsOn. Grows if the text wraps. -->
   <Style x:Key="Tile.Switch" TargetType="controls:Tile">
     <Setter Property="MinHeight" Value="70" />
@@ -454,7 +506,7 @@
 
             <Border x:Name="Face" Background="{DynamicResource Surface}" CornerRadius="{StaticResource Radius.Control}" />
 
-            <DockPanel Margin="18,11,16,11">
+            <DockPanel Margin="18,11,16,11" IsHitTestVisible="False">
 
               <TextBlock DockPanel.Dock="Right" Style="{StaticResource Text.Icon}" FontSize="12"
                          Foreground="{DynamicResource Text.Faint}" Text="{TemplateBinding Tag}" />
@@ -482,6 +534,74 @@
               <Setter TargetName="Detail" Property="Visibility" Value="Collapsed" />
             </Trigger>
 
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Face" Property="Background" Value="{DynamicResource Surface.Hover}" />
+            </Trigger>
+
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Trigger.EnterActions><BeginStoryboard Storyboard="{StaticResource Ring.Show}" /></Trigger.EnterActions>
+              <Trigger.ExitActions><BeginStoryboard Storyboard="{StaticResource Ring.Hide}" /></Trigger.ExitActions>
+            </Trigger>
+
+            <Trigger Property="IsOn" Value="True">
+              <Setter TargetName="IconLit" Property="Opacity" Value="1" />
+              <Setter TargetName="Icon" Property="Opacity" Value="0" />
+            </Trigger>
+
+            <Trigger Property="IsPressed" Value="True">
+              <Trigger.EnterActions><BeginStoryboard Storyboard="{StaticResource Press.Down}" /></Trigger.EnterActions>
+              <Trigger.ExitActions><BeginStoryboard Storyboard="{StaticResource Press.Up}" /></Trigger.ExitActions>
+            </Trigger>
+
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.4" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Game row card: same chrome as Tile.Link, with custom badge content below the game's name. -->
+  <Style x:Key="Tile.GameLink" TargetType="controls:Tile">
+    <Setter Property="MinHeight" Value="64" />
+    <Setter Property="Margin" Value="0,0,0,8" />
+    <Setter Property="Tag" Value="{x:Static theme:Glyphs.Chevron}" />
+    <Setter Property="AutomationProperties.Name" Value="{Binding Label, RelativeSource={RelativeSource Self}}" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="controls:Tile">
+          <Grid x:Name="Body" RenderTransformOrigin="0.5,0.5">
+            <Grid.RenderTransform>
+              <ScaleTransform />
+            </Grid.RenderTransform>
+
+            <Border x:Name="Face" Background="{DynamicResource Surface}" CornerRadius="{StaticResource Radius.Control}" />
+
+            <DockPanel Margin="18,11,16,11" IsHitTestVisible="False">
+
+              <TextBlock DockPanel.Dock="Right" Style="{StaticResource Text.Icon}" FontSize="12"
+                         Foreground="{DynamicResource Text.Faint}" Text="{TemplateBinding Tag}" />
+
+              <Grid DockPanel.Dock="Left" VerticalAlignment="Center" Width="22">
+                <TextBlock x:Name="Icon" Style="{StaticResource Text.Icon}" FontSize="20"
+                           HorizontalAlignment="Center" Text="{TemplateBinding Glyph}" />
+                <TextBlock x:Name="IconLit" Style="{StaticResource Text.Icon}" FontSize="20"
+                           HorizontalAlignment="Center" Text="{TemplateBinding Glyph}"
+                           Foreground="{x:Static theme:Accent.Brush}" Opacity="0" />
+              </Grid>
+
+              <StackPanel Margin="14,0,14,0" VerticalAlignment="Center">
+                <TextBlock Style="{StaticResource Text.Body}" Text="{TemplateBinding Label}" />
+                <ContentPresenter Margin="0,5,0,0" />
+              </StackPanel>
+            </DockPanel>
+
+            <Border x:Name="Ring" Style="{StaticResource Focus.Ring}" BorderBrush="{x:Static theme:Accent.Brush}" />
+          </Grid>
+
+          <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
               <Setter TargetName="Face" Property="Background" Value="{DynamicResource Surface.Hover}" />
             </Trigger>

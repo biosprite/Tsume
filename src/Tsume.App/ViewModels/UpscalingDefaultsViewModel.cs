@@ -17,7 +17,7 @@ public sealed class UpscalingDefaultsViewModel : LayerViewModel
             _hub.List.Defaults = Tuning.Settings.PreservingUnavailable(
                 _hub.List.Defaults,
                 Tuning.HasXmx,
-                Tuning.HasOptiPatcher);
+                hasOptiPatcher: true) with { OptiPatcher = false };
             _hub.SaveList();
         };
     }
@@ -27,5 +27,6 @@ public sealed class UpscalingDefaultsViewModel : LayerViewModel
     protected override void OnOpened() => Tuning.Load(
         _hub.List.Defaults,
         hasXmx: _hub.Xmx.Current() is not null,
-        hasOptiPatcher: _hub.OptiPatcher.Current() is not null || _hub.Installer.ExtrasHaveOptiPatcher);
+        hasOptiPatcher: false,
+        showOptiPatcher: false);
 }

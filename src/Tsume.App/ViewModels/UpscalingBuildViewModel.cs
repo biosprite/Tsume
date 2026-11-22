@@ -84,6 +84,8 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
     public ICommand AddXmx { get; }
     public ICommand RemoveOld { get; }
     public ICommand OpenExtras { get; }
+    public ICommand OpenOptiScalerCompatibility => _hub.OpenOptiScalerCompatibility;
+    public ICommand OpenOptiPatcherCompatibility => _hub.OpenOptiPatcherCompatibility;
 
     protected override void OnOpened()
     {
@@ -155,7 +157,7 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
         ? ""
         : Strings.NightlyOf(UpscalingViewModel.Night(_available.Tag));
 
-    /// <summary>E.g. "OptiScaler 10.0.0-pre1 · 76 MB".</summary>
+    /// <summary>E.g. "OptiScaler 10.0.0-pre1 (76 MB)".</summary>
     public string AvailableDetailLine
     {
         get
@@ -165,7 +167,7 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
             var size = _available.Size > 0 ? Strings.FormatSize(_available.Size) : "";
             return (version.Length > 0, size.Length > 0) switch
             {
-                (true, true) => $"{version} · {size}",
+                (true, true) => $"{version} ({size})",
                 (true, false) => version,
                 (false, true) => size,
                 _ => "",
@@ -203,7 +205,7 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
 
     public string XmxLine => _xmx is null
         ? Strings.XmxNotAdded
-        : Strings.XmxHeld(_xmx.Version, _xmx.Added.ToString("d MMMM", CultureInfo.CurrentCulture));
+        : Strings.XmxHeld(_xmx.Version, _xmx.Added.ToString("dd MMM yy", CultureInfo.CurrentCulture));
 
     public bool IsCheckingOptiPatcher { get; private set => Set(ref field, value); }
     public bool IsDownloadingOptiPatcher { get; private set => Set(ref field, value); }
@@ -215,7 +217,7 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
 
     public string OptiPatcherLine => _optiPatcher is null
         ? Strings.OptiPatcherNotDownloaded
-        : Strings.OptiPatcherHeld(_optiPatcher.Release.Tag, _optiPatcher.DownloadedAt.ToString("d MMMM", CultureInfo.CurrentCulture));
+        : Strings.OptiPatcherHeld(_optiPatcher.Release.Tag, _optiPatcher.DownloadedAt.ToString("dd MMM yy", CultureInfo.CurrentCulture));
 
     public Visibility OptiPatcherActionShown => !IsOptiPatcherBusy && _availableOptiPatcher is null ? Visibility.Visible : Visibility.Collapsed;
     public Visibility OptiPatcherBusyCardShown => IsOptiPatcherBusy && _availableOptiPatcher is null ? Visibility.Visible : Visibility.Collapsed;

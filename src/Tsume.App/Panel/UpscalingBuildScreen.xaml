@@ -29,9 +29,19 @@
 
         <Border Style="{StaticResource Card.Note}">
           <StackPanel>
-            <TextBlock Style="{StaticResource Text.Body}" Text="{Binding BuildLine}" />
-            <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding VersionLine}"
-                       Visibility="{Binding VersionLineShown}" Margin="0,4,0,0" />
+            <WrapPanel Orientation="Horizontal">
+              <TextBlock Style="{StaticResource Text.Body}" Text="{Binding BuildLine}"
+                         VerticalAlignment="Center" Margin="0,0,8,0" />
+              <Border Background="{DynamicResource Surface.Hover}"
+                      BorderBrush="{DynamicResource Surface.Divider}"
+                      BorderThickness="1" CornerRadius="4" Padding="6,1.5"
+                      VerticalAlignment="Center"
+                      Visibility="{Binding VersionLineShown}">
+                <TextBlock Style="{StaticResource Text.Caption}" FontSize="11"
+                           Foreground="{DynamicResource Text.Muted}"
+                           Text="{Binding VersionLine}" VerticalAlignment="Center" />
+              </Border>
+            </WrapPanel>
             <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text.Faint}"
                        TextWrapping="Wrap" TextTrimming="None"
                        Text="{x:Static lang:Strings.NightlyExplained}" Margin="0,8,0,0" />
@@ -103,47 +113,69 @@
         </Border>
 
         <StackPanel Margin="-4,0,-4,0">
-          <controls:Tile Style="{StaticResource Tile.Row}" controls:Screen.TakesFocus="True"
+          <controls:Tile Style="{StaticResource Tile.Row}" Height="44" controls:Screen.TakesFocus="True"
                          Glyph="{x:Static theme:Glyphs.Inspect}" Label="{x:Static lang:Strings.CheckForNewerBuild}"
                          IsEnabled="{Binding CanAct}"
                          Visibility="{Binding CheckShown}"
                          Command="{Binding CheckForNewer}" />
 
-          <controls:Tile Style="{StaticResource Tile.Row}" controls:Screen.TakesFocus="True"
+          <controls:Tile Style="{StaticResource Tile.Row}" Height="44" controls:Screen.TakesFocus="True"
                          Glyph="{x:Static theme:Glyphs.Quit}" Label="{x:Static lang:Strings.Cancel}"
                          Visibility="{Binding CheckingShown}"
                          Command="{Binding CancelUpdate}" />
 
           <UniformGrid Columns="2" Visibility="{Binding ConfirmDownloadShown}">
-            <controls:Tile Style="{StaticResource Tile.Row}" controls:Screen.TakesFocus="True"
+            <controls:Tile Style="{StaticResource Tile.Row}" Height="44" controls:Screen.TakesFocus="True"
                            IsOn="True"
                            Glyph="{x:Static theme:Glyphs.Download}" Label="{x:Static lang:Strings.DownloadBuild}"
                            IsEnabled="{Binding CanAct}"
                            Command="{Binding DownloadNewer}" />
-            <controls:Tile Style="{StaticResource Tile.Row}"
+            <controls:Tile Style="{StaticResource Tile.Row}" Height="44"
                            Glyph="{x:Static theme:Glyphs.Quit}" Label="{x:Static lang:Strings.Cancel}"
                            IsEnabled="{Binding CanAct}"
                            Command="{Binding CancelUpdate}" />
           </UniformGrid>
 
-          <controls:Tile Style="{StaticResource Tile.Row}" controls:Screen.TakesFocus="True"
+          <controls:Tile Style="{StaticResource Tile.Row}" Height="44" controls:Screen.TakesFocus="True"
                          Glyph="{x:Static theme:Glyphs.Quit}" Label="{x:Static lang:Strings.CancelDownload}"
                          Visibility="{Binding DownloadingShown}"
                          Command="{Binding CancelUpdate}" />
 
-          <controls:Tile Style="{StaticResource Tile.Row}"
-                         Glyph="{x:Static theme:Glyphs.Update}" Label="{Binding UpdateLabel}"
-                         IsEnabled="{Binding CanAct}"
-                         Command="{Binding UpdateGames}" />
-
-          <controls:Tile Style="{StaticResource Tile.Row}"
-                         Glyph="{x:Static theme:Glyphs.Remove}" Label="{Binding RemoveOldLabel}"
-                         IsEnabled="{Binding CanAct}"
-                         Command="{Binding RemoveOld}" />
+          <UniformGrid Columns="2" Margin="0,2,0,0">
+            <controls:Tile Style="{StaticResource Tile.Mini}" Height="40"
+                           Glyph="{x:Static theme:Glyphs.Update}" Label="{Binding UpdateLabel}"
+                           IsEnabled="{Binding CanAct}"
+                           Command="{Binding UpdateGames}" />
+            <controls:Tile Style="{StaticResource Tile.Mini}" Height="40"
+                           Glyph="{x:Static theme:Glyphs.Remove}" Label="{Binding RemoveOldLabel}"
+                           IsEnabled="{Binding CanAct}"
+                           Command="{Binding RemoveOld}" />
+          </UniformGrid>
         </StackPanel>
 
         <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.OptiPatcherHeading}"
                    Margin="4,24,0,10" />
+
+        <!-- Tiny reminder that OptiPatcher only applies to supported games. -->
+        <Border Style="{StaticResource Card.Info}"
+                Background="{x:Static theme:Accent.Tint}"
+                BorderBrush="{x:Static theme:Accent.Wash}"
+                Padding="12,8" Margin="0,0,0,8">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Style="{StaticResource Text.Icon}" FontSize="13"
+                       Foreground="{x:Static theme:Accent.Brush}"
+                       Text="{x:Static theme:Glyphs.Info}"
+                       VerticalAlignment="Center" Margin="0,0,8,0" />
+            <TextBlock Grid.Column="1" Style="{StaticResource Text.Caption}"
+                       Foreground="{DynamicResource Text}"
+                       Text="{x:Static lang:Strings.OptiPatcherSupportedOnly}"
+                       TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center" />
+          </Grid>
+        </Border>
 
         <!-- Checking or first-time downloading OptiPatcher. -->
         <Border Style="{StaticResource Card.Info}"
@@ -265,6 +297,20 @@
 
         <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
                    Text="{x:Static lang:Strings.ExtrasExplained}" Margin="6,8,6,0" />
+
+        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.CompatibilityHeading}"
+                   Margin="4,24,0,8" />
+
+        <UniformGrid Columns="2" Margin="-4,0,-4,0">
+          <controls:Tile Style="{StaticResource Tile.Mini}"
+                         Glyph="{x:Static theme:Glyphs.Share}"
+                         Label="{x:Static lang:Strings.OptiScalerCompatibility}"
+                         Command="{Binding OpenOptiScalerCompatibility}" />
+          <controls:Tile Style="{StaticResource Tile.Mini}"
+                         Glyph="{x:Static theme:Glyphs.Share}"
+                         Label="{x:Static lang:Strings.OptiPatcherCompatibility}"
+                         Command="{Binding OpenOptiPatcherCompatibility}" />
+        </UniformGrid>
 
       </StackPanel>
     </ScrollViewer>

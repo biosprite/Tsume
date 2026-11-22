@@ -51,11 +51,12 @@ public sealed class UpscalerTuningViewModel : Observable
     /// True when the game is installed without XMX while Tsume holds an XMX archive that Update can add.
     /// </param>
     public void Load(UpscalerSettings settings, bool hasXmx, bool hasOptiPatcher = false, bool isInstalled = false,
-        string? lockedProxy = null, bool xmxAvailableToAdd = false)
+        string? lockedProxy = null, bool xmxAvailableToAdd = false, bool showOptiPatcher = true)
     {
         _loading = true;
         HasXmx = hasXmx;
         HasOptiPatcher = hasOptiPatcher;
+        ShowOptiPatcher = showOptiPatcher;
         IsInstalled = isInstalled;
         _lockedProxy = lockedProxy;
         _xmxAvailableToAdd = xmxAvailableToAdd;
@@ -212,6 +213,11 @@ public sealed class UpscalerTuningViewModel : Observable
     public bool SpoofNvidia => Settings.SpoofNvidia;
 
     public ICommand ToggleOptiPatcher { get; }
+
+    /// <summary>False on Global Defaults because OptiPatcher is strictly per game.</summary>
+    public bool ShowOptiPatcher { get; private set; } = true;
+
+    public Visibility OptiPatcherShown => ShowOptiPatcher ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>False while Tsume has not downloaded OptiPatcher, or the game was installed without it.</summary>
     public bool HasOptiPatcher { get; private set; }

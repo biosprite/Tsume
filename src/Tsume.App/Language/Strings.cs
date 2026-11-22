@@ -195,6 +195,8 @@ public static class Strings
     public static string OpenGameMenuDetail => Find();
 
     /// <summary>"Installed · nightly of 11 November"</summary>
+    public static string TagUpdateReady => Find();
+    public static string TagBlocked => Find();
     public static string GameInstalled(string night) => Fill(Find(), night);
     public static string GameInstalledWithOptiPatcher(string night) => Fill(Find(), night);
     public static string GameUpdateReady => Find();
@@ -359,7 +361,11 @@ public static class Strings
     public static string XmxNotInGame => Find();
 
     public static string OptiPatcherHeading => Find();
+    public static string OptiPatcherSupportedOnly => Find();
     public static string OptiPatcherExplained => Find();
+    public static string CompatibilityHeading => Find();
+    public static string OptiScalerCompatibility => Find();
+    public static string OptiPatcherCompatibility => Find();
     public static string DownloadOptiPatcher => Find();
     public static string CheckForNewerOptiPatcher => Find();
     public static string OptiPatcherNotDownloaded => Find();

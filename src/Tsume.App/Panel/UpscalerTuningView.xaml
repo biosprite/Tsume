@@ -97,6 +97,7 @@
                    Detail="{Binding OptiPatcherDetail}"
                    IsOn="{Binding OptiPatcher}"
                    IsEnabled="{Binding HasOptiPatcher}"
+                   Visibility="{Binding OptiPatcherShown}"
                    Command="{Binding ToggleOptiPatcher}" />
 
   </StackPanel>

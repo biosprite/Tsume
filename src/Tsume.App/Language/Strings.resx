@@ -63,7 +63,7 @@
     <comment>Shown in the same place when the helper runs but does not know this machine; wraps to two lines</comment>
   </data>
   <data name="OnlineGameCaution" xml:space="preserve">
-    <value>For single-player games. In an online game OptiScaler can get an account banned, and Tsume cannot spot every anti-cheat.</value>
+    <value>Single-player games only. Using OptiScaler in online games can cause bans.</value>
     <comment>On a game's page before OptiScaler is installed in it</comment>
   </data>
 
@@ -259,30 +259,32 @@
 
   <data name="GamesHeading" xml:space="preserve"><value>GAMES</value></data>
   <data name="ToolsHeading" xml:space="preserve"><value>OPTISCALER</value></data>
-  <data name="NoGamesYet" xml:space="preserve"><value>No games with DLSS, FSR or XeSS were found in Steam, Epic, GOG, Ubisoft Connect or the Xbox app. Add one by pointing at its program.</value></data>
+  <data name="NoGamesYet" xml:space="preserve"><value>No supported games found. Use Add a game to pick a game's .exe.</value></data>
   <data name="LookingForGames" xml:space="preserve"><value>Looking for games…</value></data>
   <data name="AddGame" xml:space="preserve"><value>Add a game</value></data>
-  <data name="Defaults" xml:space="preserve"><value>Defaults</value></data>
-  <data name="OptiScalerBuild" xml:space="preserve"><value>OptiScaler build</value></data>
-  <data name="OpenGameMenu" xml:space="preserve"><value>Open its menu in the game</value></data>
-  <data name="OpenGameMenuDetail" xml:space="preserve"><value>Presses Insert for the game behind the panel</value></data>
+  <data name="Defaults" xml:space="preserve"><value>Global Defaults</value></data>
+  <data name="OptiScalerBuild" xml:space="preserve"><value>Download Build &amp; Addons</value></data>
+  <data name="OpenGameMenu" xml:space="preserve"><value>Open in-game menu</value></data>
+  <data name="OpenGameMenuDetail" xml:space="preserve"><value>Presses Insert in the game</value></data>
+  <data name="TagUpdateReady" xml:space="preserve"><value>Update ready</value></data>
+  <data name="TagBlocked" xml:space="preserve"><value>Blocked</value></data>
   <data name="GameInstalled" xml:space="preserve">
-    <value>Installed · nightly of {0}</value>
+    <value>Installed ({0})</value>
     <comment>{0} = the night the build was made, e.g. "11 November"</comment>
   </data>
   <data name="GameInstalledWithOptiPatcher" xml:space="preserve">
-    <value>Installed · nightly of {0} · OptiPatcher on</value>
+    <value>Installed ({0}), OptiPatcher on</value>
     <comment>{0} = the night the build was made, e.g. "11 November"</comment>
   </data>
-  <data name="GameUpdateReady" xml:space="preserve"><value>Installed · a newer build is ready</value></data>
-  <data name="GameUpdateReadyWithOptiPatcher" xml:space="preserve"><value>Installed · OptiPatcher on · update ready</value></data>
+  <data name="GameUpdateReady" xml:space="preserve"><value>Installed, update ready</value></data>
+  <data name="GameUpdateReadyWithOptiPatcher" xml:space="preserve"><value>Installed, OptiPatcher on, update ready</value></data>
   <data name="GameNeedsRepair" xml:space="preserve"><value>Needs repair</value></data>
   <data name="GameCutShort" xml:space="preserve"><value>Install interrupted</value></data>
-  <data name="GameFolderGone" xml:space="preserve"><value>Its folder is gone</value></data>
-  <data name="GameNothingToRun" xml:space="preserve"><value>No program found</value></data>
-  <data name="GameNoUpscaler" xml:space="preserve"><value>No upscaler files found</value></data>
+  <data name="GameFolderGone" xml:space="preserve"><value>Folder missing</value></data>
+  <data name="GameNothingToRun" xml:space="preserve"><value>No .exe found</value></data>
+  <data name="GameNoUpscaler" xml:space="preserve"><value>No upscalers found</value></data>
   <data name="GameBlocked" xml:space="preserve">
-    <value>{0} · not offered</value>
+    <value>Blocked ({0})</value>
     <comment>{0} = the name of an anti-cheat</comment>
   </data>
 
@@ -290,83 +292,83 @@
 
   <data name="NotInstalled" xml:space="preserve"><value>Not installed</value></data>
   <data name="StateInstalled" xml:space="preserve">
-    <value>Installed · nightly of {0} · loads as {1}</value>
+    <value>Installed ({0}), loads as {1}</value>
     <comment>{0} = a date, {1} = a file name such as dxgi.dll</comment>
   </data>
-  <data name="StateReplaced" xml:space="preserve"><value>Needs repair. The game replaced the file OptiScaler loads as (an update or a file check does that).</value></data>
-  <data name="StateCutShort" xml:space="preserve"><value>An install was interrupted. Repair finishes it; Remove undoes it.</value></data>
-  <data name="StateFolderGone" xml:space="preserve"><value>The game's folder is gone. Nothing is left to remove; the record can be forgotten.</value></data>
+  <data name="StateReplaced" xml:space="preserve"><value>Needs repair. A game update replaced OptiScaler's file.</value></data>
+  <data name="StateCutShort" xml:space="preserve"><value>Install interrupted. Press Repair to finish or Remove to undo.</value></data>
+  <data name="StateFolderGone" xml:space="preserve"><value>Game folder is missing. You can forget this install.</value></data>
   <data name="StateBlocked" xml:space="preserve">
-    <value>{0} is part of this game. OptiScaler is not offered for games with an anti-cheat: it can get an account banned.</value>
+    <value>Blocked due to {0}. OptiScaler is not allowed with anti-cheat.</value>
     <comment>{0} = the name of an anti-cheat</comment>
   </data>
-  <data name="StateNothingToRun" xml:space="preserve"><value>No program was found in this folder.</value></data>
+  <data name="StateNothingToRun" xml:space="preserve"><value>No game .exe found in this folder.</value></data>
   <data name="FoundUpscalers" xml:space="preserve">
     <value>Found: {0}</value>
     <comment>{0} = a list such as "DLSS, FSR 3"</comment>
   </data>
-  <data name="FoundNoUpscalers" xml:space="preserve"><value>No DLSS, FSR or XeSS files found. It can still work if the game has one built in.</value></data>
+  <data name="FoundNoUpscalers" xml:space="preserve"><value>No DLSS, FSR, or XeSS files found. It may still work if built in.</value></data>
   <data name="SomeoneElsesOptiScaler" xml:space="preserve">
-    <value>OptiScaler is already here as {0}, put there by another tool. Installing replaces it; removing puts it back.</value>
+    <value>OptiScaler is already installed as {0}. Installing replaces it, and removing restores it.</value>
     <comment>{0} = a file name</comment>
   </data>
   <data name="NewerBuildReady" xml:space="preserve">
-    <value>A newer build is downloaded: nightly of {0}.</value>
+    <value>Update ready: {0} build.</value>
     <comment>{0} = a date</comment>
   </data>
   <data name="InstallOptiScaler" xml:space="preserve"><value>Install OptiScaler</value></data>
-  <data name="UpdateOptiScaler" xml:space="preserve"><value>Update to the newer build</value></data>
+  <data name="UpdateOptiScaler" xml:space="preserve"><value>Update OptiScaler</value></data>
   <data name="RepairOptiScaler" xml:space="preserve"><value>Repair</value></data>
   <data name="RemoveOptiScaler" xml:space="preserve"><value>Remove OptiScaler</value></data>
-  <data name="ForgetInstall" xml:space="preserve"><value>Forget this install</value></data>
-  <data name="TakeOffList" xml:space="preserve"><value>Take off this list</value></data>
+  <data name="ForgetInstall" xml:space="preserve"><value>Forget install</value></data>
+  <data name="TakeOffList" xml:space="preserve"><value>Remove from list</value></data>
   <data name="OpenGameFolder" xml:space="preserve"><value>Open game folder</value></data>
-  <data name="CheckingBuild" xml:space="preserve"><value>Asking GitHub for the newest nightly…</value></data>
+  <data name="CheckingBuild" xml:space="preserve"><value>Checking GitHub for the latest build…</value></data>
   <data name="Downloading" xml:space="preserve">
-    <value>Downloading the build… {0} %</value>
+    <value>Downloading build… {0}%</value>
     <comment>{0} = percent done</comment>
   </data>
-  <data name="Unpacking" xml:space="preserve"><value>Checking and unpacking…</value></data>
-  <data name="Installing" xml:space="preserve"><value>Copying into the game's folder…</value></data>
+  <data name="Unpacking" xml:space="preserve"><value>Unpacking…</value></data>
+  <data name="Installing" xml:space="preserve"><value>Installing…</value></data>
   <data name="Removing" xml:space="preserve"><value>Removing…</value></data>
-  <data name="InstalledDone" xml:space="preserve"><value>Installed. Start the game and press Insert to open OptiScaler's menu.</value></data>
-  <data name="RemovedDone" xml:space="preserve"><value>Removed. The game's folder is as it was.</value></data>
+  <data name="InstalledDone" xml:space="preserve"><value>Installed. Press Insert in-game to open OptiScaler.</value></data>
+  <data name="RemovedDone" xml:space="preserve"><value>Removed. Original files restored.</value></data>
   <data name="RemovedButLeft" xml:space="preserve">
-    <value>Removed. {0} file(s) had been changed since and were left alone; the originals they replaced are kept in Tsume's folder.</value>
+    <value>Removed. {0} modified file(s) were left untouched; originals are backed up in Tsume.</value>
     <comment>{0} = how many files</comment>
   </data>
   <data name="Forgotten" xml:space="preserve"><value>Forgotten.</value></data>
-  <data name="SettingsSaved" xml:space="preserve"><value>Saved. It takes effect the next time the game starts.</value></data>
+  <data name="SettingsSaved" xml:space="preserve"><value>Saved. Takes effect next time the game starts.</value></data>
 
   <!-- OptiScaler: the settings -->
 
   <data name="UpscalerHeading" xml:space="preserve"><value>UPSCALER</value></data>
   <data name="ChoiceAuto" xml:space="preserve"><value>Auto</value></data>
-  <data name="UpscalerAutoDetail" xml:space="preserve"><value>OptiScaler decides (on Intel Arc, XeSS)</value></data>
-  <data name="UpscalerXessDetail" xml:space="preserve"><value>Intel's own upscaler</value></data>
-  <data name="UpscalerFsr4Detail" xml:space="preserve"><value>AMD's FSR 4, run on Arc through its INT8 network</value></data>
-  <data name="UpscalerFsr3Detail" xml:space="preserve"><value>AMD's FSR 3.1, which runs on anything</value></data>
-  <data name="ModelAutoDetail" xml:space="preserve"><value>OptiScaler picks the network it thinks the GPU supports</value></data>
-  <data name="ModelInt8Detail" xml:space="preserve"><value>The full network, for the best picture</value></data>
-  <data name="ModelLiteDetail" xml:space="preserve"><value>A smaller network, faster and a little softer</value></data>
-  <data name="FrameGenOutputHeading" xml:space="preserve"><value>FRAME GENERATION · OUTPUT</value></data>
-  <data name="FrameGenInputHeading" xml:space="preserve"><value>FRAME GENERATION · INPUT</value></data>
+  <data name="UpscalerAutoDetail" xml:space="preserve"><value>Let OptiScaler choose</value></data>
+  <data name="UpscalerXessDetail" xml:space="preserve"><value>Intel XeSS upscaler</value></data>
+  <data name="UpscalerFsr4Detail" xml:space="preserve"><value>AMD FSR 4</value></data>
+  <data name="UpscalerFsr3Detail" xml:space="preserve"><value>AMD FSR 3.1</value></data>
+  <data name="ModelAutoDetail" xml:space="preserve"><value>Let OptiScaler pick the model</value></data>
+  <data name="ModelInt8Detail" xml:space="preserve"><value>Full INT8 model for best quality</value></data>
+  <data name="ModelLiteDetail" xml:space="preserve"><value>Smaller model, faster and slightly softer</value></data>
+  <data name="FrameGenOutputHeading" xml:space="preserve"><value>FRAME GENERATION OUTPUT</value></data>
+  <data name="FrameGenInputHeading" xml:space="preserve"><value>FRAME GENERATION INPUT</value></data>
   <data name="FrameGenMultiplierHeading" xml:space="preserve"><value>MULTIPLIER</value></data>
   <data name="ChoiceOff" xml:space="preserve"><value>Off</value></data>
   <data name="SourceAny" xml:space="preserve"><value>Any game</value></data>
-  <data name="SourceAnyDetail" xml:space="preserve"><value>Built from the upscaler. Works in any game; the HUD may shimmer.</value></data>
-  <data name="SourceDlssgDetail" xml:space="preserve"><value>Uses the game's DLSS Frame Generation. Turn that on in the game.</value></data>
-  <data name="SourceFsrDetail" xml:space="preserve"><value>Uses the game's FSR Frame Generation. Turn that on in the game.</value></data>
+  <data name="SourceAnyDetail" xml:space="preserve"><value>Uses the upscaler. Works in any game, but HUD elements may shimmer.</value></data>
+  <data name="SourceDlssgDetail" xml:space="preserve"><value>Uses the game's DLSS Frame Generation. Enable it in-game.</value></data>
+  <data name="SourceFsrDetail" xml:space="preserve"><value>Uses the game's FSR Frame Generation. Enable it in-game.</value></data>
   <data name="InGameHeading" xml:space="preserve"><value>IN THE GAME</value></data>
   <data name="SpoofNvidia" xml:space="preserve"><value>Pose as an Nvidia card</value></data>
-  <data name="SpoofNvidiaDetail" xml:space="preserve"><value>So the game offers DLSS for OptiScaler to take over</value></data>
+  <data name="SpoofNvidiaDetail" xml:space="preserve"><value>Lets the game show DLSS options for OptiScaler</value></data>
   <data name="OptiPatcher" xml:space="preserve"><value>OptiPatcher</value></data>
-  <data name="OptiPatcherDetailOn" xml:space="preserve"><value>On · loads OptiPatcher.asi to unlock DLSS without GPU spoofing</value></data>
-  <data name="OptiPatcherDetailOff" xml:space="preserve"><value>Off · unlocks DLSS/DLSS-FG in supported games without GPU spoofing</value></data>
-  <data name="OptiPatcherLockedBuild" xml:space="preserve"><value>Download OptiPatcher on the OptiScaler build page first</value></data>
-  <data name="OptiPatcherBadge" xml:space="preserve"><value>OptiPatcher · On</value></data>
+  <data name="OptiPatcherDetailOn" xml:space="preserve"><value>On, unlocks DLSS without GPU spoofing</value></data>
+  <data name="OptiPatcherDetailOff" xml:space="preserve"><value>Off, unlocks DLSS in supported games without GPU spoofing</value></data>
+  <data name="OptiPatcherLockedBuild" xml:space="preserve"><value>Download OptiPatcher in Download Build &amp; Addons first.</value></data>
+  <data name="OptiPatcherBadge" xml:space="preserve"><value>OptiPatcher on</value></data>
   <data name="OptiPatcherBadgeVersion" xml:space="preserve">
-    <value>OptiPatcher {0} · On</value>
+    <value>OptiPatcher {0}</value>
     <comment>{0} = OptiPatcher release tag, e.g. "v0.42"</comment>
   </data>
   <data name="InstallAs" xml:space="preserve"><value>Install as</value></data>
@@ -375,13 +377,13 @@
     <comment>{0} = a file name such as dxgi.dll</comment>
   </data>
   <data name="LoadsAsAuto" xml:space="preserve"><value>Auto (Tsume chooses)</value></data>
-  <data name="LoadsAsDetail" xml:space="preserve"><value>dxgi.dll suits most DirectX games; Vulkan and Xbox games often need winmm.dll.</value></data>
+  <data name="LoadsAsDetail" xml:space="preserve"><value>dxgi.dll works for most DirectX games. Vulkan and Xbox games often need winmm.dll.</value></data>
   <data name="LoadsAsLockedInstalled" xml:space="preserve">
-    <value>Installed as {0}. Remove and reinstall to change.</value>
+    <value>Installed as {0}. Reinstall to change.</value>
     <comment>{0} = a file name such as dxgi.dll</comment>
   </data>
   <data name="LoadsAsLockedExisting" xml:space="preserve">
-    <value>OptiScaler is already here as {0}; Tsume reuses that name.</value>
+    <value>Existing install uses {0}.</value>
     <comment>{0} = a file name such as winmm.dll</comment>
   </data>
   <data name="ProxyAutoHint" xml:space="preserve"><value>Recommended</value></data>
@@ -390,9 +392,9 @@
   <data name="ProxyVersionHint" xml:space="preserve"><value>Xbox / fallback</value></data>
   <data name="ProxyD3d12Hint" xml:space="preserve"><value>DirectX 12 fallback</value></data>
   <data name="ProxyFallbackHint" xml:space="preserve"><value>Fallback</value></data>
-  <data name="XmxLockedBuild" xml:space="preserve"><value>XMX is greyed out until you add the XMX archive on the OptiScaler build page.</value></data>
-  <data name="XmxLockedUpdate" xml:space="preserve"><value>XMX is not in this game yet. Press Update above to add it.</value></data>
-  <data name="MultiplierIntelOnly" xml:space="preserve"><value>3× and 4× require an Intel Arc GPU; other GPUs support 2×.</value></data>
+  <data name="XmxLockedBuild" xml:space="preserve"><value>Add the XMX archive in Download Build &amp; Addons to enable.</value></data>
+  <data name="XmxLockedUpdate" xml:space="preserve"><value>Press Update above to add XMX.</value></data>
+  <data name="MultiplierIntelOnly" xml:space="preserve"><value>3× and 4× require an Intel Arc GPU.</value></data>
 
   <!-- OptiScaler: the build -->
 
@@ -400,10 +402,10 @@
     <value>Nightly of {0}</value>
     <comment>{0} = a date, e.g. "11 November"</comment>
   </data>
-  <data name="NoBuildOnDisk" xml:space="preserve"><value>Nothing downloaded yet</value></data>
-  <data name="NightlyExplained" xml:space="preserve"><value>Tsume uses OptiScaler's nightly builds; the numbered releases are months behind. About 75 MB to download.</value></data>
-  <data name="CheckForNewerBuild" xml:space="preserve"><value>Check for a newer build</value></data>
-  <data name="CheckingNewerBuild" xml:space="preserve"><value>Checking for a newer build…</value></data>
+  <data name="NoBuildOnDisk" xml:space="preserve"><value>Not downloaded</value></data>
+  <data name="NightlyExplained" xml:space="preserve"><value>~75 MB download, ~300 MB extracted.</value></data>
+  <data name="CheckForNewerBuild" xml:space="preserve"><value>Check for updates</value></data>
+  <data name="CheckingNewerBuild" xml:space="preserve"><value>Checking for updates…</value></data>
   <data name="NewerBuildAvailableHeading" xml:space="preserve"><value>NEWER BUILD AVAILABLE</value></data>
   <data name="BuildAvailableHeading" xml:space="preserve"><value>BUILD AVAILABLE</value></data>
   <data name="DownloadingBuildHeading" xml:space="preserve"><value>DOWNLOADING BUILD</value></data>
@@ -412,9 +414,9 @@
   <data name="CancelDownload" xml:space="preserve"><value>Cancel download</value></data>
   <data name="CheckCancelled" xml:space="preserve"><value>Check cancelled.</value></data>
   <data name="DownloadCancelled" xml:space="preserve"><value>Download cancelled.</value></data>
-  <data name="HaveNewest" xml:space="preserve"><value>This is the newest build.</value></data>
+  <data name="HaveNewest" xml:space="preserve"><value>Already up to date.</value></data>
   <data name="GotNewer" xml:space="preserve">
-    <value>Downloaded the nightly of {0}.</value>
+    <value>Downloaded the {0} nightly.</value>
     <comment>{0} = a date</comment>
   </data>
   <data name="UpdateGames" xml:space="preserve">
@@ -423,22 +425,22 @@
   </data>
   <data name="UpdateOneGame" xml:space="preserve"><value>Update 1 game</value></data>
   <data name="UpdateAllGames" xml:space="preserve"><value>Update all games</value></data>
-  <data name="AllGamesCurrent" xml:space="preserve"><value>Every game with OptiScaler already has this build.</value></data>
-  <data name="RemoveOldBuilds" xml:space="preserve"><value>Remove old builds</value></data>
+  <data name="AllGamesCurrent" xml:space="preserve"><value>All games are already up to date.</value></data>
+  <data name="RemoveOldBuilds" xml:space="preserve"><value>Remove old</value></data>
   <data name="RemoveOldBuildsSized" xml:space="preserve">
-    <value>Remove old builds · {0}</value>
+    <value>Remove old ({0})</value>
     <comment>{0} = how much disk space they take, e.g. "283 MB"</comment>
   </data>
   <data name="NoOldBuilds" xml:space="preserve"><value>No old builds to remove.</value></data>
   <data name="RemovedOldBuilds" xml:space="preserve">
-    <value>Removed the old builds: {0} freed.</value>
+    <value>Removed old builds ({0} freed).</value>
     <comment>{0} = disk space, e.g. "283 MB"</comment>
   </data>
-  <data name="OldBuildsInUse" xml:space="preserve"><value>The old builds could not be removed: their files are in use.</value></data>
+  <data name="OldBuildsInUse" xml:space="preserve"><value>Could not remove old builds because their files are in use.</value></data>
   <data name="SizeKB" xml:space="preserve"><value>{0} KB</value></data>
   <data name="SizeMB" xml:space="preserve"><value>{0} MB</value></data>
   <data name="SizeGB" xml:space="preserve"><value>{0:0.0} GB</value></data>
-  <data name="GamesUpToDate" xml:space="preserve"><value>Every game is on this build</value></data>
+  <data name="GamesUpToDate" xml:space="preserve"><value>All games are up to date</value></data>
   <data name="UpdatedGames" xml:space="preserve">
     <value>Updated: {0}.</value>
     <comment>{0} = how many games</comment>
@@ -448,8 +450,8 @@
     <comment>{0} = a game's name, {1} = why it could not be updated</comment>
   </data>
   <data name="ExtrasHeading" xml:space="preserve"><value>EXTRAS</value></data>
-  <data name="ExtrasExplained" xml:space="preserve"><value>Files in the extras folder are copied into each game's OptiScaler folder at install, replacing the build's own.</value></data>
-  <data name="OpenExtras" xml:space="preserve"><value>Open the extras folder</value></data>
+  <data name="ExtrasExplained" xml:space="preserve"><value>Files placed here are copied into every game's OptiScaler folder on install.</value></data>
+  <data name="OpenExtras" xml:space="preserve"><value>Open extras folder</value></data>
   <data name="ExtrasEmpty" xml:space="preserve"><value>Empty</value></data>
   <data name="ExtrasCount" xml:space="preserve">
     <value>{0} files</value>
@@ -459,68 +461,72 @@
 
   <!-- OptiScaler: defaults, and adding a game -->
 
-  <data name="DefaultsExplained" xml:space="preserve"><value>What a game starts with. A game you have changed keeps its own settings.</value></data>
-  <data name="BrowseHint" xml:space="preserve"><value>Find the game's program (.exe) and press it.</value></data>
+  <data name="DefaultsExplained" xml:space="preserve"><value>Starting settings for new games. Games you edit keep their own settings.</value></data>
+  <data name="BrowseHint" xml:space="preserve"><value>Pick the game's .exe file.</value></data>
   <data name="BrowseUp" xml:space="preserve"><value>Up</value></data>
   <data name="ThisPC" xml:space="preserve"><value>This PC</value></data>
-  <data name="CannotOpenFolder" xml:space="preserve"><value>That folder cannot be opened.</value></data>
+  <data name="CannotOpenFolder" xml:space="preserve"><value>Could not open folder.</value></data>
 
   <!-- OptiScaler: when something goes wrong. One per value of Tsume.Upscaling.Trouble. -->
 
-  <data name="TroubleOffline" xml:space="preserve"><value>GitHub could not be reached. Check the connection and try again.</value></data>
-  <data name="TroubleNoBuildPublished" xml:space="preserve"><value>GitHub listed no nightly build that Tsume can check.</value></data>
-  <data name="TroubleDownloadDamaged" xml:space="preserve"><value>The download did not match its published hash and was thrown away. Try again.</value></data>
-  <data name="TroubleCannotUnpack" xml:space="preserve"><value>Windows could not unpack the build.</value></data>
-  <data name="TroubleBuildIncomplete" xml:space="preserve"><value>The build is missing OptiScaler's own files.</value></data>
-  <data name="TroubleBuildDamaged" xml:space="preserve"><value>The downloaded build has been changed on disk, so Tsume set it aside. Try again and it will be downloaded afresh.</value></data>
-  <data name="TroubleNoBuild" xml:space="preserve"><value>No build is downloaded yet.</value></data>
+  <data name="TroubleOffline" xml:space="preserve"><value>Could not reach GitHub. Check your connection and try again.</value></data>
+  <data name="TroubleNoBuildPublished" xml:space="preserve"><value>No verifiable OptiScaler build found on GitHub.</value></data>
+  <data name="TroubleDownloadDamaged" xml:space="preserve"><value>Download failed hash check. Please try again.</value></data>
+  <data name="TroubleCannotUnpack" xml:space="preserve"><value>Could not unpack the build.</value></data>
+  <data name="TroubleBuildIncomplete" xml:space="preserve"><value>The build is missing required OptiScaler files.</value></data>
+  <data name="TroubleBuildDamaged" xml:space="preserve"><value>Downloaded build was modified on disk and cleared. Try again to re-download.</value></data>
+  <data name="TroubleNoBuild" xml:space="preserve"><value>No build downloaded yet.</value></data>
   <data name="TroubleGameRunning" xml:space="preserve"><value>The game is running. Close it first.</value></data>
-  <data name="TroubleFolderMissing" xml:space="preserve"><value>The game's folder is not there.</value></data>
-  <data name="TroubleNotWritable" xml:space="preserve"><value>This game's folder needs administrator rights, which the panel does not have. Not supported yet.</value></data>
-  <data name="TroubleDiskFull" xml:space="preserve"><value>Not enough room on the disk. OptiScaler needs about 300 MB in the game's folder.</value></data>
+  <data name="TroubleFolderMissing" xml:space="preserve"><value>Game folder not found.</value></data>
+  <data name="TroubleNotWritable" xml:space="preserve"><value>This folder needs admin rights, which Tsume does not have.</value></data>
+  <data name="TroubleDiskFull" xml:space="preserve"><value>Not enough disk space. OptiScaler needs about 300 MB.</value></data>
   <data name="TroubleFileInUse" xml:space="preserve"><value>A file is in use. Close the game and its launcher, then try again.</value></data>
   <data name="TroubleAlreadyInstalled" xml:space="preserve"><value>OptiScaler is already installed here.</value></data>
-  <data name="UpscalerXmxDetail" xml:space="preserve"><value>AMD's FSR 4 on the Arc's XMX units, the fastest way to run it. Pick FSR or DLSS in the game, not XeSS. DirectX 12 games only</value></data>
-  <data name="UpscalerXmxMissing" xml:space="preserve"><value>Needs the XMX upscaler, which Tsume has not been given: add it on the build page. Until then FSR 4 is used</value></data>
-  <data name="XmxModelAutoDetail" xml:space="preserve"><value>Whichever model is picked in OptiScaler's menu in the game</value></data>
-  <data name="XmxModelFullDetail" xml:space="preserve"><value>FSR 4.1.2's full network, for the best picture</value></data>
-  <data name="XmxModelLiteDetail" xml:space="preserve"><value>FSR 4.1.2's smaller network, faster and a little softer</value></data>
+  <data name="UpscalerXmxDetail" xml:space="preserve"><value>FSR 4 on Intel XMX (DX12 only). Select FSR or DLSS in-game, not XeSS.</value></data>
+  <data name="UpscalerXmxMissing" xml:space="preserve"><value>Add the XMX archive in Download Build &amp; Addons first. Using FSR 4 until then.</value></data>
+  <data name="XmxModelAutoDetail" xml:space="preserve"><value>Uses the model chosen in OptiScaler's menu</value></data>
+  <data name="XmxModelFullDetail" xml:space="preserve"><value>Full FSR 4.1.2 model for best quality</value></data>
+  <data name="XmxModelLiteDetail" xml:space="preserve"><value>Smaller FSR 4.1.2 model for higher performance</value></data>
   <data name="XmxHeading" xml:space="preserve"><value>XMX UPSCALER</value></data>
-  <data name="XmxExplained" xml:space="preserve"><value>A test build that runs FSR 4.1.2 on Intel's XMX units. Tsume doesn't download it: get amd_fidelityfx_upscaler_dx12.7z from OptiScaler's Discord, save it to the Desktop or Downloads, then add it here.</value></data>
-  <data name="AddXmx" xml:space="preserve"><value>Add the XMX upscaler</value></data>
-  <data name="ReplaceXmx" xml:space="preserve"><value>Look for a newer XMX upscaler</value></data>
+  <data name="XmxExplained" xml:space="preserve"><value>Runs FSR 4.1.2 on Intel XMX. Save amd_fidelityfx_upscaler_dx12.7z to Desktop or Downloads, then add it here.</value></data>
+  <data name="AddXmx" xml:space="preserve"><value>Add XMX upscaler</value></data>
+  <data name="ReplaceXmx" xml:space="preserve"><value>Update XMX upscaler</value></data>
   <data name="XmxNotAdded" xml:space="preserve"><value>Not added</value></data>
   <data name="XmxHeld" xml:space="preserve">
-    <value>Version {0} · added {1}</value>
+    <value>Version {0}, added {1}</value>
     <comment>{0} = a version number, {1} = a date</comment>
   </data>
-  <data name="XmxNotFound" xml:space="preserve"><value>No amd_fidelityfx_upscaler_dx12.7z on the Desktop or in Downloads.</value></data>
-  <data name="XmxAdded" xml:space="preserve"><value>XMX upscaler added. Games get it at their next install or update.</value></data>
-  <data name="XmxSame" xml:space="preserve"><value>That is the XMX upscaler Tsume already has.</value></data>
-  <data name="XmxReady" xml:space="preserve"><value>The XMX upscaler is not in this game yet: Update adds it.</value></data>
-  <data name="XmxNotInGame" xml:space="preserve"><value>The XMX upscaler is not in this game, so FSR 4 was set. Update adds it.</value></data>
+  <data name="XmxNotFound" xml:space="preserve"><value>amd_fidelityfx_upscaler_dx12.7z not found on Desktop or in Downloads.</value></data>
+  <data name="XmxAdded" xml:space="preserve"><value>XMX upscaler added. Games get it on their next install or update.</value></data>
+  <data name="XmxSame" xml:space="preserve"><value>Already using this XMX upscaler.</value></data>
+  <data name="XmxReady" xml:space="preserve"><value>Update to add the XMX upscaler.</value></data>
+  <data name="XmxNotInGame" xml:space="preserve"><value>XMX is not in this game yet. Using FSR 4 until updated.</value></data>
   <data name="OptiPatcherHeading" xml:space="preserve"><value>OPTIPATCHER</value></data>
-  <data name="OptiPatcherExplained" xml:space="preserve"><value>Official OptiScaler ASI plugin that exposes DLSS and DLSS-FG inputs in supported games without DXGI spoofing. Turn it on per game.</value></data>
+  <data name="OptiPatcherSupportedOnly" xml:space="preserve"><value>Supported games only. Turn on per game.</value></data>
+  <data name="OptiPatcherExplained" xml:space="preserve"><value>Unlocks DLSS and DLSS-FG in supported games without GPU spoofing.</value></data>
+  <data name="CompatibilityHeading" xml:space="preserve"><value>COMPATIBILITY</value></data>
+  <data name="OptiScalerCompatibility" xml:space="preserve"><value>OptiScaler list</value></data>
+  <data name="OptiPatcherCompatibility" xml:space="preserve"><value>OptiPatcher list</value></data>
   <data name="DownloadOptiPatcher" xml:space="preserve"><value>Download OptiPatcher</value></data>
-  <data name="CheckForNewerOptiPatcher" xml:space="preserve"><value>Check for a newer OptiPatcher</value></data>
-  <data name="OptiPatcherNotDownloaded" xml:space="preserve"><value>Not downloaded yet</value></data>
+  <data name="CheckForNewerOptiPatcher" xml:space="preserve"><value>Check for updates</value></data>
+  <data name="OptiPatcherNotDownloaded" xml:space="preserve"><value>Not downloaded</value></data>
   <data name="OptiPatcherHeld" xml:space="preserve">
-    <value>{0} · downloaded {1}</value>
+    <value>{0}, downloaded {1}</value>
     <comment>{0} = release tag such as "v0.42", {1} = a date</comment>
   </data>
-  <data name="CheckingOptiPatcher" xml:space="preserve"><value>Checking GitHub for OptiPatcher…</value></data>
+  <data name="CheckingOptiPatcher" xml:space="preserve"><value>Checking for OptiPatcher…</value></data>
   <data name="DownloadingOptiPatcher" xml:space="preserve">
     <value>Downloading OptiPatcher {0}…</value>
     <comment>{0} = release tag such as "v0.42"</comment>
   </data>
   <data name="DownloadingOptiPatcherProgress" xml:space="preserve">
-    <value>Downloading OptiPatcher {0}… {1} %</value>
+    <value>Downloading OptiPatcher {0}… {1}%</value>
     <comment>{0} = release tag such as "v0.42", {1} = percent done</comment>
   </data>
   <data name="NewerOptiPatcherAvailableHeading" xml:space="preserve"><value>NEWER OPTIPATCHER AVAILABLE</value></data>
   <data name="DownloadingOptiPatcherHeading" xml:space="preserve"><value>DOWNLOADING OPTIPATCHER</value></data>
   <data name="HaveNewestOptiPatcher" xml:space="preserve">
-    <value>OptiPatcher {0} is the newest release.</value>
+    <value>OptiPatcher {0} is up to date.</value>
     <comment>{0} = release tag such as "v0.42"</comment>
   </data>
   <data name="GotOptiPatcher" xml:space="preserve">
@@ -528,20 +534,20 @@
     <comment>{0} = release tag such as "v0.42"</comment>
   </data>
   <data name="OptiPatcherUpdateReady" xml:space="preserve">
-    <value>OptiPatcher {0} is downloaded: Update installs it.</value>
+    <value>OptiPatcher {0} is ready. Press Update to install.</value>
     <comment>{0} = release tag such as "v0.42"</comment>
   </data>
-  <data name="OptiPatcherNotInGame" xml:space="preserve"><value>OptiPatcher is not in this game yet. Press Update to add it.</value></data>
+  <data name="OptiPatcherNotInGame" xml:space="preserve"><value>OptiPatcher is not available for this game yet.</value></data>
   <data name="BuildLineWithOptiPatcher" xml:space="preserve">
-    <value>{0} · OptiPatcher {1}</value>
+    <value>{0}, OptiPatcher {1}</value>
     <comment>{0} = OptiScaler build line, {1} = OptiPatcher release tag such as "v0.42"</comment>
   </data>
-  <data name="TroubleNotXmx" xml:space="preserve"><value>That archive does not hold the XMX upscaler.</value></data>
-  <data name="TroubleNoOptiPatcherPublished" xml:space="preserve"><value>GitHub listed no OptiPatcher release that Tsume can verify.</value></data>
-  <data name="TroubleOptiPatcherInvalid" xml:space="preserve"><value>The downloaded OptiPatcher file is not a valid plugin binary.</value></data>
-  <data name="TroubleOptiPatcherDamaged" xml:space="preserve"><value>The downloaded OptiPatcher file was changed on disk, so Tsume set it aside. Download it again on the build page.</value></data>
+  <data name="TroubleNotXmx" xml:space="preserve"><value>That archive does not contain the XMX upscaler.</value></data>
+  <data name="TroubleNoOptiPatcherPublished" xml:space="preserve"><value>No verifiable OptiPatcher release found on GitHub.</value></data>
+  <data name="TroubleOptiPatcherInvalid" xml:space="preserve"><value>The downloaded OptiPatcher file is not a valid plugin.</value></data>
+  <data name="TroubleOptiPatcherDamaged" xml:space="preserve"><value>OptiPatcher was modified on disk and cleared. Re-download it in Download Build &amp; Addons.</value></data>
   <data name="TroubleNotInstalled" xml:space="preserve"><value>OptiScaler is not installed here.</value></data>
-  <data name="TroubleAntiCheat" xml:space="preserve"><value>This game has an anti-cheat. OptiScaler is not offered for it.</value></data>
+  <data name="TroubleAntiCheat" xml:space="preserve"><value>Not available for games with anti-cheat.</value></data>
   <data name="TroubleOther" xml:space="preserve">
     <value>That did not work: {0}</value>
     <comment>{0} = the system's own description of the error</comment>
@@ -570,7 +576,7 @@
   <!-- OptiScaler: restore all games -->
 
   <data name="RestoreAllGames" xml:space="preserve"><value>Restore all games</value></data>
-  <data name="RestoreAllDetail" xml:space="preserve"><value>Removes OptiScaler from every game it is in</value></data>
+  <data name="RestoreAllDetail" xml:space="preserve"><value>Removes OptiScaler from all games</value></data>
   <data name="RestoreAllHeading" xml:space="preserve"><value>RESTORE ALL GAMES?</value></data>
   <data name="KeepOptiScaler" xml:space="preserve"><value>Keep OptiScaler</value></data>
   <data name="RestoredGames" xml:space="preserve">

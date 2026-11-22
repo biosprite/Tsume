@@ -1,10 +1,13 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Globalization;
+using System.Windows;
 using System.Windows.Input;
 using Tsume.App.Language;
 using Tsume.App.Mvvm;
 using Tsume.App.Platform;
 using Tsume.App.Theme;
+using Tsume.Core.Diagnostics;
 using Tsume.Upscaling;
 using Tsume.Upscaling.Config;
 using Tsume.Upscaling.Games;
@@ -21,6 +24,10 @@ namespace Tsume.App.ViewModels;
 /// </summary>
 public sealed class UpscalingViewModel : LayerViewModel
 {
+    private const string OptiScalerCompatibilityUrl = "https://github.com/optiscaler/OptiScaler/wiki/Compatibility-List";
+    private const string OptiPatcherCompatibilityUrl = "https://github.com/optiscaler/OptiPatcher/blob/main/GameSupport.md";
+    private static readonly Journal Log = new("optiscaler");
+
     private GameList? _list;
     private bool _looking;
 
@@ -45,6 +52,40 @@ public sealed class UpscalingViewModel : LayerViewModel
 
         // The panel stays open: the key press is posted straight to the game behind it.
         OpenGameMenu = new Command(QuickActions.OpenOptiScalerMenu);
+
+        OpenOptiScalerCompatibility = new Command(() => _ = OpenUrlAsync(OptiScalerCompatibilityUrl, dismiss));
+        OpenOptiPatcherCompatibility = new Command(() => _ = OpenUrlAsync(OptiPatcherCompatibilityUrl, dismiss));
+    }
+
+    private static async Task OpenUrlAsync(string url, Func<Task> dismiss)
+    {
+        // Delegate through explorer.exe first so UIAccess integrity does not block ShellExecute
+        // protocol activation (e.g. Microsoft Edge / MSEdgeHTM).
+        var opened = false;
+        try
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe") { ArgumentList = { url }, UseShellExecute = false });
+            opened = true;
+        }
+        catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Log.Write($"explorer.exe could not open {url}: {error.Message}");
+        }
+
+        if (!opened)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                opened = true;
+            }
+            catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
+            {
+                Log.Write($"ShellExecute could not open {url}: {error.Message}");
+            }
+        }
+
+        if (opened) await dismiss();
     }
 
     public UpscalingPaths Paths { get; } = new();
@@ -84,10 +125,10 @@ public sealed class UpscalingViewModel : LayerViewModel
 
     public bool HasPageOpen => Pages.Any(page => page.IsOpen);
 
-    /// <summary>A build tag's date in the current culture, e.g. "11 November"; the tag itself if it has no date.</summary>
+    /// <summary>A build tag's date in DD MMM YY format (e.g. "22 Nov 26"); the tag itself if it has no date.</summary>
     public static string Night(string buildTag) =>
         new NightlyBuild(buildTag, "", "", 0, "").Date is { } date
-            ? date.ToString("d MMMM", CultureInfo.CurrentCulture)
+            ? date.ToString("dd MMM yy", CultureInfo.CurrentCulture)
             : buildTag;
 
     /// <summary>
@@ -230,6 +271,8 @@ public sealed class UpscalingViewModel : LayerViewModel
     public ObservableCollection<UpscalingGameRow> Games { get; } = [];
 
     public ICommand OpenGameMenu { get; }
+    public ICommand OpenOptiScalerCompatibility { get; }
+    public ICommand OpenOptiPatcherCompatibility { get; }
 
     /// <summary>The line under the build's row: which nightly is here.</summary>
     public string BuildLine { get; private set => Set(ref field, value); } = "";
@@ -369,7 +412,27 @@ public sealed class UpscalingViewModel : LayerViewModel
     }
 }
 
-/// <summary>One game in the list: its name and a status line.</summary>
+public enum GameTagTone
+{
+    Neutral,
+    Success,
+    Accent,
+    Warning,
+    Danger,
+}
+
+/// <summary>One slightly rounded rectangular tag shown beneath a game's title so each item is cleanly separated.</summary>
+public sealed record GameTag(string Text, GameTagTone Tone = GameTagTone.Neutral, string? Glyph = null)
+{
+    public Visibility GlyphShown => string.IsNullOrEmpty(Glyph) ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility SuccessShown => Tone == GameTagTone.Success ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility AccentShown => Tone == GameTagTone.Accent ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility NeutralShown => Tone == GameTagTone.Neutral ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility WarningShown => Tone == GameTagTone.Warning ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility DangerShown => Tone == GameTagTone.Danger ? Visibility.Visible : Visibility.Collapsed;
+}
+
+/// <summary>One game in the list: its name and separated slightly-rounded status/upscaler tags below it.</summary>
 public sealed class UpscalingGameRow(ListedGame listed, Action open) : Observable
 {
     public ListedGame Listed { get; } = listed;
@@ -380,6 +443,8 @@ public sealed class UpscalingGameRow(ListedGame listed, Action open) : Observabl
     public string Glyph => Glyphs.Game;
 
     public string Detail { get; private set => Set(ref field, value); } = "";
+
+    public IReadOnlyList<GameTag> Tags { get; private set => Set(ref field, value); } = [];
 
     /// <summary>True when OptiScaler is in this game; lights the row's icon.</summary>
     public bool IsInstalled { get; private set => Set(ref field, value); }
@@ -402,8 +467,49 @@ public sealed class UpscalingGameRow(ListedGame listed, Action open) : Observabl
             _ when facts is null                    => Strings.GameNothingToRun,
             _ when facts.AntiCheat is { } antiCheat => Strings.GameBlocked(antiCheat),
             _ when facts.Upscalers.Count == 0       => Strings.GameNoUpscaler,
-            _                                       => string.Join(" · ", facts.Upscalers),
+            _                                       => string.Join(", ", facts.Upscalers),
         };
+
+        var tags = new List<GameTag>();
+        switch (state)
+        {
+            case InstallState.Healthy:
+                tags.Add(new GameTag(Strings.GameInstalled(UpscalingViewModel.Night(manifest!.Build)), GameTagTone.Success, Glyphs.Tick));
+                if (optiPatcherOn)
+                    tags.Add(new GameTag(Strings.OptiPatcher, GameTagTone.Accent, Glyphs.Plugin));
+                if (!isCurrent)
+                    tags.Add(new GameTag(Strings.TagUpdateReady, GameTagTone.Warning, Glyphs.Update));
+                break;
+
+            case InstallState.Replaced:
+                tags.Add(new GameTag(Strings.GameNeedsRepair, GameTagTone.Warning, Glyphs.Warning));
+                break;
+
+            case InstallState.CutShort:
+                tags.Add(new GameTag(Strings.GameCutShort, GameTagTone.Warning, Glyphs.Warning));
+                break;
+
+            case InstallState.FolderGone:
+                tags.Add(new GameTag(Strings.GameFolderGone, GameTagTone.Warning, Glyphs.Warning));
+                break;
+
+            default:
+                if (facts is null)
+                    tags.Add(new GameTag(Strings.GameNothingToRun));
+                else if (facts.AntiCheat is { } antiCheat)
+                {
+                    tags.Add(new GameTag(Strings.TagBlocked, GameTagTone.Danger, Glyphs.Shield));
+                    tags.Add(new GameTag(antiCheat));
+                }
+                else if (facts.Upscalers.Count == 0)
+                    tags.Add(new GameTag(Strings.GameNoUpscaler));
+                else
+                    foreach (var upscaler in facts.Upscalers)
+                        tags.Add(new GameTag(upscaler));
+                break;
+        }
+
+        if (!Tags.SequenceEqual(tags)) Tags = tags;
 
         Notify(nameof(Name));   // a store may have renamed it since the row was made
     }

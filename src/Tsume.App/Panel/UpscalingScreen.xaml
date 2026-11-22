@@ -37,16 +37,118 @@
                   VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
       <StackPanel>
 
+        <UniformGrid Columns="2" Margin="-4,0,-4,14">
+          <controls:Tile Style="{StaticResource Tile.Mini}"
+                         Glyph="{x:Static theme:Glyphs.Share}"
+                         Label="{x:Static lang:Strings.OptiScalerCompatibility}"
+                         Command="{Binding OpenOptiScalerCompatibility}" />
+          <controls:Tile Style="{StaticResource Tile.Mini}"
+                         Glyph="{x:Static theme:Glyphs.Share}"
+                         Label="{x:Static lang:Strings.OptiPatcherCompatibility}"
+                         Command="{Binding OpenOptiPatcherCompatibility}" />
+        </UniformGrid>
+
         <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.GamesHeading}" />
 
         <!-- Focus lands on the first game, or on Back when none are listed. -->
         <ItemsControl ItemsSource="{Binding Games}" Focusable="False" controls:Screen.TakesFocus="True">
           <ItemsControl.ItemTemplate>
             <DataTemplate>
-              <controls:Tile Style="{StaticResource Tile.Link}"
-                             Glyph="{Binding Glyph}" Label="{Binding Name}" Detail="{Binding Detail}"
+              <controls:Tile Style="{StaticResource Tile.GameLink}"
+                             Glyph="{Binding Glyph}" Label="{Binding Name}"
+                             AutomationProperties.HelpText="{Binding Detail}"
                              IsOn="{Binding IsInstalled}"
-                             Command="{Binding Open}" />
+                             Command="{Binding Open}">
+                <ItemsControl ItemsSource="{Binding Tags}" Focusable="False" Margin="0,0,0,-4">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Grid Margin="0,0,5,4">
+                        <!-- Slightly rounded rectangular tag: Installed (soft green) -->
+                        <Border Background="#1A4ADE80" BorderBrush="#4C4ADE80"
+                                BorderThickness="1" CornerRadius="4" Padding="6,2"
+                                Visibility="{Binding SuccessShown}">
+                          <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Text.Icon}" FontSize="10"
+                                       Foreground="#FF6EE7A0"
+                                       Text="{Binding Glyph}" Visibility="{Binding GlyphShown}"
+                                       VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <TextBlock Style="{StaticResource Text.Caption}" FontSize="10.5" FontWeight="SemiBold"
+                                       Foreground="#FF6EE7A0"
+                                       Text="{Binding Text}" VerticalAlignment="Center" />
+                          </StackPanel>
+                        </Border>
+
+                        <!-- Slightly rounded rectangular tag: OptiPatcher (live accent brushes set directly). -->
+                        <Border Background="{x:Static theme:Accent.Tint}"
+                                BorderBrush="{x:Static theme:Accent.Wash}"
+                                BorderThickness="1" CornerRadius="4" Padding="6,2"
+                                Visibility="{Binding AccentShown}">
+                          <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Text.Icon}" FontSize="10"
+                                       Foreground="{x:Static theme:Accent.Brush}"
+                                       Text="{Binding Glyph}" Visibility="{Binding GlyphShown}"
+                                       VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <TextBlock Style="{StaticResource Text.Caption}" FontSize="10.5" FontWeight="SemiBold"
+                                       Foreground="{x:Static theme:Accent.Brush}"
+                                       Text="{Binding Text}" VerticalAlignment="Center" />
+                          </StackPanel>
+                        </Border>
+
+                        <!-- Slightly rounded rectangular tag: Date / Upscaler / Anti-cheat name -->
+                        <Border Background="{DynamicResource Surface.Hover}"
+                                BorderBrush="{DynamicResource Surface.Divider}"
+                                BorderThickness="1" CornerRadius="4" Padding="6,2"
+                                Visibility="{Binding NeutralShown}">
+                          <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Text.Icon}" FontSize="10"
+                                       Foreground="{DynamicResource Text.Muted}"
+                                       Text="{Binding Glyph}" Visibility="{Binding GlyphShown}"
+                                       VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <TextBlock Style="{StaticResource Text.Caption}" FontSize="10.5"
+                                       Foreground="{DynamicResource Text.Muted}"
+                                       Text="{Binding Text}" VerticalAlignment="Center" />
+                          </StackPanel>
+                        </Border>
+
+                        <!-- Slightly rounded rectangular tag: Update ready / Needs repair / Interrupted / Folder missing -->
+                        <Border Background="#1AF5B841" BorderBrush="#4CF5B841"
+                                BorderThickness="1" CornerRadius="4" Padding="6,2"
+                                Visibility="{Binding WarningShown}">
+                          <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Text.Icon}" FontSize="10"
+                                       Foreground="#FFE5A93B"
+                                       Text="{Binding Glyph}" Visibility="{Binding GlyphShown}"
+                                       VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <TextBlock Style="{StaticResource Text.Caption}" FontSize="10.5" FontWeight="SemiBold"
+                                       Foreground="#FFE5A93B"
+                                       Text="{Binding Text}" VerticalAlignment="Center" />
+                          </StackPanel>
+                        </Border>
+
+                        <!-- Slightly rounded rectangular tag: Blocked -->
+                        <Border Background="#1AE05555" BorderBrush="#4CE05555"
+                                BorderThickness="1" CornerRadius="4" Padding="6,2"
+                                Visibility="{Binding DangerShown}">
+                          <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Text.Icon}" FontSize="10"
+                                       Foreground="#FFE06868"
+                                       Text="{Binding Glyph}" Visibility="{Binding GlyphShown}"
+                                       VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <TextBlock Style="{StaticResource Text.Caption}" FontSize="10.5" FontWeight="SemiBold"
+                                       Foreground="#FFE06868"
+                                       Text="{Binding Text}" VerticalAlignment="Center" />
+                          </StackPanel>
+                        </Border>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </controls:Tile>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>

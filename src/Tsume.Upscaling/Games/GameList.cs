@@ -33,12 +33,12 @@ public sealed class GameList
     /// </summary>
     public UpscalerSettings? ChosenDefaults { get; set; }
 
-    /// <summary>What a game gets until it is given settings of its own.</summary>
+    /// <summary>What a game gets until it is given settings of its own. OptiPatcher is always per game.</summary>
     [JsonIgnore]
     public UpscalerSettings Defaults
     {
-        get => ChosenDefaults ?? new();
-        set => ChosenDefaults = value;
+        get => (ChosenDefaults ?? new()) with { OptiPatcher = false };
+        set => ChosenDefaults = value with { OptiPatcher = false };
     }
 
     public List<ListedGame> Games { get; set; } = [];

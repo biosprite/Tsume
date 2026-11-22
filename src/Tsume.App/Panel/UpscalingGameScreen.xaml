@@ -41,8 +41,8 @@
                        Text="{Binding StateLine}" />
             <Border Background="{x:Static theme:Accent.Tint}"
                     BorderBrush="{x:Static theme:Accent.Wash}"
-                    BorderThickness="1" CornerRadius="8"
-                    Padding="8,3" Margin="0,8,0,0"
+                    BorderThickness="1" CornerRadius="4"
+                    Padding="7,2" Margin="0,8,0,0"
                     HorizontalAlignment="Left"
                     Visibility="{Binding OptiPatcherBadgeShown}">
               <StackPanel Orientation="Horizontal">
