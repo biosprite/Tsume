@@ -23,7 +23,6 @@ public sealed class UpscalerTuningViewModel : Observable
     private bool _loading;
     private string? _lockedProxy;
     private bool _xmxAvailableToAdd;
-    private bool _optiPatcherAvailableToAdd;
 
     public UpscalerTuningViewModel()
     {
@@ -51,11 +50,8 @@ public sealed class UpscalerTuningViewModel : Observable
     /// <param name="xmxAvailableToAdd">
     /// True when the game is installed without XMX while Tsume holds an XMX archive that Update can add.
     /// </param>
-    /// <param name="optiPatcherAvailableToAdd">
-    /// True when the game is installed without OptiPatcher while Tsume holds OptiPatcher that Update can add.
-    /// </param>
     public void Load(UpscalerSettings settings, bool hasXmx, bool hasOptiPatcher = false, bool isInstalled = false,
-        string? lockedProxy = null, bool xmxAvailableToAdd = false, bool optiPatcherAvailableToAdd = false)
+        string? lockedProxy = null, bool xmxAvailableToAdd = false)
     {
         _loading = true;
         HasXmx = hasXmx;
@@ -63,7 +59,6 @@ public sealed class UpscalerTuningViewModel : Observable
         IsInstalled = isInstalled;
         _lockedProxy = lockedProxy;
         _xmxAvailableToAdd = xmxAvailableToAdd;
-        _optiPatcherAvailableToAdd = optiPatcherAvailableToAdd;
         Settings = settings.Fitting(hasXmx, hasOptiPatcher);
         Notify("");   // every control reads its value again
         _loading = false;
@@ -191,7 +186,7 @@ public sealed class UpscalerTuningViewModel : Observable
     public bool ShowsMultiplier => Settings.FrameGen == FrameGenChoice.XeFG;
 
     /// <summary>True on Intel Arc GPUs, which support XeFG multi-frame generation (3× and 4×).</summary>
-    public bool SupportsMultiFrame => GpuVendor.HasIntelGpu();
+    public bool SupportsMultiFrame => GpuVendor.HasIntelArcGpu();
 
     /// <summary>Greys out 3× and 4× on non-Intel GPUs, where XeFG only supports 2×.</summary>
     public IReadOnlySet<int>? DisabledMultipliers => SupportsMultiFrame ? null : DisabledMultiFrame;
@@ -224,7 +219,7 @@ public sealed class UpscalerTuningViewModel : Observable
     public bool OptiPatcher => HasOptiPatcher && Settings.OptiPatcher;
 
     public string OptiPatcherDetail => !HasOptiPatcher
-        ? (_optiPatcherAvailableToAdd ? Strings.OptiPatcherLockedUpdate : Strings.OptiPatcherLockedBuild)
+        ? Strings.OptiPatcherLockedBuild
         : Settings.OptiPatcher
             ? Strings.OptiPatcherDetailOn
             : Strings.OptiPatcherDetailOff;

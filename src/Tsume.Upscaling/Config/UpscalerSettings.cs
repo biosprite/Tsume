@@ -114,12 +114,12 @@ public sealed record UpscalerSettings
     /// Adjusts settings for what the target game and this GPU actually support: falls back to plain FSR 4 (INT8) when
     /// XMX is chosen but not in the game's folder, maps plain FSR 4's Lite choice to INT8 (AMD's DX12 upscaler does
     /// not offer the Lite network), turns off OptiPatcher when <c>OptiPatcher.asi</c> is not present, and clamps
-    /// XeFG's multiplier to 2× on non-Intel GPUs (3×/4× require Intel Arc).
+    /// XeFG's multiplier to 2× on non-Arc GPUs (3×/4× require Intel Arc).
     /// </summary>
-    public UpscalerSettings Fitting(bool hasXmx, bool hasOptiPatcher = false, bool? hasIntelGpu = null)
+    public UpscalerSettings Fitting(bool hasXmx, bool hasOptiPatcher = false, bool? hasIntelArcGpu = null)
     {
         var fitted = this;
-        var intel = hasIntelGpu ?? GpuVendor.HasIntelGpu();
+        var intelArc = hasIntelArcGpu ?? GpuVendor.HasIntelArcGpu();
 
         if (fitted.Upscaler == UpscalerChoice.Fsr4Xmx && !hasXmx)
             fitted = fitted with { Upscaler = UpscalerChoice.Fsr4, Model = Fsr4Model.Int8 };
@@ -129,10 +129,31 @@ public sealed record UpscalerSettings
         if (fitted.OptiPatcher && !hasOptiPatcher)
             fitted = fitted with { OptiPatcher = false };
 
-        if (!intel && fitted.Multiplier > 2)
+        if (!intelArc && fitted.Multiplier > 2)
             fitted = fitted with { Multiplier = 2 };
 
         return fitted;
+    }
+
+    /// <summary>
+    /// Restores a previously remembered XMX or OptiPatcher preference when that feature is currently unavailable
+    /// (so editing an unrelated setting does not discard the preference before an install or update can activate it).
+    /// </summary>
+    public UpscalerSettings PreservingUnavailable(UpscalerSettings previous, bool hasXmx, bool hasOptiPatcher)
+    {
+        var result = this;
+
+        if (!hasXmx
+            && previous.Upscaler == UpscalerChoice.Fsr4Xmx
+            && result.Upscaler == UpscalerChoice.Fsr4)
+        {
+            result = result with { Upscaler = UpscalerChoice.Fsr4Xmx, Model = previous.Model };
+        }
+
+        if (!hasOptiPatcher && previous.OptiPatcher)
+            result = result with { OptiPatcher = true };
+
+        return result;
     }
 
     /// <summary>Writes these settings into the file, and only these.</summary>
@@ -141,14 +162,20 @@ public sealed record UpscalerSettings
     /// so Unreal does not fail with a DirectX 12 unsupported error.
     /// </param>
     /// <param name="hasOptiPatcher">
-    /// False when <c>OptiPatcher.asi</c> is not in the game: <c>LoadAsiPlugins</c> is then left as the file has it,
-    /// so a value set for the user's own ASI plugins is kept.
+    /// False when <c>OptiPatcher.asi</c> is not managed for this game: <c>LoadAsiPlugins</c> is then left as the
+    /// file has it, so a value set for the user's own ASI plugins is kept.
     /// </param>
-    public void WriteTo(IniFile ini, bool ueIntelAtomics = false, bool hasOptiPatcher = true)
+    /// <param name="keepOtherAsiPlugins">
+    /// True when the game's plugins folder holds other <c>*.asi</c> files: turning OptiPatcher off leaves
+    /// <c>LoadAsiPlugins</c> untouched so those user plugins keep loading.
+    /// </param>
+    /// <param name="hasIntelArcGpu">Overrides Intel Arc detection (used by self-checks).</param>
+    public void WriteTo(IniFile ini, bool ueIntelAtomics = false, bool hasOptiPatcher = true,
+        bool keepOtherAsiPlugins = false, bool? hasIntelArcGpu = null)
     {
         // Each graphics API names its upscalers differently. The XMX upscaler is DirectX 12 only; XeSS covers the other two.
-        // Native DX11 XeSS is Intel Arc only (non-Intel GPUs use dx11on12); native DX11 FSR 3.1 avoids dx11on12 instability.
-        var dx11Xess = GpuVendor.HasIntelGpu() ? "xess" : "xess_12";
+        // Native DX11 XeSS is Intel Arc only (non-Arc GPUs use dx11on12); native DX11 FSR 3.1 avoids dx11on12 instability.
+        var dx11Xess = (hasIntelArcGpu ?? GpuVendor.HasIntelArcGpu()) ? "xess" : "xess_12";
         var (dx11, dx12, vulkan, backend) = Upscaler switch
         {
             UpscalerChoice.XeSS    => (dx11Xess, "xess", "xess", Auto),
@@ -216,14 +243,22 @@ public sealed record UpscalerSettings
         ini.Set("Spoofing", "Dxgi", SpoofNvidia ? Auto : "false");
         if (ueIntelAtomics) ini.Set("Spoofing", "UEIntelAtomics", SpoofNvidia ? "true" : Auto);
 
-        if (hasOptiPatcher) ini.Set("Plugins", "LoadAsiPlugins", OptiPatcher ? "true" : Auto);
+        if (hasOptiPatcher)
+        {
+            if (OptiPatcher) ini.Set("Plugins", "LoadAsiPlugins", "true");
+            else if (!keepOtherAsiPlugins) ini.Set("Plugins", "LoadAsiPlugins", Auto);
+        }
     }
 
     /// <summary>
     /// These settings updated from the file, which the in-game overlay may have changed. Unknown values read as Auto;
     /// what the file cannot say (the FSR 4 model under XeSS, the multiplier with frame generation off) is kept.
     /// </summary>
-    public UpscalerSettings CorrectedBy(IniFile ini)
+    /// <param name="hasOptiPatcher">
+    /// False when <c>OptiPatcher.asi</c> is not installed in the game: <c>LoadAsiPlugins=true</c> then belongs to
+    /// the user's own ASI plugins and does not count as OptiPatcher being enabled.
+    /// </param>
+    public UpscalerSettings CorrectedBy(IniFile ini, bool hasOptiPatcher = true)
     {
         var upscaler = ini.Get("Upscalers", "Dx12Upscaler")?.ToLowerInvariant() switch
         {
@@ -280,7 +315,7 @@ public sealed record UpscalerSettings
 
             SpoofNvidia = !Is(ini.Get("Spoofing", "Dxgi"), "false"),
 
-            OptiPatcher = Is(ini.Get("Plugins", "LoadAsiPlugins"), "true"),
+            OptiPatcher = hasOptiPatcher && Is(ini.Get("Plugins", "LoadAsiPlugins"), "true"),
         };
 
         static bool Is(string? value, string word) => string.Equals(value, word, StringComparison.OrdinalIgnoreCase);

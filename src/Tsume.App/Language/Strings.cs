@@ -276,7 +276,6 @@ public static class Strings
     public static string OptiPatcherDetailOn => Find();
     public static string OptiPatcherDetailOff => Find();
     public static string OptiPatcherLockedBuild => Find();
-    public static string OptiPatcherLockedUpdate => Find();
     public static string OptiPatcherBadge => Find();
     public static string OptiPatcherBadgeVersion(string tag) => Fill(Find(), tag);
 
@@ -367,11 +366,11 @@ public static class Strings
     public static string OptiPatcherHeld(string tag, string day) => Fill(Find(), tag, day);
     public static string CheckingOptiPatcher => Find();
     public static string DownloadingOptiPatcher(string tag) => Fill(Find(), tag);
+    public static string DownloadingOptiPatcherProgress(string tag, int percent) => Fill(Find(), tag, percent);
     public static string NewerOptiPatcherAvailableHeading => Find();
     public static string DownloadingOptiPatcherHeading => Find();
     public static string HaveNewestOptiPatcher(string tag) => Fill(Find(), tag);
     public static string GotOptiPatcher(string tag) => Fill(Find(), tag);
-    public static string OptiPatcherReady(string tag) => Fill(Find(), tag);
     public static string OptiPatcherUpdateReady(string tag) => Fill(Find(), tag);
     public static string OptiPatcherNotInGame => Find();
     public static string BuildLineWithOptiPatcher(string buildLine, string tag) => Fill(Find(), buildLine, tag);

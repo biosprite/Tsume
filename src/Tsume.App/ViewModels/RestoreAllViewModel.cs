@@ -52,9 +52,9 @@ public sealed class RestoreAllViewModel : LayerViewModel
         {
             Line = Strings.Removing;
 
-            var games = _hub.Installer.Removable()
-                .Select(manifest => (Manifest: manifest, Listed: _hub.List.Find(manifest.GameId)))
-                .ToList();
+            // First entry wins, as GameList.Find does, so a games.json listing a game twice cannot throw here.
+            var byId = new Dictionary<string, ListedGame>();
+            foreach (var listed in _hub.List.Games) byId.TryAdd(listed.Game.Id, listed);
 
             var (restored, failures, updatedFacts) = await Task.Run(() =>
             {
@@ -63,8 +63,9 @@ public sealed class RestoreAllViewModel : LayerViewModel
                 var refreshed = new List<(ListedGame Listed, GameFacts? Facts)>();
 
                 // One game failing (e.g. it is running) does not stop the rest.
-                foreach (var (manifest, listed) in games)
+                foreach (var manifest in _hub.Installer.Removable())
                 {
+                    byId.TryGetValue(manifest.GameId, out var listed);
                     try
                     {
                         _hub.Installer.Remove(manifest.GameId);

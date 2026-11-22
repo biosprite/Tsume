@@ -364,7 +364,6 @@
   <data name="OptiPatcherDetailOn" xml:space="preserve"><value>On · loads OptiPatcher.asi to unlock DLSS without GPU spoofing</value></data>
   <data name="OptiPatcherDetailOff" xml:space="preserve"><value>Off · unlocks DLSS/DLSS-FG in supported games without GPU spoofing</value></data>
   <data name="OptiPatcherLockedBuild" xml:space="preserve"><value>Download OptiPatcher on the OptiScaler build page first</value></data>
-  <data name="OptiPatcherLockedUpdate" xml:space="preserve"><value>Not in this game yet. Press Update above to add it</value></data>
   <data name="OptiPatcherBadge" xml:space="preserve"><value>OptiPatcher · On</value></data>
   <data name="OptiPatcherBadgeVersion" xml:space="preserve">
     <value>OptiPatcher {0} · On</value>
@@ -514,6 +513,10 @@
     <value>Downloading OptiPatcher {0}…</value>
     <comment>{0} = release tag such as "v0.42"</comment>
   </data>
+  <data name="DownloadingOptiPatcherProgress" xml:space="preserve">
+    <value>Downloading OptiPatcher {0}… {1} %</value>
+    <comment>{0} = release tag such as "v0.42", {1} = percent done</comment>
+  </data>
   <data name="NewerOptiPatcherAvailableHeading" xml:space="preserve"><value>NEWER OPTIPATCHER AVAILABLE</value></data>
   <data name="DownloadingOptiPatcherHeading" xml:space="preserve"><value>DOWNLOADING OPTIPATCHER</value></data>
   <data name="HaveNewestOptiPatcher" xml:space="preserve">
@@ -521,11 +524,7 @@
     <comment>{0} = release tag such as "v0.42"</comment>
   </data>
   <data name="GotOptiPatcher" xml:space="preserve">
-    <value>Downloaded OptiPatcher {0}. Turn it on per game; installed games get it on Update.</value>
-    <comment>{0} = release tag such as "v0.42"</comment>
-  </data>
-  <data name="OptiPatcherReady" xml:space="preserve">
-    <value>OptiPatcher {0} is not in this game yet: Update adds it.</value>
+    <value>Downloaded OptiPatcher {0}. Turn it on per game.</value>
     <comment>{0} = release tag such as "v0.42"</comment>
   </data>
   <data name="OptiPatcherUpdateReady" xml:space="preserve">

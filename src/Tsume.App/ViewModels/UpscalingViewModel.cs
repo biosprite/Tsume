@@ -110,8 +110,7 @@ public sealed class UpscalingViewModel : LayerViewModel
             {
                 say(Strings.CheckingOptiPatcher);
                 var patcher = await OptiPatcherFeed.NewestAsync();
-                say(Strings.DownloadingOptiPatcher(patcher.Tag));
-                await Task.Run(() => OptiPatcher.FetchAsync(patcher));
+                await FetchOptiPatcherAsync(patcher, say);
             }
             catch (Exception error) when (error is UpscalingException or System.IO.IOException or UnauthorizedAccessException)
             {
@@ -126,7 +125,13 @@ public sealed class UpscalingViewModel : LayerViewModel
         CancellationToken cancel = default)
     {
         say(Strings.DownloadingOptiPatcher(release.Tag));
-        return await Task.Run(() => OptiPatcher.FetchAsync(release, cancel: cancel), cancel);
+        var progress = new Progress<double>(done =>
+        {
+            if (cancel.IsCancellationRequested) return;
+            say(Strings.DownloadingOptiPatcherProgress(release.Tag, (int)(done * 100)));
+        });
+
+        return await Task.Run(() => OptiPatcher.FetchAsync(release, progress, cancel), cancel);
     }
 
     public async Task<StoredBuild> FetchAsync(NightlyBuild build, Action<string> say, CancellationToken cancel = default)
@@ -175,9 +180,10 @@ public sealed class UpscalingViewModel : LayerViewModel
     /// <returns>What the removal, if there was one, left alone.</returns>
     public RemovalReport? PutIn(ListedGame listed, StoredBuild build, UpscalerSettings settings)
     {
-        // Verify stored OptiPatcher before removing an existing healthy install so a damaged
-        // file on disk fails cleanly instead of leaving the game uninstalled.
-        if (OptiPatcher.Current() is { } patcher) OptiPatcherStore.Verified(patcher);
+        // When this install needs the stored OptiPatcher, verify it before removing an existing healthy install
+        // so a damaged file on disk fails cleanly instead of leaving the game uninstalled.
+        if (settings.OptiPatcher && !Installer.ExtrasHaveOptiPatcher && OptiPatcher.Current() is { } patcher)
+            OptiPatcherStore.Verified(patcher);
 
         RemovalReport? removed = null;
 
@@ -323,6 +329,7 @@ public sealed class UpscalingViewModel : LayerViewModel
     public void ShowGames()
     {
         var build = Builds.Current();
+        var xmx = Xmx.Current();
         var patcher = OptiPatcher.Current();
         var baseBuildLine = build is null ? Strings.NoBuildOnDisk : Strings.NightlyOf(Night(build.Build.Tag));
         BuildLine = patcher is null
@@ -352,7 +359,7 @@ public sealed class UpscalingViewModel : LayerViewModel
             var manifest = Installer.Find(listed.Game.Id);
             var state = Installer.Check(manifest);
             var optiPatcherOn = manifest is not null && state == InstallState.Healthy && Installer.IsOptiPatcherEnabled(manifest);
-            row.Describe(manifest, state, manifest is null || Installer.IsCurrent(manifest, build), optiPatcherOn);
+            row.Describe(manifest, state, manifest is null || Installer.IsCurrent(manifest, build, xmx, patcher), optiPatcherOn);
         }
 
         EmptyNote = Games.Count > 0 ? "" : _looking ? Strings.LookingForGames : Strings.NoGamesYet;

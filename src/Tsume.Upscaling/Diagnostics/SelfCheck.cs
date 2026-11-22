@@ -76,7 +76,25 @@ public static class SelfCheck
 
         var defaults = new UpscalerSettings();
         var expectedDefault = UpscalerSettings.DefaultUpscaler(GpuVendor.HasIntelGpu(), GpuVendor.HasAmdGpu());
+        Say($"  detected primary GPU: Intel={GpuVendor.HasIntelGpu()}, IntelArc={GpuVendor.HasIntelArcGpu()}, Amd={GpuVendor.HasAmdGpu()}");
         Check(defaults.Upscaler == expectedDefault, $"on this machine the default upscaler is {expectedDefault}");
+
+        // GPU classification: only Intel Arc unlocks Arc-only features (native DX11 XeSS, XeFG 3×/4×).
+        Check(GpuVendor.Classify(0x8086, "Intel(R) Arc(TM) 140V GPU") == (true, true, false)
+              && GpuVendor.Classify(0x8086, "Intel(R) Arc(TM) B390 GPU") == (true, true, false)
+              && GpuVendor.Classify(0x8086, "Intel(R) UHD Graphics 770") == (true, false, false)
+              && GpuVendor.Classify(0x8086, "Intel(R) Iris(R) Xe Graphics") == (true, false, false)
+              && GpuVendor.Classify(0x1002, "AMD Radeon RX 7800 XT") == (false, false, true)
+              && GpuVendor.Classify(0x10DE, "NVIDIA GeForce RTX 4090") == (false, false, false),
+            "GPU classification distinguishes Intel Arc from older Intel iGPUs, AMD, and Nvidia");
+
+        ini = IniFile.Parse(blank);
+        new UpscalerSettings { Upscaler = UpscalerChoice.XeSS }.WriteTo(ini, hasIntelArcGpu: true);
+        var dx11Arc = ini.Get("Upscalers", "Dx11Upscaler");
+        new UpscalerSettings { Upscaler = UpscalerChoice.XeSS }.WriteTo(ini, hasIntelArcGpu: false);
+        var dx11NonArc = ini.Get("Upscalers", "Dx11Upscaler");
+        Check(dx11Arc == "xess" && dx11NonArc == "xess_12",
+            "DX11 XeSS uses native xess only on Intel Arc and xess_12 elsewhere");
 
         // FSR 4.1.2 Lite on the XMX upscaler.
         var xmxSettings = new UpscalerSettings { Upscaler = UpscalerChoice.Fsr4Xmx, Model = Fsr4Model.Lite };
@@ -123,9 +141,19 @@ public static class SelfCheck
             "plain FSR 4 clamps Lite to INT8 because AMD's DX12 upscaler has no Lite network");
 
         var xefgMfg = new UpscalerSettings { FrameGen = FrameGenChoice.XeFG, Multiplier = 4 };
-        Check(xefgMfg.Fitting(hasXmx: true, hasIntelGpu: true).Multiplier == 4
-              && xefgMfg.Fitting(hasXmx: true, hasIntelGpu: false).Multiplier == 2,
-            "XeFG 3×/4× stays on Intel GPUs and clamps to 2× on non-Intel GPUs");
+        Check(xefgMfg.Fitting(hasXmx: true, hasIntelArcGpu: true).Multiplier == 4
+              && xefgMfg.Fitting(hasXmx: true, hasIntelArcGpu: false).Multiplier == 2,
+            "XeFG 3×/4× stays on Intel Arc GPUs and clamps to 2× on non-Arc GPUs");
+
+        // Remembered XMX and OptiPatcher preferences survive edits to unrelated settings while unavailable.
+        var rememberedUnavailable = new UpscalerSettings { Upscaler = UpscalerChoice.Fsr4Xmx, Model = Fsr4Model.Lite, OptiPatcher = true, SpoofNvidia = true };
+        var editedWhileUnavailable = rememberedUnavailable.Fitting(hasXmx: false, hasOptiPatcher: false) with { SpoofNvidia = false };
+        var preserved = editedWhileUnavailable.PreservingUnavailable(rememberedUnavailable, hasXmx: false, hasOptiPatcher: false);
+        var switchedExplicitly = (editedWhileUnavailable with { Upscaler = UpscalerChoice.XeSS })
+            .PreservingUnavailable(rememberedUnavailable, hasXmx: false, hasOptiPatcher: false);
+        Check(preserved is { Upscaler: UpscalerChoice.Fsr4Xmx, Model: Fsr4Model.Lite, OptiPatcher: true, SpoofNvidia: false }
+              && switchedExplicitly is { Upscaler: UpscalerChoice.XeSS, OptiPatcher: true },
+            "editing an unrelated setting preserves unavailable XMX/OptiPatcher preferences while explicit upscaler changes win");
 
         var dlssgFg = new UpscalerSettings { FrameGen = FrameGenChoice.XeFG, Source = FrameGenSource.Dlssg, Multiplier = 2 };
         ini = IniFile.Parse(blank);
@@ -146,12 +174,14 @@ public static class SelfCheck
               && opOn.Fitting(hasXmx: true, hasOptiPatcher: true).OptiPatcher,
             "OptiPatcher clamps to off when OptiPatcher.asi is not present");
 
-        // The user's own ASI plugins: LoadAsiPlugins=true set by hand survives a settings write in a game without OptiPatcher.
+        // The user's own ASI plugins: LoadAsiPlugins=true set by hand survives a settings write in a game without OptiPatcher,
+        // and does not report OptiPatcher as enabled.
         ini = IniFile.Parse(blank);
         ini.Set("Plugins", "LoadAsiPlugins", "true");
-        new UpscalerSettings().CorrectedBy(ini).Fitting(hasXmx: true, hasOptiPatcher: false).WriteTo(ini, hasOptiPatcher: false);
-        Check(ini.Get("Plugins", "LoadAsiPlugins") == "true",
-            "without OptiPatcher, a LoadAsiPlugins=true set for the user's own plugins is kept");
+        var readWithoutOp = new UpscalerSettings().CorrectedBy(ini, hasOptiPatcher: false);
+        readWithoutOp.Fitting(hasXmx: true, hasOptiPatcher: false).WriteTo(ini, hasOptiPatcher: false);
+        Check(!readWithoutOp.OptiPatcher && ini.Get("Plugins", "LoadAsiPlugins") == "true",
+            "without OptiPatcher, LoadAsiPlugins=true does not read as OptiPatcher and is kept for the user's own plugins");
         Say("");
 
         Say("Games the stores report (read only)");
@@ -239,12 +269,12 @@ public static class SelfCheck
             var (twin, twinFacts) = MakeGame(bench, "Twin", folder => { });
             var twinManifest = installer.Install(twin, twinFacts, build, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS });
 
-            Installer.WriteSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.Fsr4, SpoofNvidia = false });
+            installer.WriteSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.Fsr4, SpoofNvidia = false });
             Check(IniFile.Load(Path.Combine(twin.Folder, "OptiScaler.ini")).Get("Upscalers", "Dx12Upscaler") == "xess"
                   && IniFile.Load(Path.Combine(a.Folder, "OptiScaler.ini")).Get("Upscalers", "Dx12Upscaler") == "ffx",
                 "two games keep different settings");
             Check(Files.Hash(Path.Combine(build.Folder, "OptiScaler.ini")) == blankHash, "and the store's blank settings file is unchanged");
-            Installer.WriteSettings(manifest, new UpscalerSettings());
+            installer.WriteSettings(manifest, new UpscalerSettings());
 
             installer.Remove(twin.Id);
             Check(File.Exists(shared) && Files.Hash(shared) == Files.Hash(inStore) && Files.Names(inStore) == namesBefore,
@@ -262,7 +292,7 @@ public static class SelfCheck
 
             Check(!Installer.ReadSettings(manifest, new UpscalerSettings()).SpoofNvidia, "a change made in the overlay is read back");
 
-            Installer.WriteSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS });
+            installer.WriteSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS });
             live = IniFile.Load(Path.Combine(a.Folder, "OptiScaler.ini"));
             Check(live.Get("Upscalers", "Dx12Upscaler") == "xess" && live.Get("Sharpness", "Sharpness") == "0.55",
                 "changing a setting in Tsume leaves the overlay's other tuning alone");
@@ -353,6 +383,10 @@ public static class SelfCheck
             });
             before = Snapshot(e.Folder);
 
+            var savedE = Path.Combine(paths.InstallFolder(e.Id), "Saved", "OptiScaler.ini");
+            Directory.CreateDirectory(Path.GetDirectoryName(savedE)!);
+            File.WriteAllText(savedE, blank.Replace("Sharpness=auto", "Sharpness=0.77"));
+
             var failed = false;
             try { installer.Install(e, eFacts, build, new UpscalerSettings { Proxy = "dxgi.dll" }); }
             catch (Exception error) when (error is UpscalingException or IOException or UnauthorizedAccessException) { failed = true; }
@@ -360,6 +394,8 @@ public static class SelfCheck
             Check(failed, "the install reported failure");
             Check(Same(before, Snapshot(e.Folder)), "and undid itself: the folder is as it was found");
             Check(installer.Find(e.Id) is null, "no record remains");
+            Check(File.Exists(savedE) && IniFile.Load(savedE).Get("Sharpness", "Sharpness") == "0.77",
+                "and Saved\\OptiScaler.ini survives a failed update/install");
             Say("");
 
             Say("F. The XMX upscaler");
@@ -417,7 +453,7 @@ public static class SelfCheck
                 Check(Installer.ReadSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS }) == xmxSettings,
                     "its settings read back as XMX 4.1.2 Lite");
 
-                Installer.WriteSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS });
+                installer.WriteSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS });
                 live = IniFile.Load(Path.Combine(f.Folder, "OptiScaler.ini"));
                 Check(live.Get("Upscalers", "Dx12Upscaler") == "xess" && live.Get(XmxLayout.Name, "UpscalerIndex") == "3",
                     "switching to XeSS changes the upscaler and leaves the XMX version be");
@@ -445,29 +481,58 @@ public static class SelfCheck
             Say($"        {newestPatcher.Tag} ({newestPatcher.AssetName}, {newestPatcher.Size / 1024} KB) fetched and verified in {clock.Elapsed.TotalSeconds:0.0} s");
 
             Check(patcherStore.Current()?.Release.Tag == newestPatcher.Tag, "OptiPatcher is stored and readable");
-            Check(!installer.IsCurrent(manifest, build), "a game installed earlier now reads as due an update");
+            Check(installer.IsCurrent(manifest, build), "a game without OptiPatcher stays up to date after OptiPatcher is downloaded");
 
-            installer.Remove(g.Id);
-            manifest = installer.Install(g, gFacts, build, new UpscalerSettings { OptiPatcher = true });
+            // User's own plugin in OptiScaler\plugins\: stays isolated from OptiPatcher.
+            var userPlugin = Path.Combine(g.Folder, "OptiScaler", "plugins", "mine.asi");
+            Directory.CreateDirectory(Path.GetDirectoryName(userPlugin)!);
+            File.WriteAllText(userPlugin, "user asi plugin");
+            live = IniFile.Load(Path.Combine(g.Folder, "OptiScaler.ini"));
+            live.Set("Plugins", "LoadAsiPlugins", "true");
+            live.Save(Path.Combine(g.Folder, "OptiScaler.ini"));
 
+            Check(!Installer.IsOptiPatcherEnabled(manifest) && !Installer.ReadSettings(manifest, new UpscalerSettings()).OptiPatcher,
+                "LoadAsiPlugins=true for a user plugin does not show OptiPatcher as enabled");
+
+            // Turning OptiPatcher on dynamically places OptiPatcher.asi without reinstalling OptiScaler.
             var pluginPath = Path.Combine(g.Folder, OptiPatcherLayout.Plugin);
+            installer.WriteSettings(manifest, new UpscalerSettings { OptiPatcher = true });
             Check(File.Exists(pluginPath) && Files.Hash(pluginPath) == newestPatcher.Sha256,
-                $"installed: OptiPatcher is at {OptiPatcherLayout.Plugin} with verified hash");
+                $"toggled on: OptiPatcher is placed at {OptiPatcherLayout.Plugin} with verified hash");
             Check(manifest.OptiPatcher == newestPatcher.Tag && Installer.HasOptiPatcher(manifest)
                   && Installer.IsOptiPatcherEnabled(manifest) && installer.IsCurrent(manifest, build),
                 "manifest records the OptiPatcher tag, reports it enabled, and reads as up to date");
 
-            Installer.WriteSettings(manifest, new UpscalerSettings { OptiPatcher = false });
-            Check(!Installer.IsOptiPatcherEnabled(manifest)
-                  && IniFile.Load(Path.Combine(g.Folder, "OptiScaler.ini")).Get("Plugins", "LoadAsiPlugins") == "auto"
-                  && File.Exists(pluginPath),
-                "turning OptiPatcher off sets LoadAsiPlugins=auto while keeping OptiPatcher.asi ready");
+            // Turning OptiPatcher off while user's mine.asi is present removes OptiPatcher.asi but keeps LoadAsiPlugins=true.
+            installer.WriteSettings(manifest, new UpscalerSettings { OptiPatcher = false });
+            Check(!File.Exists(pluginPath) && !Installer.HasOptiPatcher(manifest) && !Installer.IsOptiPatcherEnabled(manifest)
+                  && IniFile.Load(Path.Combine(g.Folder, "OptiScaler.ini")).Get("Plugins", "LoadAsiPlugins") == "true",
+                "turning OptiPatcher off removes OptiPatcher.asi while keeping LoadAsiPlugins=true for the user's own plugin");
 
-            Installer.WriteSettings(manifest, new UpscalerSettings { OptiPatcher = true });
-            Check(Installer.IsOptiPatcherEnabled(manifest), "turning OptiPatcher back on re-enables LoadAsiPlugins=true");
+            // Without other user plugins, turning OptiPatcher off resets LoadAsiPlugins=auto.
+            File.Delete(userPlugin);
+            installer.WriteSettings(manifest, new UpscalerSettings { OptiPatcher = true });
+            Check(Installer.IsOptiPatcherEnabled(manifest) && File.Exists(pluginPath),
+                "turning OptiPatcher back on places OptiPatcher.asi and enables LoadAsiPlugins=true");
+            installer.WriteSettings(manifest, new UpscalerSettings { OptiPatcher = false });
+            Check(!File.Exists(pluginPath) && !Installer.IsOptiPatcherEnabled(manifest)
+                  && IniFile.Load(Path.Combine(g.Folder, "OptiScaler.ini")).Get("Plugins", "LoadAsiPlugins") == "auto",
+                "turning OptiPatcher off with no other plugins resets LoadAsiPlugins=auto");
 
             installer.Remove(g.Id);
             Check(Same(before, Snapshot(g.Folder)), "removed: the game folder is as it was found");
+
+            // A damaged OptiPatcher file does not block installs that do not use OptiPatcher, but fails when OptiPatcher is requested.
+            File.WriteAllText(storedPatcher.File, "corrupted");
+            manifest = installer.Install(g, gFacts, build, new UpscalerSettings { OptiPatcher = false });
+            Check(!Installer.HasOptiPatcher(manifest), "damaged OptiPatcher in store does not block installs with OptiPatcher off");
+            installer.Remove(g.Id);
+
+            var patcherFailed = false;
+            try { installer.Install(g, gFacts, build, new UpscalerSettings { OptiPatcher = true }); }
+            catch (UpscalingException error) when (error.Trouble == Trouble.OptiPatcherDamaged) { patcherFailed = true; }
+            Check(patcherFailed && patcherStore.Current() is null,
+                "requesting OptiPatcher with a damaged file fails cleanly and sets the damaged file aside");
 
             Say("");
         }

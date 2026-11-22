@@ -25,7 +25,8 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
     private StoredOptiPatcher? _optiPatcher;
     private OptiPatcherRelease? _availableOptiPatcher;
     private XmxUpscaler? _xmx;
-    private CancellationTokenSource? _operationCancel;
+    private CancellationTokenSource? _buildCancel;
+    private CancellationTokenSource? _optiPatcherCancel;
     private bool _busyHere;
 
     /// <param name="dismiss">Closes the panel and completes once it is fully off screen.</param>
@@ -118,11 +119,11 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
         Notify("");
     }
 
-    /// <summary>Healthy installs a fresh one would improve on: an older build, or no XMX upscaler where Tsume now has one.</summary>
+    /// <summary>Healthy installs a fresh one would improve on: an older build, no XMX upscaler, or an older OptiPatcher.</summary>
     private IEnumerable<InstallManifest> GamesOnAnotherBuild(StoredBuild build) => _hub.Installer.InstalledGames()
         .Select(_hub.Installer.Find)
         .OfType<InstallManifest>()
-        .Where(manifest => !_hub.Installer.IsCurrent(manifest, build) && Installer.Check(manifest) == InstallState.Healthy);
+        .Where(manifest => !_hub.Installer.IsCurrent(manifest, build, _xmx, _optiPatcher) && Installer.Check(manifest) == InstallState.Healthy);
 
     private IReadOnlyList<InstallManifest> Outdated { get; set; } = [];
 
@@ -266,7 +267,8 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
         _busyHere = true;
 
         using var cancel = new CancellationTokenSource();
-        _operationCancel = cancel;
+        if (isOptiPatcher) _optiPatcherCancel = cancel;
+        else _buildCancel = cancel;
 
         try
         {
@@ -283,7 +285,8 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
         }
         finally
         {
-            if (ReferenceEquals(_operationCancel, cancel)) _operationCancel = null;
+            if (isOptiPatcher && ReferenceEquals(_optiPatcherCancel, cancel)) _optiPatcherCancel = null;
+            else if (!isOptiPatcher && ReferenceEquals(_buildCancel, cancel)) _buildCancel = null;
             IsChecking = false;
             IsDownloading = false;
             DownloadProgress = "";
@@ -342,7 +345,7 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
 
     private void OnCancelUpdate()
     {
-        if (_operationCancel is { } cancel)
+        if (_buildCancel is { } cancel)
         {
             cancel.Cancel();
             return;
@@ -418,7 +421,7 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
 
     private void OnCancelOptiPatcher()
     {
-        if (_operationCancel is { } cancel)
+        if (_optiPatcherCancel is { } cancel)
         {
             cancel.Cancel();
             return;
@@ -490,22 +493,30 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
             return;
         }
 
-        // Verify stored OptiPatcher up front so a damaged file aborts cleanly instead of
-        // uninstalling the first game and stripping OptiPatcher from the rest of the batch.
-        if (_hub.OptiPatcher.Current() is { } patcher)
+        var plan = Outdated
+            .Select(manifest => _hub.List.Find(manifest.GameId) is { } listed
+                ? (Manifest: manifest, Listed: listed, Settings: _hub.SettingsForUpdate(manifest, listed))
+                : default)
+            .Where(item => item.Listed is not null)
+            .ToList();
+
+        // When at least one game in the batch needs stored OptiPatcher, verify it up front so a damaged file
+        // aborts cleanly instead of uninstalling the first game and stripping OptiPatcher from the rest.
+        if (plan.Any(item => item.Settings.OptiPatcher)
+            && !_hub.Installer.ExtrasHaveOptiPatcher
+            && _hub.OptiPatcher.Current() is { } patcher)
+        {
             await Task.Run(() => OptiPatcherStore.Verified(patcher));
+        }
 
         var updated = 0;
         var failures = new List<string>();
 
-        foreach (var manifest in Outdated)
+        foreach (var (manifest, listed, settings) in plan)
         {
-            if (_hub.List.Find(manifest.GameId) is not { } listed) continue;
-
             Status = $"{manifest.GameName}: {Strings.Installing}";
             try
             {
-                var settings = _hub.SettingsForUpdate(manifest, listed);
                 await Task.Run(() => _hub.PutIn(listed, build, settings));
                 updated++;
             }

@@ -109,24 +109,28 @@ public sealed class Installer(UpscalingPaths paths)
     }
 
     /// <summary>
-    /// True if this install already carries the exact OptiPatcher binary held by Tsume, Tsume holds none, or the
-    /// user's own copy in Extras\ already went into this game (Extras\ is laid over every install, so that copy is
-    /// what Update would place).
+    /// True if this install does not use OptiPatcher, Tsume holds no OptiPatcher, the user's own copy in Extras\
+    /// overrides it, or this install already carries the exact OptiPatcher binary held by Tsume.
     /// </summary>
     public bool IsOptiPatcherCurrent(InstallManifest manifest, StoredOptiPatcher? patcher) =>
         patcher is null
-        || (ExtrasHaveOptiPatcher && HasOptiPatcher(manifest))
+        || !HasOptiPatcher(manifest)
+        || ExtrasHaveOptiPatcher
         || OptiPatcherIn(manifest)?.Sha256 == patcher.Release.Sha256;
 
     /// <summary>True if the user put their own OptiPatcher.asi in Extras\plugins\, which replaces the downloaded one.</summary>
-    private bool ExtrasHaveOptiPatcher => File.Exists(Path.Combine(paths.Extras, "plugins", OptiPatcherLayout.FileName));
+    public bool ExtrasHaveOptiPatcher => File.Exists(Path.Combine(paths.Extras, "plugins", OptiPatcherLayout.FileName));
 
-    /// <summary>True if the install is from the build on disk and carries the XMX upscaler and OptiPatcher Tsume holds now.</summary>
+    /// <summary>True if the install is from the build on disk and carries the XMX upscaler and (when used) OptiPatcher Tsume holds now.</summary>
     public bool IsCurrent(InstallManifest manifest, StoredBuild? build) =>
+        IsCurrent(manifest, build, _xmx.Current(), _optiPatcher.Current());
+
+    /// <summary>Same as <see cref="IsCurrent(InstallManifest, StoredBuild?)"/> using already-loaded store records.</summary>
+    public bool IsCurrent(InstallManifest manifest, StoredBuild? build, XmxUpscaler? xmx, StoredOptiPatcher? patcher) =>
         (build is null || manifest.Build == build.Build.Tag)
         && manifest.Linked is not null   // installed before games shared the store's files: installing again saves the space
-        && (_xmx.Current() is not { } held || XmxIn(manifest)?.Sha256 == held.Sha256)
-        && IsOptiPatcherCurrent(manifest, _optiPatcher.Current());
+        && (xmx is null || XmxIn(manifest)?.Sha256 == xmx.Sha256)
+        && IsOptiPatcherCurrent(manifest, patcher);
 
     private static PlacedFile? XmxIn(InstallManifest manifest) =>
         manifest.Files.FirstOrDefault(file => file.Path.Equals(XmxLayout.Upscaler, StringComparison.OrdinalIgnoreCase));
@@ -161,16 +165,32 @@ public sealed class Installer(UpscalingPaths paths)
         {
             MakeSureWritable(target);
 
-            // XMX and OptiPatcher are installed whenever Tsume holds them, chosen or not, so switching them later is only an ini change.
-            var xmx = _xmx.Current() is { } held ? _xmx.Shared(held) : null;
-            var patcher = _optiPatcher.Current();
-            var patcherFile = patcher is not null ? OptiPatcherStore.Verified(patcher) : null;
-            var hasOptiPatcher = patcher is not null || ExtrasHaveOptiPatcher;
+            // XMX is installed whenever Tsume holds it, chosen or not, because OptiScaler only loads it when selected.
+            // OptiPatcher is placed only when enabled for this game (or overridden in Extras\), so it never loads
+            // alongside the user's own ASI plugins or blocks installs when unused.
+            var xmxHeld = _xmx.Current();
+            var xmxFile = xmxHeld is not null ? _xmx.Shared(xmxHeld) : null;
 
+            var extrasHasOptiPatcher = ExtrasHaveOptiPatcher;
+            StoredOptiPatcher? patcher = null;
+            if (settings.OptiPatcher && !extrasHasOptiPatcher)
+            {
+                patcher = _optiPatcher.Current();
+                if (patcher is not null) OptiPatcherStore.Verified(patcher);
+            }
+
+            var hasOptiPatcher = patcher is not null || extrasHasOptiPatcher;
+            var keepOtherAsiPlugins = HasOtherAsiPlugins(target);
             var ueIntelAtomics = GameInspector.IsUnrealTarget(target) && GpuVendor.HasIntelGpu();
 
-            var staged = StageSettings(home, build, settings.Fitting(xmx is not null, hasOptiPatcher), ueIntelAtomics, hasOptiPatcher);
-            var plan = Plan(build, proxy, staged, xmx, patcherFile);
+            var staged = StageSettings(
+                home,
+                build,
+                settings.Fitting(xmxFile is not null, hasOptiPatcher),
+                ueIntelAtomics,
+                hasOptiPatcher,
+                keepOtherAsiPlugins);
+            var plan = Plan(build, proxy, staged, xmxHeld, xmxFile, patcher);
 
             // Record the store's OptiPatcher tag only when the placed binary actually came from the store (not overridden by Extras\).
             var placedPatcher = plan.FirstOrDefault(step => step.Path.Equals(OptiPatcherLayout.Plugin, StringComparison.OrdinalIgnoreCase));
@@ -223,10 +243,11 @@ public sealed class Installer(UpscalingPaths paths)
         {
             Log.Write($"install in {target} failed: {error.Message}");
 
-            // Undo what was done. If that fails too, the manifest stays and a later removal finishes the job.
+            // Undo what was done. Keep any pre-existing Saved\ settings from an update removal so a retry keeps tuning.
+            // If undo fails too, the manifest stays and a later removal finishes the job.
             try
             {
-                if (File.Exists(ManifestFile(game.Id))) Undo(manifest, keepSettings: false);
+                if (File.Exists(ManifestFile(game.Id))) Undo(manifest, keepSettings: false, discardSaved: false);
                 else Files.Discard(Path.Combine(home, "Staged"));   // it never got as far as the game's folder
             }
             catch (Exception undo) when (undo is IOException or UnauthorizedAccessException)
@@ -253,9 +274,10 @@ public sealed class Installer(UpscalingPaths paths)
 
     /// <summary>
     /// Everything that goes into the game's folder: the build (OptiScaler.dll under the proxy name, the prepared
-    /// settings file), the XMX upscaler with AMD's beside it, then the Extras\ files laid over OptiScaler\, replacing same-named files.
+    /// settings file), the XMX upscaler with AMD's beside it, OptiPatcher when enabled, then the Extras\ files laid
+    /// over OptiScaler\, replacing same-named files.
     /// </summary>
-    private List<Step> Plan(StoredBuild build, string proxy, string settingsFile, string? xmx, string? optiPatcher)
+    private List<Step> Plan(StoredBuild build, string proxy, string settingsFile, XmxUpscaler? xmxHeld, string? xmxFile, StoredOptiPatcher? optiPatcher)
     {
         var plan = new Dictionary<string, Step>(StringComparer.OrdinalIgnoreCase);
 
@@ -276,9 +298,9 @@ public sealed class Installer(UpscalingPaths paths)
                 plan[file.Path] = new Step(source, file.Path, file.Length, file.Sha256) { Shared = true };
         }
 
-        if (xmx is not null)
+        if (xmxHeld is not null && xmxFile is not null)
         {
-            plan[XmxLayout.Upscaler] = new Step(xmx, XmxLayout.Upscaler, new FileInfo(xmx).Length, Files.Hash(xmx)) { Shared = true };
+            plan[XmxLayout.Upscaler] = new Step(xmxFile, XmxLayout.Upscaler, xmxHeld.Length, xmxHeld.Sha256) { Shared = true };
 
             // The XMX upscaler reads FSR 4.1.2's weights out of AMD's own upscaler (in the nightly), under this other name.
             if (plan.TryGetValue(XmxLayout.WeightsInBuild, out var amd))
@@ -287,7 +309,11 @@ public sealed class Installer(UpscalingPaths paths)
 
         if (optiPatcher is not null)
         {
-            plan[OptiPatcherLayout.Plugin] = new Step(optiPatcher, OptiPatcherLayout.Plugin, new FileInfo(optiPatcher).Length, Files.Hash(optiPatcher)) { Shared = true };
+            plan[OptiPatcherLayout.Plugin] = new Step(
+                optiPatcher.File,
+                OptiPatcherLayout.Plugin,
+                new FileInfo(optiPatcher.File).Length,
+                optiPatcher.Release.Sha256) { Shared = true };
         }
 
         if (Directory.Exists(paths.Extras))
@@ -321,6 +347,9 @@ public sealed class Installer(UpscalingPaths paths)
                 throw new UpscalingException(Trouble.OptiPatcherDamaged, step.Path);
             }
 
+            if (step.Path.Equals(XmxLayout.Upscaler, StringComparison.OrdinalIgnoreCase))
+                throw new UpscalingException(Trouble.NotXmx, step.Path);
+
             BuildStore.Distrust(build);
             throw new UpscalingException(Trouble.BuildDamaged, step.Path);
         }
@@ -332,12 +361,13 @@ public sealed class Installer(UpscalingPaths paths)
     /// The settings file to install: the one saved from an update (so overlay tuning survives),
     /// else the build's clean one, with Tsume's settings written into it.
     /// </summary>
-    private static string StageSettings(string home, StoredBuild build, UpscalerSettings settings, bool ueIntelAtomics, bool hasOptiPatcher)
+    private static string StageSettings(string home, StoredBuild build, UpscalerSettings settings,
+        bool ueIntelAtomics, bool hasOptiPatcher, bool keepOtherAsiPlugins)
     {
         var saved = Path.Combine(home, "Saved", SettingsFile);
         var ini = IniFile.Load(File.Exists(saved) ? saved : Path.Combine(build.Folder, SettingsFile));
 
-        settings.WriteTo(ini, ueIntelAtomics, hasOptiPatcher);
+        settings.WriteTo(ini, ueIntelAtomics, hasOptiPatcher, keepOtherAsiPlugins);
 
         var staged = Path.Combine(home, "Staged", SettingsFile);
         ini.Save(staged);
@@ -384,7 +414,7 @@ public sealed class Installer(UpscalingPaths paths)
 
         try
         {
-            var report = Undo(manifest, keepSettings: keepSettings && manifest.Complete);
+            var report = Undo(manifest, keepSettings: keepSettings && manifest.Complete, discardSaved: !keepSettings);
             Log.Write($"removed from {manifest.Target}; left alone: {report.LeftAlone.Count}");
             return report;
         }
@@ -408,7 +438,7 @@ public sealed class Installer(UpscalingPaths paths)
         Files.Discard(Path.Combine(home, "Staged"));
     }
 
-    private RemovalReport Undo(InstallManifest manifest, bool keepSettings)
+    private RemovalReport Undo(InstallManifest manifest, bool keepSettings, bool discardSaved)
     {
         var home = paths.InstallFolder(manifest.GameId);
         var originals = Path.Combine(home, "Originals");
@@ -464,7 +494,7 @@ public sealed class Installer(UpscalingPaths paths)
         Files.Delete(ManifestFile(manifest.GameId));
         Files.Discard(originals);
         Files.Discard(Path.Combine(home, "Staged"));
-        if (!keepSettings) Files.Discard(Path.Combine(home, "Saved"));
+        if (discardSaved) Files.Discard(Path.Combine(home, "Saved"));
 
         return new RemovalReport(leftAlone, kept);
     }
@@ -475,7 +505,7 @@ public sealed class Installer(UpscalingPaths paths)
         try
         {
             var ini = IniFile.Load(Path.Combine(manifest.Target, SettingsFile));
-            return remembered.CorrectedBy(ini);
+            return remembered.CorrectedBy(ini, hasOptiPatcher: HasOptiPatcher(manifest));
         }
         catch (IOException)
         {
@@ -483,24 +513,220 @@ public sealed class Installer(UpscalingPaths paths)
         }
     }
 
-    /// <summary>Writes the settings into the game's OptiScaler.ini. They take effect the next time the game starts.</summary>
-    public static void WriteSettings(InstallManifest manifest, UpscalerSettings settings)
+    /// <summary>
+    /// Writes the settings into the game's OptiScaler.ini, and places or removes <c>OptiPatcher.asi</c> when its
+    /// toggle changes. Settings take effect the next time the game starts.
+    /// </summary>
+    public void WriteSettings(InstallManifest manifest, UpscalerSettings settings)
     {
         if (!Directory.Exists(manifest.Target)) throw new UpscalingException(Trouble.FolderMissing, manifest.Target);
 
         try
         {
+            var hadOptiPatcher = HasOptiPatcher(manifest);
+            var manageAsiPlugins = hadOptiPatcher;
+
+            if (settings.OptiPatcher && !hadOptiPatcher)
+            {
+                if (AddOptiPatcher(manifest)) manageAsiPlugins = true;
+            }
+            else if (!settings.OptiPatcher && hadOptiPatcher)
+            {
+                RemoveOptiPatcher(manifest);
+                manageAsiPlugins = true;
+            }
+
+            var hasOptiPatcher = HasOptiPatcher(manifest);
+            var keepOtherAsiPlugins = HasOtherAsiPlugins(manifest.Target);
+
             var file = Path.Combine(manifest.Target, SettingsFile);
             var ini = IniFile.Load(file);
             var ueIntelAtomics = GameInspector.IsUnrealTarget(manifest.Target) && GpuVendor.HasIntelGpu();
 
-            var hasOptiPatcher = HasOptiPatcher(manifest);
-            settings.Fitting(HasXmx(manifest), hasOptiPatcher).WriteTo(ini, ueIntelAtomics, hasOptiPatcher);
+            settings.Fitting(HasXmx(manifest), hasOptiPatcher)
+                .WriteTo(ini, ueIntelAtomics, manageAsiPlugins, keepOtherAsiPlugins);
             ini.Save(file);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             throw Explain(error, manifest.Target);
+        }
+    }
+
+    /// <summary>
+    /// Places <c>OptiPatcher.asi</c> into an already-installed game and updates its manifest.
+    /// Returns false when neither Extras\ nor Tsume's store holds OptiPatcher.
+    /// </summary>
+    private bool AddOptiPatcher(InstallManifest manifest)
+    {
+        string source;
+        string sha256;
+        long length;
+        string? tag;
+        var fromStore = false;
+
+        if (ExtrasHaveOptiPatcher)
+        {
+            source = Path.Combine(paths.Extras, "plugins", OptiPatcherLayout.FileName);
+            sha256 = Files.Hash(source);
+            length = new FileInfo(source).Length;
+            tag = null;
+        }
+        else if (_optiPatcher.Current() is { } patcher)
+        {
+            source = OptiPatcherStore.Verified(patcher);
+            sha256 = patcher.Release.Sha256;
+            length = new FileInfo(source).Length;
+            tag = patcher.Release.Tag;
+            fromStore = true;
+        }
+        else
+        {
+            return false;
+        }
+
+        if (IsRunning(manifest.Executable)) throw new UpscalingException(Trouble.GameRunning, manifest.GameName);
+
+        var home = paths.InstallFolder(manifest.GameId);
+        var destination = Files.Inside(manifest.Target, OptiPatcherLayout.Plugin);
+        var newFolders = FoldersToMake(manifest.Target, [OptiPatcherLayout.Plugin]);
+        var addedFolders = newFolders.Where(folder => !manifest.NewFolders.Contains(folder, StringComparer.OrdinalIgnoreCase)).ToList();
+
+        var placed = new PlacedFile
+        {
+            Path = OptiPatcherLayout.Plugin,
+            Sha256 = sha256,
+            Length = length,
+        };
+
+        var previousTag = manifest.OptiPatcher;
+        manifest.Files.Add(placed);
+        manifest.NewFolders.AddRange(addedFolders);
+        manifest.OptiPatcher = tag;
+
+        var original = Files.Inside(Path.Combine(home, "Originals"), placed.Path);
+
+        try
+        {
+            // Record the file already there before anything in the game's folder changes, as Install does:
+            // an add cut short then still finds it, in place or in Originals\, and puts it back.
+            placed.OriginalSha256 = File.Exists(destination) ? Files.Hash(destination) : null;
+            Save(manifest);
+
+            if (placed.OriginalSha256 is not null) MoveAside(destination, original, placed);
+
+            var linked = fromStore && manifest.Linked == true && Files.LetEveryoneRead(source) && Files.TryLink(source, destination);
+            if (!linked) Files.Place(source, destination);
+
+            return true;
+        }
+        catch
+        {
+            try
+            {
+                // Delete only what Tsume put there: an original that never got moved aside stays.
+                var originalMoved = placed.OriginalSha256 is not null && File.Exists(original);
+                if (File.Exists(destination) && Files.Hash(destination) == placed.Sha256
+                    && (placed.OriginalSha256 is null || originalMoved))
+                {
+                    Files.Delete(destination);
+                }
+
+                if (originalMoved)
+                {
+                    Files.Place(original, destination);
+                    Files.Delete(original);
+                }
+
+                foreach (var folder in addedFolders.OrderByDescending(folder => folder.Length))
+                {
+                    var path = Files.Inside(manifest.Target, folder);
+                    if (Directory.Exists(path) && Files.IsEmpty(path)) Directory.Delete(path);
+                }
+
+                manifest.Files.Remove(placed);
+                foreach (var folder in addedFolders) manifest.NewFolders.Remove(folder);
+                manifest.OptiPatcher = previousTag;
+                Save(manifest);
+            }
+            catch (Exception rollback) when (rollback is IOException or UnauthorizedAccessException)
+            {
+                Log.Write($"could not roll back OptiPatcher placement in {manifest.Target}: {rollback.Message}");
+            }
+
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Removes <c>OptiPatcher.asi</c> from an already-installed game, restores any displaced original,
+    /// cleans up an empty plugins folder if Tsume created it, and updates the manifest.
+    /// </summary>
+    private void RemoveOptiPatcher(InstallManifest manifest)
+    {
+        if (OptiPatcherIn(manifest) is not { } placed) return;
+        if (IsRunning(manifest.Executable)) throw new UpscalingException(Trouble.GameRunning, manifest.GameName);
+
+        var home = paths.InstallFolder(manifest.GameId);
+        var file = Files.Inside(manifest.Target, placed.Path);
+        var original = placed.OriginalSha256 is null ? null : Files.Inside(Path.Combine(home, "Originals"), placed.Path);
+
+        if (File.Exists(file))
+        {
+            var now = Files.Hash(file);
+            if (now == placed.Sha256)
+            {
+                Files.Delete(file);
+                if (original is not null && File.Exists(original))
+                {
+                    Files.Place(original, file);
+                    Files.Delete(original);
+                }
+            }
+        }
+        else if (original is not null && File.Exists(original))
+        {
+            Files.Place(original, file);
+            Files.Delete(original);
+        }
+
+        var pluginsFolder = Path.GetDirectoryName(placed.Path);
+        if (!string.IsNullOrEmpty(pluginsFolder)
+            && manifest.NewFolders.Contains(pluginsFolder, StringComparer.OrdinalIgnoreCase))
+        {
+            var fullPluginsFolder = Files.Inside(manifest.Target, pluginsFolder);
+            if (Directory.Exists(fullPluginsFolder) && Files.IsEmpty(fullPluginsFolder))
+            {
+                Directory.Delete(fullPluginsFolder);
+                manifest.NewFolders.RemoveAll(folder => folder.Equals(pluginsFolder, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
+        manifest.Files.Remove(placed);
+        manifest.OptiPatcher = null;
+        Save(manifest);
+    }
+
+    /// <summary>
+    /// True if any <c>*.asi</c> plugin other than OptiPatcher is in the game's OptiScaler plugins folder, or in
+    /// Extras\plugins\ (laid over OptiScaler\ at every install, so it may not be in the game yet).
+    /// </summary>
+    private bool HasOtherAsiPlugins(string target) =>
+        HasOtherAsiPluginsIn(Path.Combine(target, "OptiScaler", "plugins"))
+        || HasOtherAsiPluginsIn(Path.Combine(paths.Extras, "plugins"));
+
+    private static bool HasOtherAsiPluginsIn(string pluginsDir)
+    {
+        if (!Directory.Exists(pluginsDir)) return false;
+
+        try
+        {
+            return Directory.EnumerateFiles(pluginsDir, "*.asi")
+                .Any(file => !Path.GetFileName(file).Equals(OptiPatcherLayout.FileName, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 
