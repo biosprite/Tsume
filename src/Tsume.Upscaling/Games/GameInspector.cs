@@ -151,8 +151,8 @@ public static class GameInspector
         return Best(games.Count > 0 ? games : programs);
 
         string Best(List<string> among) => among
-            .OrderByDescending(program => string.Equals(program, game.Executable, StringComparison.OrdinalIgnoreCase))
-            .ThenByDescending(program => upscalerFolders.Contains(Path.GetDirectoryName(program)!))
+            .OrderByDescending(program => upscalerFolders.Contains(Path.GetDirectoryName(program)!))
+            .ThenByDescending(program => string.Equals(program, game.Executable, StringComparison.OrdinalIgnoreCase))
             .ThenByDescending(program => NamedLike(program, game))
             .ThenByDescending(Size)
             .ThenBy(program => program, StringComparer.OrdinalIgnoreCase)

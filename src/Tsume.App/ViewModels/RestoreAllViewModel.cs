@@ -1,6 +1,8 @@
+using System.IO;
 using System.Windows.Input;
 using Tsume.App.Language;
 using Tsume.App.Mvvm;
+using Tsume.Upscaling.Games;
 
 namespace Tsume.App.ViewModels;
 
@@ -50,27 +52,50 @@ public sealed class RestoreAllViewModel : LayerViewModel
         {
             Line = Strings.Removing;
 
-            var restored = 0;
-            var failures = await Task.Run(() =>
+            var games = _hub.Installer.Removable()
+                .Select(manifest => (Manifest: manifest, Listed: _hub.List.Find(manifest.GameId)))
+                .ToList();
+
+            var (restored, failures, updatedFacts) = await Task.Run(() =>
             {
+                var count = 0;
                 var failed = new List<string>();
+                var refreshed = new List<(ListedGame Listed, GameFacts? Facts)>();
 
                 // One game failing (e.g. it is running) does not stop the rest.
-                foreach (var game in _hub.Installer.Removable())
+                foreach (var (manifest, listed) in games)
                 {
                     try
                     {
-                        _hub.Installer.Remove(game.GameId);
-                        restored++;
+                        _hub.Installer.Remove(manifest.GameId);
+                        count++;
+
+                        if (listed is not null)
+                        {
+                            try
+                            {
+                                refreshed.Add((listed, GameInspector.Inspect(listed.Game)));
+                            }
+                            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                            {
+                                refreshed.Add((listed, listed.Facts is { } previous ? previous with { ExistingProxy = null } : null));
+                            }
+                        }
                     }
                     catch (Exception error)
                     {
-                        failed.Add(Strings.CouldNotUpdate(game.GameName, Strings.Explain(error)));
+                        failed.Add(Strings.CouldNotUpdate(manifest.GameName, Strings.Explain(error)));
                     }
                 }
 
-                return failed;
+                return (count, failed, refreshed);
             });
+
+            if (updatedFacts.Count > 0)
+            {
+                foreach (var (listed, facts) in updatedFacts) listed.Facts = facts;
+                _hub.SaveList();
+            }
 
             Line = string.Join(Environment.NewLine, failures.Prepend(Strings.RestoredGames(restored)));
         }

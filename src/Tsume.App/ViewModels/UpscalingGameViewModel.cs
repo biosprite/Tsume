@@ -131,23 +131,27 @@ public sealed class UpscalingGameViewModel : LayerViewModel
         _state = Installer.Check(_manifest);
         _build = _hub.Builds.Current();
 
+        var isHealthy = _manifest is not null && _state == InstallState.Healthy;
+        var storeHasXmx = _hub.Xmx.Current() is not null;
+
         // An installed game's settings come from its own file: OptiScaler's
         // in-game overlay may have changed them.
         var remembered = _hub.List.SettingsFor(listed.Game.Id);
-        var settings = _manifest is not null && _state == InstallState.Healthy
-            ? Installer.ReadSettings(_manifest, remembered)
+        var settings = isHealthy
+            ? Installer.ReadSettings(_manifest!, remembered)
             : remembered;
 
         // XMX is selectable if it is already in the game, or would go in with an install.
-        _hasXmx = _manifest is not null && _state == InstallState.Healthy
-            ? Installer.HasXmx(_manifest)
-            : _hub.Xmx.Current() is not null;
+        _hasXmx = isHealthy
+            ? Installer.HasXmx(_manifest!)
+            : storeHasXmx;
 
-        var isInstalled = _manifest is not null;
-        var lockedProxy = _manifest?.Proxy ?? Facts?.ExistingProxy;
+        // Lock the proxy only while cleanly installed, or when someone else's OptiScaler sits in an uninstalled game.
+        // Broken installs (Replaced / CutShort) can pick a new proxy before repairing.
+        var lockedProxy = isHealthy ? _manifest!.Proxy : _manifest is null ? Facts?.ExistingProxy : null;
 
         _existingFolder = ExistingFolder();
-        Tuning.Load(settings, _hasXmx, isInstalled, lockedProxy);
+        Tuning.Load(settings, _hasXmx, isInstalled: isHealthy, lockedProxy, xmxAvailableToAdd: isHealthy && storeHasXmx);
         Notify("");
     }
 
@@ -295,10 +299,24 @@ public sealed class UpscalingGameViewModel : LayerViewModel
 
     private async Task RemoveAsync()
     {
-        var id = _listed!.Game.Id;
+        var listed = _listed!;
 
         Status = Strings.Removing;
-        var report = await Task.Run(() => _hub.Installer.Remove(id));
+        var (report, facts) = await Task.Run(() =>
+        {
+            var removed = _hub.Installer.Remove(listed.Game.Id);
+            try
+            {
+                return (removed, GameInspector.Inspect(listed.Game));
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                return (removed, listed.Facts is { } previous ? previous with { ExistingProxy = null } : null);
+            }
+        });
+
+        listed.Facts = facts;
+        _hub.SaveList();
 
         Status = report.LeftAlone.Count > 0 ? Strings.RemovedButLeft(report.LeftAlone.Count) : Strings.RemovedDone;
     }
@@ -315,23 +333,26 @@ public sealed class UpscalingGameViewModel : LayerViewModel
     {
         if (_listed is not { } listed || _hub.IsBusy) return;
 
-        // Keep the user's proxy preference untouched while installed (the proxy dropdown is locked).
-        listed.Settings = _manifest is not null
+        var isHealthy = _manifest is not null && _state == InstallState.Healthy;
+
+        // Keep the user's proxy preference untouched while cleanly installed (the proxy dropdown is locked).
+        listed.Settings = isHealthy
             ? Tuning.Settings with { Proxy = listed.Settings?.Proxy ?? "" }
             : Tuning.Settings;
         _hub.SaveList();
 
-        if (_manifest is null || _state != InstallState.Healthy) return;
+        if (!isHealthy) return;
 
         try
         {
-            Installer.WriteSettings(_manifest, Tuning.Settings);
+            Installer.WriteSettings(_manifest!, Tuning.Settings);
             Status = Strings.SettingsSaved;
 
             if (Tuning.Settings.Upscaler == UpscalerChoice.Fsr4Xmx && !_hasXmx)
             {
                 // XMX is not in this game yet: show what was actually written instead.
-                Tuning.Load(Installer.ReadSettings(_manifest, Tuning.Settings), hasXmx: false, isInstalled: true, lockedProxy: _manifest.Proxy);
+                Tuning.Load(Installer.ReadSettings(_manifest!, Tuning.Settings), hasXmx: false, isInstalled: true,
+                    lockedProxy: _manifest!.Proxy, xmxAvailableToAdd: _hub.Xmx.Current() is not null);
                 Status = Strings.XmxNotInGame;
             }
         }

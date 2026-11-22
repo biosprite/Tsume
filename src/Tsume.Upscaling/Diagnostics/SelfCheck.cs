@@ -160,6 +160,19 @@ public static class SelfCheck
 
         try
         {
+            // A store manifest pointing at a root stub exe should still resolve to the real game exe next to upscaler DLLs.
+            var hintedRoot = Path.Combine(bench, "Hinted");
+            var hintedBin = Path.Combine(hintedRoot, "bin", "x64");
+            Directory.CreateDirectory(hintedBin);
+            var stubExe = Path.Combine(hintedRoot, "StartGame.exe");
+            var realExe = Path.Combine(hintedBin, "Hinted.exe");
+            File.WriteAllBytes(stubExe, new byte[4096]);
+            File.WriteAllBytes(realExe, new byte[4096]);
+            File.WriteAllText(Path.Combine(hintedBin, "nvngx_dlss.dll"), "stand-in for DLSS");
+            var hintedGame = Game.At(hintedRoot, "Hinted", GameStore.Epic, stubExe);
+            Check(string.Equals(GameInspector.Inspect(hintedGame)?.Executable, realExe, StringComparison.OrdinalIgnoreCase),
+                "store manifest hint in root does not override a real game exe beside upscaler DLLs");
+
             Say("A. An ordinary game");
             var (a, aFacts) = MakeGame(bench, "Plain", folder => { });
             var before = Snapshot(a.Folder);

@@ -22,6 +22,7 @@ public sealed class UpscalerTuningViewModel : Observable
 
     private bool _loading;
     private string? _lockedProxy;
+    private bool _xmxAvailableToAdd;
 
     public UpscalerTuningViewModel()
     {
@@ -36,16 +37,21 @@ public sealed class UpscalerTuningViewModel : Observable
     public UpscalerSettings Settings { get; private set; } = new();
 
     /// <param name="hasXmx">True if the XMX upscaler is in the game, or would go in with an install.</param>
-    /// <param name="isInstalled">True once OptiScaler is installed in this game (locks install-time choices).</param>
+    /// <param name="isInstalled">True once OptiScaler is cleanly installed in this game (locks install-time choices).</param>
     /// <param name="lockedProxy">
     /// The fixed proxy DLL name when already installed (or already placed by another tool); null when editable.
     /// </param>
-    public void Load(UpscalerSettings settings, bool hasXmx, bool isInstalled = false, string? lockedProxy = null)
+    /// <param name="xmxAvailableToAdd">
+    /// True when the game is installed without XMX while Tsume holds an XMX archive that Update can add.
+    /// </param>
+    public void Load(UpscalerSettings settings, bool hasXmx, bool isInstalled = false, string? lockedProxy = null,
+        bool xmxAvailableToAdd = false)
     {
         _loading = true;
         HasXmx = hasXmx;
         IsInstalled = isInstalled;
         _lockedProxy = lockedProxy;
+        _xmxAvailableToAdd = xmxAvailableToAdd;
         Settings = settings.Fitting(hasXmx);
         Notify("");   // every control reads its value again
         _loading = false;
@@ -91,7 +97,7 @@ public sealed class UpscalerTuningViewModel : Observable
     };
 
     /// <summary>Explains why XMX is greyed out, when it is unavailable.</summary>
-    public string XmxHint => HasXmx ? "" : IsInstalled ? Strings.XmxLockedUpdate : Strings.XmxLockedBuild;
+    public string XmxHint => HasXmx ? "" : _xmxAvailableToAdd ? Strings.XmxLockedUpdate : Strings.XmxLockedBuild;
 
     public Visibility XmxHintShown => XmxHint.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
