@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Threading;
 using Tsume.App.Mvvm;
 using Tsume.App.Platform;
@@ -17,11 +16,6 @@ public sealed record GuidedActionStep(int Number, string Headline, string? Detai
     public bool HasDetail => !string.IsNullOrWhiteSpace(Detail);
 }
 
-public sealed record GuidedTargetChip(string Label, string Value, Brush? SwatchBrush = null)
-{
-    public bool HasSwatch => SwatchBrush is not null;
-}
-
 public sealed class GuidedStepItem : Observable
 {
     public required string Id { get; init; }
@@ -31,7 +25,6 @@ public sealed class GuidedStepItem : Observable
     public required string Title { get; init; }
     public required string Subtitle { get; init; }
     public required IReadOnlyList<GuidedActionStep> ActionSteps { get; init; }
-    public IReadOnlyList<GuidedTargetChip> Targets { get; init; } = [];
     public string? AfterCaptureNote { get; init; }
     public string? SkipHint { get; init; }
     public required string WhyItMatters { get; init; }
@@ -40,7 +33,6 @@ public sealed class GuidedStepItem : Observable
     public bool IsBaselineStep { get; init; }
     public bool IsOptional { get; init; }
 
-    public bool HasTargets => Targets.Count > 0;
     public bool HasAfterCaptureNote => !string.IsNullOrWhiteSpace(AfterCaptureNote);
     public bool HasSkipHint => !string.IsNullOrWhiteSpace(SkipHint);
 
@@ -1419,13 +1411,6 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         return parts.Count > 0 ? string.Join(" · ", parts) : "change detected";
     }
 
-    private static SolidColorBrush Swatch(byte r, byte g, byte b)
-    {
-        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
-        brush.Freeze();
-        return brush;
-    }
-
     private static List<GuidedStepItem> CreateGuidedSteps() =>
     [
         new()
@@ -1437,18 +1422,11 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             Title = "Set Your Baseline",
             Subtitle = "Put your handheld into its normal default state so Tsume has a clean starting point.",
             IsBaselineStep = true,
-            Targets =
-            [
-                new("Power", "Balanced / Default"),
-                new("Fans", "Auto"),
-                new("Charge Limit", "Off (100%)"),
-                new("Controller", "Gamepad"),
-            ],
             ActionSteps =
             [
                 new(1, "Open your handheld's built-in control app",
                     "For example: MSI Center M, Armoury Crate, Legion Space, or Ayaneo Space."),
-                new(2, "Apply the four default settings shown above",
+                new(2, "Follow the default settings below",
                     "Set power to `Balanced`, fans to `Auto`, charge limit to `100%` (off), and controller to `Gamepad`."),
                 new(3, "Click [[Capture Step]] below",
                     "Tsume saves a clean reference snapshot to compare against every step that follows."),
@@ -1464,10 +1442,6 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             Glyph = Glyphs.Battery,
             Title = "Quiet / Battery Saver Mode",
             Subtitle = "Switch to your handheld's quietest, lowest-power preset.",
-            Targets =
-            [
-                new("Power Mode", "Silent / Quiet / Super Battery"),
-            ],
             ActionSteps =
             [
                 new(1, "Switch to the lowest power preset in your OEM app",
@@ -1487,10 +1461,6 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             Glyph = Glyphs.Sustained,
             Title = "Performance / Turbo Mode",
             Subtitle = "Switch to your handheld's highest stock performance preset.",
-            Targets =
-            [
-                new("Power Mode", "Performance / Turbo / Sport"),
-            ],
             ActionSteps =
             [
                 new(1, "Switch to the highest stock preset in your OEM app",
@@ -1510,11 +1480,6 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             Glyph = Glyphs.Sliders,
             Title = "Manual Power Limits (17 W / 23 W)",
             Subtitle = "Set two unequal wattages so Tsume can pinpoint sustained vs. boost power.",
-            Targets =
-            [
-                new("Sustained (PL1 / SPL)", "17 W"),
-                new("Boost (PL2 / SPPT)", "23 W"),
-            ],
             ActionSteps =
             [
                 new(1, "Switch to `Manual` / `Custom` power mode in your OEM app"),
@@ -1534,10 +1499,6 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             Title = "Max Fan Speed",
             Subtitle = "Briefly turn on full-speed fan override so Tsume can detect the switch and max RPM.",
             IsOptional = true,
-            Targets =
-            [
-                new("Fan Mode", "Max / Full Speed / Cooler Boost"),
-            ],
             ActionSteps =
             [
                 new(1, "Turn on `Max Fan` / `Cooler Boost` / `Full Speed` in your OEM app"),
@@ -1559,10 +1520,6 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             Title = "Battery Charge Limit (80%)",
             Subtitle = "Turn on battery care / charge limiting so Tsume can find where the cap is stored.",
             IsOptional = true,
-            Targets =
-            [
-                new("Charge Limit", "On · 80%"),
-            ],
             ActionSteps =
             [
                 new(1, "Enable `Battery Charge Limit` / `Care Mode` in your OEM app"),
@@ -1583,10 +1540,6 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             Title = "Controller Mode: Desktop / Mouse",
             Subtitle = "Switch built-in controls from Gamepad to Desktop mode to see how switching works.",
             IsOptional = true,
-            Targets =
-            [
-                new("Controller Mode", "Desktop / Mouse"),
-            ],
             ActionSteps =
             [
                 new(1, "Switch the built-in controller from `Gamepad` to `Desktop / Mouse` mode",
@@ -1609,12 +1562,6 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             Title = "RGB Lighting: Solid Red (100%)",
             Subtitle = "Set stick or button LEDs to pure full-brightness Red as the first color test.",
             IsOptional = true,
-            Targets =
-            [
-                new("Effect", "Solid / Static"),
-                new("Color", "Pure Red (#FF0000)", Swatch(255, 59, 59)),
-                new("Brightness", "100%"),
-            ],
             ActionSteps =
             [
                 new(1, "Open the RGB / lighting settings in your OEM app"),
@@ -1635,12 +1582,6 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             Title = "RGB Lighting: Solid Blue (50%)",
             Subtitle = "Switch LEDs to half-brightness pure Blue to separate color from brightness.",
             IsOptional = true,
-            Targets =
-            [
-                new("Effect", "Solid / Static"),
-                new("Color", "Pure Blue (#0000FF)", Swatch(59, 130, 246)),
-                new("Brightness", "50%"),
-            ],
             ActionSteps =
             [
                 new(1, "Keep the lighting effect on `Solid (Static)` in your OEM app"),
@@ -1661,11 +1602,6 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             Title = "Remap Back Paddles",
             Subtitle = "Assign two known actions to your rear buttons so Tsume can locate their mapping.",
             IsOptional = true,
-            Targets =
-            [
-                new("Left Back (M1 / L4)", "F12"),
-                new("Right Back (M2 / R4)", "Gamepad A"),
-            ],
             ActionSteps =
             [
                 new(1, "Open button remapping in your OEM app"),
