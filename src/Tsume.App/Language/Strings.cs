@@ -133,6 +133,7 @@ public static class Strings
     public static string BothSticks => Find();
     public static string ControllerNotFound => Find();
     public static string ControllerNotAnswering => Find();
+    public static string ControllerFirmwareTooOld(string version) => Fill(Find(), version);
     public static string LightingMsiCenterRuns => Find();
     public static string LightingSaved => Find();
 
@@ -476,6 +477,20 @@ public static class Strings
     public static string CheckEnvironmentBusy => Find();
     public static string IncludeHardwareInLogs => Find();
     public static string IncludeHardwareInLogsDetail => Find();
+    public static string DeveloperFirmwareChecksHeading => Find();
+    public static string RunFirmwareProbe => Find();
+    public static string RunFirmwareProbeDetail => Find();
+    public static string RunFirmwareProbeBusy => Find();
+    public static string RunWriteCheck => Find();
+    public static string RunWriteCheckDetail => Find();
+    public static string RunWriteCheckBusy => Find();
+    public static string RunModeCheck => Find();
+    public static string RunModeCheckDetail => Find();
+    public static string RunModeCheckBusy => Find();
+    public static string FirmwareCheckLogged => Find();
+    public static string FirmwareCheckLoggedMsiWarning => Find();
+    public static string FirmwareCheckFailed(string why) => Fill(Find(), why);
+    public static string DeveloperShareLogsDetail => Find();
     public static string HardwareDiscoveryTitle => Find();
     public static string HardwareDiscoverySubtitle => Find();
 

@@ -41,6 +41,7 @@ public sealed class PerformanceViewModel : Observable
         _absorbing = true;
         Mode = state.Mode;
         var manual = state.Manual ?? Device.ManualDefault ?? default;
+        if (Device.ManualRange is { } range) manual = range.Clamp(manual);
         Sustained = manual.Sustained;
         Boost = manual.Boost;
         _absorbing = false;
@@ -68,18 +69,27 @@ public sealed class PerformanceViewModel : Observable
 
         // Bindings re-read everything from the profile. Values the controls push back
         // meanwhile are not user choices and must not reach the firmware.
+        var previousManual = Manual;
         var before = _absorbing;
         _absorbing = true;
 
         Notify(nameof(MinWatts));
+        Notify(nameof(MinBoostWatts));
         Notify(nameof(MaxSustainedWatts));
         Notify(nameof(MaxBoostWatts));
 
         if (!_manualChosen && device.ManualDefault is { } start)
         {
-            Sustained = start.Sustained;
-            Boost = start.Boost;
+            var clamped = device.ManualRange?.Clamp(start) ?? start;
+            Sustained = clamped.Sustained;
+            Boost = clamped.Boost;
             _manualChosen = true;
+        }
+        else if (_manualChosen && device.ManualRange is { } range)
+        {
+            var clamped = range.Clamp(previousManual);
+            Sustained = clamped.Sustained;
+            Boost = clamped.Boost;
         }
 
         Notify(nameof(Modes));
@@ -146,17 +156,30 @@ public sealed class PerformanceViewModel : Observable
 
     // Slider ranges, as doubles to bind to Slider.Minimum/Maximum.
     public double MinWatts => Device.ManualRange?.Min ?? 0;
-    public double MaxSustainedWatts => Device.ManualRange?.MaxSustained ?? 1;
+    public double MinBoostWatts => Device.ManualRange?.MinBoost ?? 0;
+    public double MaxSustainedWatts => Device.ManualRange?.EffectiveMaxSustained ?? 1;
     public double MaxBoostWatts => Device.ManualRange?.MaxBoost ?? 1;
+
+    private double MinBoostFor(double sustained) =>
+        Device.ManualRange is { } range ? range.MinBoostFor((int)sustained) : sustained;
 
     public double Sustained
     {
         get;
         set
         {
-            if (!Set(ref field, Math.Round(value))) return;
+            var rounded = Math.Round(value);
+            if (Device.ManualRange is { } range)
+                rounded = Math.Clamp(rounded, range.Min, range.EffectiveMaxSustained);
 
-            if (Boost < field) Boost = field;   // boost can never sit below sustained
+            if (!Set(ref field, rounded))
+            {
+                if (rounded != value) Notify();
+                return;
+            }
+
+            var minBoost = MinBoostFor(field);
+            if (Boost < minBoost) Boost = minBoost;
             OnManualChanged();
         }
     }
@@ -166,8 +189,16 @@ public sealed class PerformanceViewModel : Observable
         get;
         set
         {
-            if (!Set(ref field, Math.Max(Math.Round(value), Sustained))) return;
-            OnManualChanged();
+            var rounded = Math.Round(value);
+            var floor = MinBoostFor(Sustained);
+            var clamped = Device.ManualRange is { } range
+                ? Math.Clamp(rounded, floor, range.MaxBoost)
+                : Math.Max(rounded, floor);
+
+            if (Set(ref field, clamped))
+                OnManualChanged();
+            else if (clamped != value)
+                Notify();
         }
     }
 
@@ -337,8 +368,9 @@ public sealed class PerformanceViewModel : Observable
         Mode = snapshot.Mode;
         if (snapshot.Mode == PerformanceMode.Manual)
         {
-            Sustained = snapshot.Limits.Sustained;
-            Boost = snapshot.Limits.Boost;
+            var limits = Device.ManualRange is { } range ? range.Clamp(snapshot.Limits) : snapshot.Limits;
+            Sustained = limits.Sustained;
+            Boost = limits.Boost;
         }
         _absorbing = false;
     }

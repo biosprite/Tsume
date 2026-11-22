@@ -34,8 +34,15 @@ public sealed class ChargeKeeper(IDevice device)
     /// <param name="occasion">Why now — "start-up", "wake" — for the log.</param>
     public void RestoreIfForgotten(string occasion)
     {
+        lock (DiscoveryWorker.KeeperGate)
         lock (_gate)
         {
+            if (DiscoveryWorker.IsMutatingFirmwareCheckRunning)
+            {
+                Log.Write($"Skipped charge limit restore on {occasion}: a firmware check is running.");
+                return;
+            }
+
             try
             {
                 if (Recall() is not { } chosen || !device.Profile.ChargeLimits.Contains(chosen.Percent) || device.MakerToolIsRunning) return;

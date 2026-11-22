@@ -49,7 +49,15 @@ internal sealed class MsiBackButtonController : IBackButtonController
     public static MsiBackButtonController? Open(BackButtonsProfile profile)
     {
         var controller = ClawController.Find(profile.VendorId, profile.ProductIds);
-        return controller is null ? null : new MsiBackButtonController(profile, controller);
+        if (controller is null) return null;
+
+        if (profile.MinFirmwareVersion is { } min && controller.FirmwareVersionRaw < min)
+        {
+            controller.Dispose();
+            return null;
+        }
+
+        return new MsiBackButtonController(profile, controller);
     }
 
     public async Task<BackButtonBinding?> ReadAsync(BackButtonDefinition button)

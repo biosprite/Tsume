@@ -252,7 +252,21 @@ public sealed class LightingViewModel : LayerViewModel
 
     private async Task<ClawController?> ConnectAsync()
     {
-        _controller ??= await Task.Run(ClawController.Find);
+        if (_controller is null)
+        {
+            var found = await Task.Run(ClawController.Find);
+            if (found is { UsesLegacyProfileLayout: true })
+            {
+                var version = found.FirmwareVersion;
+                var raw = found.FirmwareVersionRaw;
+                found.Dispose();
+                IsAvailable = false;
+                Status = raw == 0 ? Strings.ControllerNotAnswering : Strings.ControllerFirmwareTooOld(version);
+                return null;
+            }
+
+            _controller = found;
+        }
 
         IsAvailable = _controller is not null;
         if (_controller is null) Status = Strings.ControllerNotFound;

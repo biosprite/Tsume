@@ -33,6 +33,7 @@ public static class HelperPipe
 [JsonDerivedType(typeof(SetRtssStartup),    "rtss.startup.set")]
 [JsonDerivedType(typeof(GetHardwareInventory), "discovery.inventory")]
 [JsonDerivedType(typeof(GetHardwareState),     "discovery.state")]
+[JsonDerivedType(typeof(RunFirmwareCheck),     "firmware.check")]
 public abstract record HelperRequest;
 
 /// <summary>Read the current state without changing anything.</summary>
@@ -105,6 +106,25 @@ public sealed record GetHardwareInventory(bool IncludeTimedLoad = true, bool Pol
 /// </summary>
 public sealed record GetHardwareState(bool PollOnly = false) : HelperRequest;
 
+/// <summary>Firmware verification checks exposed under Developer options.</summary>
+public enum FirmwareCheckKind
+{
+    /// <summary>Read-only EC register, WMI table, and 256-byte EC dump (<c>--probe</c>).</summary>
+    Probe,
+
+    /// <summary>Rewrites each Tsume register with its current value and reads it back (<c>--write-check</c>).</summary>
+    WriteCheck,
+
+    /// <summary>Applies Balanced and Endurance, measures package power under load, and restores the original state (<c>--mode-check</c>).</summary>
+    ModeCheck,
+}
+
+/// <summary>
+/// Runs an MSI firmware verification tool on the helper (<c>--probe</c>, <c>--write-check</c>, or <c>--mode-check</c>).
+/// Runs asynchronously on the helper so the pipe stays responsive: replies with <see cref="HelperReply.Pending"/> while running.
+/// </summary>
+public sealed record RunFirmwareCheck(FirmwareCheckKind Kind, bool PollOnly = false) : HelperRequest;
+
 /// <summary>The helper's answer to any request.</summary>
 public sealed record HelperReply
 {
@@ -130,8 +150,15 @@ public sealed record HelperReply
     /// <summary>JSON payload for read-only discovery requests (<see cref="GetHardwareInventory"/> and <see cref="GetHardwareState"/>).</summary>
     public string? PayloadJson { get; init; }
 
-    /// <summary>True while an asynchronous discovery job is still running on the helper; caller should poll again shortly.</summary>
+    /// <summary>Plain-text report returned by <see cref="RunFirmwareCheck"/>.</summary>
+    public string? Report { get; init; }
+
+    /// <summary>True while an asynchronous discovery or diagnostic job is still running on the helper; caller should poll again shortly.</summary>
     public bool Pending { get; init; }
+
+    /// <summary>True when the failure came from the pipe transport (helper offline or dropped) rather than a reply sent by the helper.</summary>
+    [JsonIgnore]
+    public bool Unreachable { get; init; }
 
     public static HelperReply Success(HardwareSnapshot snapshot) => new() { Ok = true, Snapshot = snapshot };
     public static HelperReply Success(LiveReadings readings) => new() { Ok = true, Readings = readings };

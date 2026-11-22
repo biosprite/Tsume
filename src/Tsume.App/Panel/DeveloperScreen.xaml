@@ -59,6 +59,43 @@
                        IsOn="{Binding IncludeHardwareInLogs}"
                        Command="{Binding ToggleIncludeHardwareInLogs}" />
 
+        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.DeveloperFirmwareChecksHeading}"
+                   Margin="4,12,0,10" />
+
+        <controls:Tile Style="{StaticResource Tile.Link}"
+                       Glyph="{x:Static theme:Glyphs.Inspect}"
+                       Label="{x:Static lang:Strings.RunFirmwareProbe}"
+                       Detail="{Binding FirmwareProbeDetail}"
+                       Command="{Binding RunFirmwareProbe}" />
+
+        <controls:Tile Style="{StaticResource Tile.Link}"
+                       Glyph="{x:Static theme:Glyphs.Tick}"
+                       Label="{x:Static lang:Strings.RunWriteCheck}"
+                       Detail="{Binding WriteCheckDetail}"
+                       Command="{Binding RunWriteCheck}" />
+
+        <controls:Tile Style="{StaticResource Tile.Link}"
+                       Glyph="{x:Static theme:Glyphs.Sustained}"
+                       Label="{x:Static lang:Strings.RunModeCheck}"
+                       Detail="{Binding ModeCheckDetail}"
+                       Command="{Binding RunModeCheck}" />
+
+        <Border Background="{DynamicResource Surface}" CornerRadius="{StaticResource Radius.Control}"
+                Padding="14,12" Margin="0,0,0,8" Visibility="{Binding FirmwareCheckOutputVisibility}">
+          <ScrollViewer MaxHeight="220" Focusable="False"
+                        VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+            <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
+                       Text="{Binding FirmwareCheckOutput}" TextWrapping="NoWrap" TextTrimming="None"
+                       FontFamily="Consolas" FontSize="11" />
+          </ScrollViewer>
+        </Border>
+
+        <controls:Tile Style="{StaticResource Tile.Link}"
+                       Glyph="{x:Static theme:Glyphs.Share}"
+                       Label="{x:Static lang:Strings.ShareLogs}"
+                       Detail="{Binding ShareLogsDetail}"
+                       Command="{Binding ShareLogs}" />
+
       </StackPanel>
     </ScrollViewer>
 

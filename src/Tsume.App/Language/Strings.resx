@@ -193,6 +193,10 @@
   <data name="BothSticks" xml:space="preserve"><value>Both sticks</value></data>
   <data name="ControllerNotFound" xml:space="preserve"><value>Controller not found</value></data>
   <data name="ControllerNotAnswering" xml:space="preserve"><value>The controller stopped answering</value></data>
+  <data name="ControllerFirmwareTooOld" xml:space="preserve">
+    <value>Controller firmware {0} is too old — update it in MSI Center M</value>
+    <comment>{0} = controller firmware version, e.g. 2.11</comment>
+  </data>
   <data name="LightingMsiCenterRuns" xml:space="preserve"><value>MSI Center M is running and may undo these changes</value></data>
   <data name="LightingSaved" xml:space="preserve"><value>Kept on the controller when you leave this screen</value></data>
 
@@ -660,6 +664,23 @@
   <data name="CheckEnvironmentBusy" xml:space="preserve"><value>Checking environment…</value></data>
   <data name="IncludeHardwareInLogs" xml:space="preserve"><value>Include hardware info in logs</value></data>
   <data name="IncludeHardwareInLogsDetail" xml:space="preserve"><value>Embeds a read-only hardware inventory in Share logs (always on for unsupported devices)</value></data>
+  <data name="DeveloperFirmwareChecksHeading" xml:space="preserve"><value>FIRMWARE VERIFICATION</value></data>
+  <data name="RunFirmwareProbe" xml:space="preserve"><value>Firmware probe</value></data>
+  <data name="RunFirmwareProbeDetail" xml:space="preserve"><value>Read-only EC registers, WMI tables and 256-byte EC dump</value></data>
+  <data name="RunFirmwareProbeBusy" xml:space="preserve"><value>Reading firmware (read-only)…</value></data>
+  <data name="RunWriteCheck" xml:space="preserve"><value>Write check</value></data>
+  <data name="RunWriteCheckDetail" xml:space="preserve"><value>Rewrites each Tsume register with its current value and reads it back</value></data>
+  <data name="RunWriteCheckBusy" xml:space="preserve"><value>Running no-op write check…</value></data>
+  <data name="RunModeCheck" xml:space="preserve"><value>Mode check</value></data>
+  <data name="RunModeCheckDetail" xml:space="preserve"><value>Tests Balanced &amp; Endurance (~35 s load, fans spin up) then restores</value></data>
+  <data name="RunModeCheckBusy" xml:space="preserve"><value>Running mode check (~35 s, fans will spin up)…</value></data>
+  <data name="FirmwareCheckLogged" xml:space="preserve"><value>Logged to firmware-checks.log · Share logs to send</value></data>
+  <data name="FirmwareCheckLoggedMsiWarning" xml:space="preserve"><value>Logged (MSI Center M was running — pause it for clean checks)</value></data>
+  <data name="FirmwareCheckFailed" xml:space="preserve">
+    <value>Check failed: {0}</value>
+    <comment>{0} = error message</comment>
+  </data>
+  <data name="DeveloperShareLogsDetail" xml:space="preserve"><value>Exports a zip including firmware-checks.log to your Desktop</value></data>
   <data name="HardwareDiscoveryTitle" xml:space="preserve"><value>Hardware Discovery</value></data>
   <data name="HardwareDiscoverySubtitle" xml:space="preserve"><value>100% read-only device logging for adding full handheld support to Tsume</value></data>
 

@@ -51,7 +51,7 @@
                 <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Boost}"
                                       Label="{x:Static lang:Strings.Boost}" Unit=" W"
                                       AutomationProperties.Name="{Binding BoostName}"
-                                      Minimum="{Binding MinWatts}" Maximum="{Binding MaxBoostWatts}"
+                                      Minimum="{Binding MinBoostWatts}" Maximum="{Binding MaxBoostWatts}"
                                       LargeChange="1"
                                       Value="{Binding Boost}"
                                       Margin="0,8,0,0" />

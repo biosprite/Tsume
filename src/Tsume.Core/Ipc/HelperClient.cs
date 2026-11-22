@@ -21,12 +21,14 @@ public sealed class HelperClient
 
     public async Task<HelperReply> SendAsync(HelperRequest request, TimeSpan? replyTimeout, CancellationToken cancel = default)
     {
+        var connected = false;
         try
         {
             await using var pipe = new NamedPipeClientStream(
                 ".", HelperPipe.Name, PipeDirection.InOut, PipeOptions.Asynchronous);
 
             await pipe.ConnectAsync(ConnectTimeout, cancel);
+            connected = true;
 
             var effectiveTimeout = replyTimeout ?? request switch
             {
@@ -45,16 +47,24 @@ public sealed class HelperClient
             var line = await reader.ReadLineAsync(timeout.Token);
 
             return line is null
-                ? HelperReply.Failure("The helper closed the connection without answering.")
+                ? new HelperReply { Ok = false, Unreachable = true, Error = "The helper closed the connection without answering." }
                 : HelperJson.ReadReply(line) ?? HelperReply.Failure("The helper sent an empty reply.");
         }
         catch (TimeoutException)
         {
-            return HelperReply.Failure("The helper is not running.");
+            return new HelperReply { Ok = false, Unreachable = true, Error = "The helper is not running." };
         }
-        catch (Exception error) when (error is IOException or OperationCanceledException or UnauthorizedAccessException)
+        catch (OperationCanceledException error) when (!cancel.IsCancellationRequested)
+        {
+            return new HelperReply { Ok = false, Unreachable = !connected, Error = error.Message };
+        }
+        catch (OperationCanceledException error)
         {
             return HelperReply.Failure(error.Message);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return new HelperReply { Ok = false, Unreachable = !connected || error is IOException, Error = error.Message };
         }
     }
 }
