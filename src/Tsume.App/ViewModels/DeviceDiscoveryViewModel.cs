@@ -2,29 +2,97 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Tsume.App.Mvvm;
 using Tsume.App.Platform;
+using Tsume.App.Theme;
 using Tsume.Core.Diagnostics;
 using Tsume.Core.Ipc;
 
 namespace Tsume.App.ViewModels;
 
+public sealed record GuidedActionStep(int Number, string Headline, string? Detail = null)
+{
+    public bool HasDetail => !string.IsNullOrWhiteSpace(Detail);
+}
+
+public sealed record GuidedTargetChip(string Label, string Value, Brush? SwatchBrush = null)
+{
+    public bool HasSwatch => SwatchBrush is not null;
+}
+
 public sealed class GuidedStepItem : Observable
 {
     public required string Id { get; init; }
     public required int Number { get; init; }
+    public required string Category { get; init; }
+    public required string Glyph { get; init; }
     public required string Title { get; init; }
-    public required string Instruction { get; init; }
+    public required string Subtitle { get; init; }
+    public required IReadOnlyList<GuidedActionStep> ActionSteps { get; init; }
+    public IReadOnlyList<GuidedTargetChip> Targets { get; init; } = [];
+    public string? AfterCaptureNote { get; init; }
+    public string? SkipHint { get; init; }
     public required string WhyItMatters { get; init; }
+    public string NoteHint { get; init; } = "Optional note:";
     public bool IsButtonCaptureStep { get; init; }
     public bool IsBaselineStep { get; init; }
+    public bool IsOptional { get; init; }
 
-    public string Status { get; set => Set(ref field, value); } = "Pending";
+    public bool HasTargets => Targets.Count > 0;
+    public bool HasAfterCaptureNote => !string.IsNullOrWhiteSpace(AfterCaptureNote);
+    public bool HasSkipHint => !string.IsNullOrWhiteSpace(SkipHint);
+
+    public string Status
+    {
+        get;
+        set
+        {
+            if (Set(ref field, value)) Notify(nameof(SidebarStatus));
+        }
+    } = "Pending";
+
     public string Detail { get; set => Set(ref field, value); } = "";
-    public bool IsCaptured { get; set => Set(ref field, value); }
-    public bool IsSkipped { get; set => Set(ref field, value); }
+
+    public bool IsCaptured
+    {
+        get;
+        set
+        {
+            if (Set(ref field, value))
+            {
+                Notify(nameof(SidebarStatus));
+                Notify(nameof(ShowStartBadge));
+                Notify(nameof(ShowOptionalBadge));
+            }
+        }
+    }
+
+    public bool IsSkipped
+    {
+        get;
+        set
+        {
+            if (Set(ref field, value))
+            {
+                Notify(nameof(SidebarStatus));
+                Notify(nameof(ShowStartBadge));
+                Notify(nameof(ShowOptionalBadge));
+            }
+        }
+    }
+
     public bool IsSelected { get; set => Set(ref field, value); }
+
+    public string SidebarStatus =>
+        IsCaptured || IsSkipped ? Status :
+        IsBaselineStep ? "Start here" :
+        IsOptional ? "Pending · Optional" :
+        Status;
+
+    public bool ShowStartBadge => IsBaselineStep && !IsCaptured && !IsSkipped;
+    public bool ShowOptionalBadge => IsOptional && !IsCaptured && !IsSkipped;
 }
 
 /// <summary>
@@ -70,14 +138,14 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 
         ButtonPrompts =
         [
-            new("oem_short", "OEM button (short press)"),
-            new("oem_hold", "OEM button (press & hold)"),
-            new("quick_settings_short", "Quick Settings / Game Bar (short press)"),
-            new("quick_settings_hold", "Quick Settings / Game Bar (press & hold)"),
-            new("back_left", "Back Left paddle (M1 / L4)"),
-            new("back_right", "Back Right paddle (M2 / R4)"),
-            new("volume_buttons", "Volume Up / Volume Down"),
-            new("other_button", "Other dedicated button"),
+            new("oem_short", "OEM button", "SHORT PRESS"),
+            new("oem_hold", "OEM button", "PRESS & HOLD"),
+            new("quick_settings_short", "Quick Settings / Game Bar", "SHORT PRESS"),
+            new("quick_settings_hold", "Quick Settings / Game Bar", "PRESS & HOLD"),
+            new("back_left", "Back Left paddle", "M1 / L4"),
+            new("back_right", "Back Right paddle", "M2 / R4"),
+            new("volume_buttons", "Volume buttons", "VOL + / −"),
+            new("other_button", "Other button", "CUSTOM"),
         ];
         SelectedButtonPrompt = ButtonPrompts[0];
 
@@ -213,7 +281,9 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
                     : $"{_buttonEvents.Count} button event(s) captured across WMI / Keyboard / HID / XInput.";
 
             if (!_guidedDiffs.TryGetValue(SelectedStep.Id, out var diff))
-                return "Not captured yet. Make the change in your OEM app (if applicable), then click Capture Step.";
+                return SelectedStep.IsBaselineStep
+                    ? "Not captured yet. Set your handheld to the baseline defaults above, then click Capture Step."
+                    : "Not captured yet. Follow the steps above, then click Capture Step.";
 
             return FormatDiffSummary(diff);
         }
@@ -873,97 +943,286 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         return parts.Count > 0 ? string.Join(" · ", parts) : "change detected";
     }
 
+    private static SolidColorBrush Swatch(byte r, byte g, byte b)
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+        brush.Freeze();
+        return brush;
+    }
+
     private static List<GuidedStepItem> CreateGuidedSteps() =>
     [
         new()
         {
             Id = "baseline",
             Number = 1,
-            Title = "Baseline State",
+            Category = "SETUP",
+            Glyph = Glyphs.Steady,
+            Title = "Set Your Baseline",
+            Subtitle = "Put your handheld into its normal default state so Tsume has a clean starting point.",
             IsBaselineStep = true,
-            Instruction = "In your OEM software (MSI Center M, Armoury Crate, Legion Space, etc.), set:\n• Balanced / Default performance mode\n• Fan on Auto\n• Battery charge limit at 100% (off)\n• Controller in Gamepad mode\n\nThen click Capture Step.",
-            WhyItMatters = "Gives Tsume the clean reference snapshot (and live-jitter mask) that every later step compares against.",
+            Targets =
+            [
+                new("Power", "Balanced / Default"),
+                new("Fans", "Auto"),
+                new("Charge Limit", "Off (100%)"),
+                new("Controller", "Gamepad"),
+            ],
+            ActionSteps =
+            [
+                new(1, "Open your handheld's built-in control app",
+                    "For example: MSI Center M, Armoury Crate, Legion Space, or Ayaneo Space."),
+                new(2, "Apply the four default settings shown above",
+                    "Set power to `Balanced`, fans to `Auto`, charge limit to `100%` (off), and controller to `Gamepad`."),
+                new(3, "Click [[Capture Step]] below",
+                    "Tsume saves a clean reference snapshot to compare against every step that follows."),
+            ],
+            WhyItMatters = "Every change you make in the next steps is compared against this snapshot. Starting from known defaults makes each individual setting stand out cleanly from background sensor noise.",
+            NoteHint = "Optional note (e.g., OEM app name and default profile label):",
         },
         new()
         {
             Id = "mode-endurance",
             Number = 2,
-            Title = "Quiet / Endurance Mode",
-            Instruction = "Switch your OEM software to its lowest / Quiet / Super Battery / Silent performance mode, wait 2 seconds, then click Capture Step.",
-            WhyItMatters = "Identifies the exact mode register code, default low-power wattage limits, and Windows power overlay.",
+            Category = "POWER MODES",
+            Glyph = Glyphs.Battery,
+            Title = "Quiet / Battery Saver Mode",
+            Subtitle = "Switch to your handheld's quietest, lowest-power preset.",
+            Targets =
+            [
+                new("Power Mode", "Silent / Quiet / Super Battery"),
+            ],
+            ActionSteps =
+            [
+                new(1, "Switch to the lowest power preset in your OEM app",
+                    "Usually labeled `Silent`, `Quiet`, `Endurance`, or `Super Battery`."),
+                new(2, "Wait about `2 seconds`",
+                    "Gives the firmware a moment to finish switching power profiles."),
+                new(3, "Click [[Capture Step]] below"),
+            ],
+            WhyItMatters = "Shows Tsume how your handheld signals its lowest-power preset, what default wattage cap it uses, and whether it changes the Windows power mode alongside it.",
+            NoteHint = "Optional note (e.g., the exact mode name in your OEM app, like \"Super Battery\"):",
         },
         new()
         {
             Id = "mode-performance",
             Number = 3,
+            Category = "POWER MODES",
+            Glyph = Glyphs.Sustained,
             Title = "Performance / Turbo Mode",
-            Instruction = "Switch your OEM software to its highest preset (Performance / Sport / Turbo), wait 2 seconds, then click Capture Step.",
-            WhyItMatters = "Identifies the Performance mode code, stock preset wattage ceiling, and any fan-table differences.",
+            Subtitle = "Switch to your handheld's highest stock performance preset.",
+            Targets =
+            [
+                new("Power Mode", "Performance / Turbo / Sport"),
+            ],
+            ActionSteps =
+            [
+                new(1, "Switch to the highest stock preset in your OEM app",
+                    "Usually labeled `Performance`, `Turbo`, `Extreme`, or `Sport`."),
+                new(2, "Wait about `2 seconds`",
+                    "Gives the firmware time to raise wattage limits and update fan curves."),
+                new(3, "Click [[Capture Step]] below"),
+            ],
+            WhyItMatters = "Shows Tsume the code your handheld uses for its top performance preset, its stock wattage ceiling, and any fan behavior tied to that mode.",
+            NoteHint = "Optional note (e.g., the exact preset name in your OEM app, like \"Extreme Performance\"):",
         },
         new()
         {
             Id = "mode-manual-sentinel",
             Number = 4,
-            Title = "Manual Power (17 W / 23 W)",
-            Instruction = "Switch to Manual / Custom power mode and set two distinctive, unequal numbers:\n• Sustained (PL1 / SPL / STAPM): 17 W\n• Boost (PL2 / SPPT / FPPT): 23 W\n(If your device only allows one slider or different bounds, pick two distinctive unequal numbers and type them in the note box.)\n\nWait 2 seconds, then click Capture Step.",
-            WhyItMatters = "Asymmetric sentinel numbers (0x11 and 0x17) make the exact sustained vs. boost registers, byte order, and watt scaling unmistakable.",
+            Category = "POWER MODES",
+            Glyph = Glyphs.Sliders,
+            Title = "Manual Power Limits (17 W / 23 W)",
+            Subtitle = "Set two unequal wattages so Tsume can pinpoint sustained vs. boost power.",
+            Targets =
+            [
+                new("Sustained (PL1 / SPL)", "17 W"),
+                new("Boost (PL2 / SPPT)", "23 W"),
+            ],
+            ActionSteps =
+            [
+                new(1, "Switch to `Manual` / `Custom` power mode in your OEM app"),
+                new(2, "Set Sustained power to `17 W` and Boost power to `23 W`",
+                    "Only have one slider or different min/max limits? Pick any two unequal numbers and write them in the note box below."),
+                new(3, "Wait about `2 seconds`, then click [[Capture Step]] below"),
+            ],
+            WhyItMatters = "Using two unusual, unequal numbers (17 and 23) makes it unmistakable which hardware setting controls sustained power versus short-term boost power — and how watts are scaled.",
+            NoteHint = "Optional note — if you couldn't set 17 W / 23 W, type the exact wattages you used:",
         },
         new()
         {
             Id = "fan-max",
             Number = 5,
-            Title = "Fan Max / Cooler Boost",
-            Instruction = "Turn Fan Max / Cooler Boost / Full Speed ON in your OEM app. Wait 3 seconds for fans to spin up, then click Capture Step. (Turn it back to Auto afterwards.)",
-            WhyItMatters = "Pinpoints the exact fan-override register/bitmask and captures high-RPM tachometer period readings.",
+            Category = "COOLING",
+            Glyph = Glyphs.Fan,
+            Title = "Max Fan Speed",
+            Subtitle = "Briefly turn on full-speed fan override so Tsume can detect the switch and max RPM.",
+            IsOptional = true,
+            Targets =
+            [
+                new("Fan Mode", "Max / Full Speed / Cooler Boost"),
+            ],
+            ActionSteps =
+            [
+                new(1, "Turn on `Max Fan` / `Cooler Boost` / `Full Speed` in your OEM app"),
+                new(2, "Wait about `3 seconds` for the fans to spin up",
+                    "This lets Tsume capture both the override switch and high-RPM fan sensor readings."),
+                new(3, "Click [[Capture Step]] below"),
+            ],
+            AfterCaptureNote = "Switch your fans back to `Auto` after capturing so they don't stay loud for the remaining steps.",
+            SkipHint = "No manual or max fan toggle on your handheld? Click [[Skip Step]].",
+            WhyItMatters = "Pinpoints the exact switch that forces fans to full speed and records how your handheld reports high fan RPM readings.",
+            NoteHint = "Optional note (e.g., OEM toggle name or visible fan RPM):",
         },
         new()
         {
             Id = "charge-limit",
             Number = 6,
+            Category = "BATTERY",
+            Glyph = Glyphs.Charging,
             Title = "Battery Charge Limit (80%)",
-            Instruction = "Set Battery Charge Limit / Care Mode to 80% (or your OEM app's battery saver cap) in your OEM app, wait 2 seconds, then click Capture Step.",
-            WhyItMatters = "Reveals the exact charge-limit register, enable bit encoding (e.g. 0x80 | 80 vs raw 80), and any OEM registry mirror key.",
+            Subtitle = "Turn on battery care / charge limiting so Tsume can find where the cap is stored.",
+            IsOptional = true,
+            Targets =
+            [
+                new("Charge Limit", "On · 80%"),
+            ],
+            ActionSteps =
+            [
+                new(1, "Enable `Battery Charge Limit` / `Care Mode` in your OEM app"),
+                new(2, "Set the maximum charge cap to `80%`",
+                    "If your handheld only offers a fixed cap (like `85%`), enable that and note the percentage below."),
+                new(3, "Wait about `2 seconds`, then click [[Capture Step]] below"),
+            ],
+            SkipHint = "No battery charge limit option in your OEM app? Click [[Skip Step]].",
+            WhyItMatters = "Reveals where your handheld stores the charge cap and whether it uses a plain percentage or combines it with a separate on/off flag.",
+            NoteHint = "Optional note (e.g., if your handheld caps at a different percentage like 85%):",
         },
         new()
         {
             Id = "controller-mode",
             Number = 7,
-            Title = "Controller Mode (Desktop / Cursor)",
-            Instruction = "Switch the built-in controller from Gamepad mode to Desktop / Mouse mode in your OEM app, wait 2 seconds, then click Capture Step. (Switch back to Gamepad afterwards.)",
-            WhyItMatters = "Shows whether the controller stays on USB or re-enumerates, how XInput responds, and the exact mode byte.",
+            Category = "CONTROLLER",
+            Glyph = Glyphs.Cursor,
+            Title = "Controller Mode — Desktop / Mouse",
+            Subtitle = "Switch built-in controls from Gamepad to Desktop mode to see how switching works.",
+            IsOptional = true,
+            Targets =
+            [
+                new("Controller Mode", "Desktop / Mouse"),
+            ],
+            ActionSteps =
+            [
+                new(1, "Switch the built-in controller from `Gamepad` to `Desktop / Mouse` mode",
+                    "Use your OEM app or your handheld's quick-toggle shortcut."),
+                new(2, "Wait about `2 seconds`",
+                    "Gives Windows a moment to finish updating USB or XInput devices if the controller reconnects."),
+                new(3, "Click [[Capture Step]] below"),
+            ],
+            AfterCaptureNote = "Switch your controller back to `Gamepad` mode after capturing.",
+            SkipHint = "No `Desktop / Mouse` controller mode? Click [[Skip Step]].",
+            WhyItMatters = "Shows the exact setting that toggles Gamepad vs. Desktop mode and whether your controller stays connected or briefly reconnects over USB.",
+            NoteHint = "Optional note (e.g., OEM mode name or whether Windows played a USB disconnect chime):",
         },
         new()
         {
             Id = "rgb-red-100",
             Number = 8,
+            Category = "LIGHTING",
+            Glyph = Glyphs.Lighting,
             Title = "RGB Lighting — Solid Red (100%)",
-            Instruction = "In your OEM app, set controller stick/button RGB to solid pure Red (#FF0000) at 100% brightness, then click Capture Step. (Skip if no RGB.)",
-            WhyItMatters = "Reveals the exact lighting memory offset, LED count, and RGB vs. GRB byte order.",
+            Subtitle = "Set stick or button LEDs to pure full-brightness Red as the first color test.",
+            IsOptional = true,
+            Targets =
+            [
+                new("Effect", "Solid / Static"),
+                new("Color", "Pure Red (#FF0000)", Swatch(255, 59, 59)),
+                new("Brightness", "100%"),
+            ],
+            ActionSteps =
+            [
+                new(1, "Open the RGB / lighting settings in your OEM app"),
+                new(2, "Set effect to `Solid (Static)`, color to `#FF0000` (Pure Red), at `100%` brightness",
+                    "No hex input? Set `R: 255`, `G: 0`, `B: 0`, or choose the purest solid red preset."),
+                new(3, "Click [[Capture Step]] below"),
+            ],
+            SkipHint = "No RGB lighting on this handheld? Click [[Skip Step]].",
+            WhyItMatters = "Lighting only the Red channel at full brightness makes the LED data easy to spot in memory and reveals how many LEDs your handheld has and their color order (RGB vs. GRB).",
+            NoteHint = "Optional note (e.g., if your OEM app only offers color presets instead of hex/RGB sliders):",
         },
         new()
         {
             Id = "rgb-blue-50",
             Number = 9,
+            Category = "LIGHTING",
+            Glyph = Glyphs.Lighting,
             Title = "RGB Lighting — Solid Blue (50%)",
-            Instruction = "Change controller RGB to solid pure Blue (#0000FF) at 50% brightness, then click Capture Step. (Skip if no RGB.)",
-            WhyItMatters = "Separates the color channel bytes from the brightness byte and range (0–100 vs 0–255).",
+            Subtitle = "Switch LEDs to half-brightness pure Blue to separate color from brightness.",
+            IsOptional = true,
+            Targets =
+            [
+                new("Effect", "Solid / Static"),
+                new("Color", "Pure Blue (#0000FF)", Swatch(59, 130, 246)),
+                new("Brightness", "50%"),
+            ],
+            ActionSteps =
+            [
+                new(1, "Keep the lighting effect on `Solid (Static)` in your OEM app"),
+                new(2, "Change color to `#0000FF` (Pure Blue) and brightness to `50%`",
+                    "No hex input? Set `R: 0`, `G: 0`, `B: 255`, with brightness halfway."),
+                new(3, "Click [[Capture Step]] below"),
+            ],
+            SkipHint = "No RGB lighting on this handheld? Click [[Skip Step]].",
+            WhyItMatters = "Comparing 100% Red against 50% Blue separates which bytes control the color from which byte controls brightness — and shows whether brightness scales from 0–100 or 0–255.",
+            NoteHint = "Optional note (e.g., if brightness uses fixed levels like Low / Medium / High):",
         },
         new()
         {
             Id = "back-paddles",
             Number = 10,
-            Title = "Back Paddles (M1 → F12, M2 → A)",
-            Instruction = "In your OEM app, remap the Left back paddle (M1/L4) to keyboard key F12 and the Right back paddle (M2/R4) to gamepad A (or another distinct key), then click Capture Step. (Skip if no rear buttons.)",
-            WhyItMatters = "Pinpoints the exact byte offset, block length, and key-code table for rear button remapping.",
+            Category = "CONTROLLER",
+            Glyph = Glyphs.Buttons,
+            Title = "Remap Back Paddles",
+            Subtitle = "Assign two known actions to your rear buttons so Tsume can locate their mapping.",
+            IsOptional = true,
+            Targets =
+            [
+                new("Left Back (M1 / L4)", "F12"),
+                new("Right Back (M2 / R4)", "Gamepad A"),
+            ],
+            ActionSteps =
+            [
+                new(1, "Open button remapping in your OEM app"),
+                new(2, "Map Left back paddle (`M1` / `L4`) to keyboard key `F12`"),
+                new(3, "Map Right back paddle (`M2` / `R4`) to `Gamepad A`",
+                    "If either option isn't available, pick another distinct key and note what you chose below."),
+                new(4, "Click [[Capture Step]] below"),
+            ],
+            SkipHint = "No rear paddles or extra back buttons? Click [[Skip Step]].",
+            WhyItMatters = "Assigning one keyboard key and one gamepad button reveals where each paddle's mapping is stored and how keyboard vs. gamepad actions are encoded.",
+            NoteHint = "Optional note (e.g., if you mapped different keys or also have M3 / M4 buttons):",
         },
         new()
         {
             Id = "dedicated-buttons",
             Number = 11,
-            Title = "Dedicated Hardware Buttons",
+            Category = "BUTTONS",
+            Glyph = Glyphs.Gamepad,
+            Title = "Test Hardware Buttons",
+            Subtitle = "Press your handheld's extra buttons while Tsume listens so it can identify each signal.",
+            IsOptional = true,
             IsButtonCaptureStep = true,
-            Instruction = "Pick each button below, click Start Listening, and press that physical button on your handheld.\nTsume passively records WMI events, keyboard chords (Win+G / F15 / etc.), Raw Input HID reports, and XInput simultaneously.",
-            WhyItMatters = "Captures the exact WMI code, key chord, or HID report for OEM, Quick Settings, and rear buttons so Tsume can intercept or remap them cleanly.",
+            ActionSteps =
+            [
+                new(1, "Pick a button from the list below",
+                    "Start with `OEM button` or `Quick Settings / Game Bar`."),
+                new(2, "Click [[Start Listening]]",
+                    "Tsume passively watches WMI events, keyboard chords (like `Win+G` or `F15`), raw HID, and XInput at the same time."),
+                new(3, "Press that physical button on your handheld",
+                    "Repeat for each extra button you want to test, then click [[Stop Listening]] when done."),
+            ],
+            SkipHint = "Don't need hardware button capture right now? Click [[Skip Step]].",
+            WhyItMatters = "Every handheld sends different signals for its menu, Quick Settings, and rear buttons. Recording each press lets Tsume recognize or remap them cleanly.",
         },
     ];
 
@@ -978,7 +1237,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
     }
 }
 
-public sealed record ButtonPromptOption(string Id, string Label)
+public sealed record ButtonPromptOption(string Id, string Label, string CodeTag)
 {
     public override string ToString() => Label;
 }

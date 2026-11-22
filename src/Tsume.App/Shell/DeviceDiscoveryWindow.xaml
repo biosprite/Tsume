@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:theme="clr-namespace:Tsume.App.Theme"
         xmlns:lang="clr-namespace:Tsume.App.Language"
+        xmlns:ctrl="clr-namespace:Tsume.App.Controls"
         Title="Tsume Hardware Discovery"
         Width="980"
         Height="700"
@@ -398,7 +399,7 @@
                           </TextBlock.Style>
                         </TextBlock>
 
-                        <TextBlock Text="{Binding Status}" FontSize="10.5"
+                        <TextBlock Text="{Binding SidebarStatus}" FontSize="10.5"
                                    LineHeight="13" LineStackingStrategy="BlockLineHeight" Margin="0,1,0,0">
                           <TextBlock.Style>
                             <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
@@ -431,7 +432,8 @@
             <StackPanel>
               <Border Style="{StaticResource Dev.Card}">
                 <StackPanel>
-                  <DockPanel Margin="0,0,0,4">
+                  <!-- Step metadata & status badges -->
+                  <DockPanel Margin="0,0,0,10">
                     <Border DockPanel.Dock="Right" Background="#1F3DDC97" BorderBrush="#553DDC97"
                             BorderThickness="1" CornerRadius="8" Padding="8,2" VerticalAlignment="Center"
                             Visibility="{Binding SelectedStep.IsCaptured, Converter={StaticResource BoolToVis}}">
@@ -448,16 +450,168 @@
                             Visibility="{Binding SelectedStep.IsSkipped, Converter={StaticResource BoolToVis}}">
                       <TextBlock Style="{StaticResource Text.Caption}" Text="Skipped" FontSize="11" />
                     </Border>
+                    <Border DockPanel.Dock="Right" Background="{x:Static theme:Accent.Tint}" BorderBrush="{x:Static theme:Accent.Wash}"
+                            BorderThickness="1" CornerRadius="8" Padding="8,2" VerticalAlignment="Center"
+                            Visibility="{Binding SelectedStep.ShowStartBadge, Converter={StaticResource BoolToVis}}">
+                      <TextBlock Style="{StaticResource Text.Caption}" Text="START HERE"
+                                 Foreground="{x:Static theme:Accent.Brush}" FontWeight="Bold" FontSize="10" />
+                    </Border>
+                    <Border DockPanel.Dock="Right" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Panel.Edge}"
+                            BorderThickness="1" CornerRadius="8" Padding="8,2" VerticalAlignment="Center"
+                            Visibility="{Binding SelectedStep.ShowOptionalBadge, Converter={StaticResource BoolToVis}}">
+                      <TextBlock Style="{StaticResource Text.Caption}" Text="OPTIONAL"
+                                 Foreground="{DynamicResource Text.Muted}" FontWeight="SemiBold" FontSize="10" />
+                    </Border>
+
                     <TextBlock Style="{StaticResource Text.Heading}" Margin="0" VerticalAlignment="Center">
-                      <Run Text="STEP " /><Run Text="{Binding SelectedStep.Number, Mode=OneWay}" /><Run Text=" OF 11" />
+                      <Run Text="STEP " /><Run Text="{Binding SelectedStep.Number, Mode=OneWay}" /><Run Text=" OF " /><Run Text="{Binding Steps.Count, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding SelectedStep.Category, Mode=OneWay}" />
                     </TextBlock>
                   </DockPanel>
-                  <TextBlock Style="{StaticResource Text.Title}" Text="{Binding SelectedStep.Title}" Margin="0,0,0,10" />
-                  <TextBlock Style="{StaticResource Text.Body}" Text="{Binding SelectedStep.Instruction}"
-                             TextWrapping="Wrap" FontWeight="Normal" LineHeight="21" Margin="0,0,0,12" />
-                  <Border Background="{x:Static theme:Accent.Tint}" CornerRadius="10" Padding="12,8" Margin="0,0,0,12">
-                    <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
-                               Text="{Binding SelectedStep.WhyItMatters}" TextWrapping="Wrap" />
+
+                  <!-- Step title header with icon & plain-English goal -->
+                  <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10"
+                            Background="{x:Static theme:Accent.Tint}" BorderBrush="{x:Static theme:Accent.Wash}"
+                            BorderThickness="1" VerticalAlignment="Top" Margin="0,1,12,0">
+                      <TextBlock Text="{Binding SelectedStep.Glyph}" FontFamily="{StaticResource Font.Icons}"
+                                 FontSize="17" Foreground="{x:Static theme:Accent.Brush}"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                      <TextBlock Style="{StaticResource Text.Title}" FontSize="20"
+                                 Text="{Binding SelectedStep.Title}" TextWrapping="Wrap" />
+                      <TextBlock Style="{StaticResource Text.Caption}" FontSize="13"
+                                 Foreground="{DynamicResource Text.Muted}" Text="{Binding SelectedStep.Subtitle}"
+                                 TextWrapping="Wrap" LineHeight="18" Margin="0,3,0,0" />
+                    </StackPanel>
+                  </Grid>
+
+                  <!-- Quick-glance target values to apply -->
+                  <ItemsControl ItemsSource="{Binding SelectedStep.Targets}"
+                                Visibility="{Binding SelectedStep.HasTargets, Converter={StaticResource BoolToVis}}"
+                                Margin="0,0,0,6">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Panel.Edge}"
+                                BorderThickness="1" CornerRadius="8" Padding="9,4,6,4" Margin="0,0,8,6">
+                          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource Text.Caption}" FontSize="11.5"
+                                       Foreground="{DynamicResource Text.Muted}" Text="{Binding Label}"
+                                       VerticalAlignment="Center" Margin="0,0,7,0" />
+                            <Border Background="#FF0B0E14" BorderBrush="#40FFFFFF" BorderThickness="1,1,1,1.5"
+                                    CornerRadius="5" Padding="6,1.5" VerticalAlignment="Center">
+                              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border Width="9" Height="9" CornerRadius="4.5"
+                                        Background="{Binding SwatchBrush}" BorderBrush="#55FFFFFF" BorderThickness="1"
+                                        VerticalAlignment="Center" Margin="0,0,6,0"
+                                        Visibility="{Binding HasSwatch, Converter={StaticResource BoolToVis}}" />
+                                <TextBlock FontFamily="Cascadia Mono, Consolas" FontSize="11.5" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Text}" Text="{Binding Value}"
+                                           VerticalAlignment="Center" />
+                              </StackPanel>
+                            </Border>
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+
+                  <!-- Structured numbered checklist ("What to do") -->
+                  <Border Background="#0AFFFFFF" BorderBrush="{DynamicResource Surface.Divider}"
+                          BorderThickness="1" CornerRadius="11" Padding="14,11,14,5" Margin="0,2,0,10">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource Text.Heading}" Text="WHAT TO DO" FontSize="10.5" Margin="0,0,0,9" />
+                      <ItemsControl ItemsSource="{Binding SelectedStep.ActionSteps}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                            <Grid Margin="0,0,0,8">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                              </Grid.ColumnDefinitions>
+                              <Border Grid.Column="0" Width="20" Height="20" CornerRadius="10"
+                                      Background="{x:Static theme:Accent.Tint}" BorderBrush="{x:Static theme:Accent.Wash}"
+                                      BorderThickness="1" VerticalAlignment="Top" Margin="0,1,10,0">
+                                <TextBlock Text="{Binding Number, Mode=OneWay}"
+                                           FontFamily="{StaticResource Font.Words}" FontSize="11" FontWeight="Bold"
+                                           Foreground="{x:Static theme:Accent.Brush}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                              </Border>
+                              <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Style="{StaticResource Text.Body}" FontSize="13" FontWeight="SemiBold"
+                                           ctrl:InlineCodeText.Text="{Binding Headline}"
+                                           TextWrapping="Wrap" LineHeight="22" />
+                                <TextBlock Style="{StaticResource Text.Caption}" FontSize="12"
+                                           Foreground="{DynamicResource Text.Muted}"
+                                           ctrl:InlineCodeText.Text="{Binding Detail}"
+                                           TextWrapping="Wrap" LineHeight="20" Margin="0,2,0,0"
+                                           Visibility="{Binding HasDetail, Converter={StaticResource BoolToVis}}" />
+                              </StackPanel>
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+
+                      <Border BorderBrush="{DynamicResource Surface.Divider}" BorderThickness="0,1,0,0"
+                              Padding="0,8,0,6" Margin="0,1,0,0"
+                              Visibility="{Binding SelectedStep.HasSkipHint, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Style="{StaticResource Text.Caption}" FontSize="11.5"
+                                   Foreground="{DynamicResource Text.Muted}"
+                                   ctrl:InlineCodeText.Text="{Binding SelectedStep.SkipHint}"
+                                   TextWrapping="Wrap" LineHeight="20" />
+                      </Border>
+                    </StackPanel>
+                  </Border>
+
+                  <!-- After-capture revert reminder (when applicable) -->
+                  <Border Background="#16F5B841" BorderBrush="#44F5B841" BorderThickness="1"
+                          CornerRadius="10" Padding="12,8" Margin="0,0,0,10"
+                          Visibility="{Binding SelectedStep.HasAfterCaptureNote, Converter={StaticResource BoolToVis}}">
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                      </Grid.ColumnDefinitions>
+                      <TextBlock Grid.Column="0" Style="{StaticResource Text.Icon}" Text="{x:Static theme:Glyphs.Update}"
+                                 FontSize="13" Foreground="{StaticResource Signal.Warn}"
+                                 VerticalAlignment="Top" Margin="0,2,9,0" />
+                      <StackPanel Grid.Column="1">
+                        <TextBlock Style="{StaticResource Text.Heading}" Text="AFTER CAPTURING"
+                                   Foreground="{StaticResource Signal.Warn}" FontSize="10" Margin="0,0,0,2" />
+                        <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
+                                   ctrl:InlineCodeText.Text="{Binding SelectedStep.AfterCaptureNote}"
+                                   TextWrapping="Wrap" LineHeight="20" />
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+
+                  <!-- Plain-English explanation of why this step matters -->
+                  <Border Background="{x:Static theme:Accent.Tint}" BorderBrush="{x:Static theme:Accent.Wash}"
+                          BorderThickness="1" CornerRadius="10" Padding="12,9" Margin="0,0,0,12">
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                      </Grid.ColumnDefinitions>
+                      <TextBlock Grid.Column="0" Style="{StaticResource Text.Icon}" Text="{x:Static theme:Glyphs.Info}"
+                                 FontSize="14" Foreground="{x:Static theme:Accent.Brush}"
+                                 VerticalAlignment="Top" Margin="0,2,10,0" />
+                      <StackPanel Grid.Column="1">
+                        <TextBlock Style="{StaticResource Text.Heading}" Text="WHY THIS HELPS"
+                                   Foreground="{x:Static theme:Accent.Brush}" FontSize="10" Margin="0,0,0,3" />
+                        <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
+                                   Text="{Binding SelectedStep.WhyItMatters}" TextWrapping="Wrap" LineHeight="18" />
+                      </StackPanel>
+                    </Grid>
                   </Border>
 
                   <!-- Button capture step controls -->
@@ -505,8 +659,16 @@
                       </ListBox.ItemContainerStyle>
                       <ListBox.ItemTemplate>
                         <DataTemplate>
-                          <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
-                                     Text="{Binding Label}" FontWeight="SemiBold" />
+                          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
+                                       Text="{Binding Label}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Border Background="#FF0B0E14" BorderBrush="#40FFFFFF" BorderThickness="1,1,1,1.5"
+                                    CornerRadius="5" Padding="5,1" Margin="7,0,0,0" VerticalAlignment="Center">
+                              <TextBlock FontFamily="Cascadia Mono, Consolas" FontSize="10" FontWeight="SemiBold"
+                                         Foreground="{DynamicResource Text.Muted}" Text="{Binding CodeTag}"
+                                         VerticalAlignment="Center" />
+                            </Border>
+                          </StackPanel>
                         </DataTemplate>
                       </ListBox.ItemTemplate>
                     </ListBox>
@@ -530,7 +692,8 @@
                       </Style>
                     </StackPanel.Style>
 
-                    <TextBlock Style="{StaticResource Text.Caption}" Text="Optional note (e.g., actual watts or OEM mode label):" Margin="0,0,0,4" />
+                    <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding SelectedStep.NoteHint}"
+                               TextWrapping="Wrap" Margin="0,0,0,4" />
                     <TextBox Text="{Binding StepUserNote, UpdateSourceTrigger=PropertyChanged}"
                              Background="#FF0B0D12" Foreground="#FFE6ECF5" CaretBrush="#FFE6ECF5"
                              BorderBrush="{DynamicResource Panel.Edge}" Padding="10,7" Margin="0,0,0,12" FontSize="13" />
