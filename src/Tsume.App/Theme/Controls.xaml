@@ -259,6 +259,10 @@
                 </BeginStoryboard>
               </Trigger.ExitActions>
             </Trigger>
+
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.4" />
+            </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
@@ -422,6 +426,10 @@
               <Trigger.EnterActions><BeginStoryboard Storyboard="{StaticResource Press.Down}" /></Trigger.EnterActions>
               <Trigger.ExitActions><BeginStoryboard Storyboard="{StaticResource Press.Up}" /></Trigger.ExitActions>
             </Trigger>
+
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.4" />
+            </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
@@ -492,6 +500,10 @@
               <Trigger.EnterActions><BeginStoryboard Storyboard="{StaticResource Press.Down}" /></Trigger.EnterActions>
               <Trigger.ExitActions><BeginStoryboard Storyboard="{StaticResource Press.Up}" /></Trigger.ExitActions>
             </Trigger>
+
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.4" />
+            </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
@@ -545,6 +557,10 @@
             <Trigger Property="IsPressed" Value="True">
               <Trigger.EnterActions><BeginStoryboard Storyboard="{StaticResource Press.Down}" /></Trigger.EnterActions>
               <Trigger.ExitActions><BeginStoryboard Storyboard="{StaticResource Press.Up}" /></Trigger.ExitActions>
+            </Trigger>
+
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.4" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -611,6 +627,10 @@
             <Trigger Property="IsPressed" Value="True">
               <Trigger.EnterActions><BeginStoryboard Storyboard="{StaticResource Press.Down}" /></Trigger.EnterActions>
               <Trigger.ExitActions><BeginStoryboard Storyboard="{StaticResource Press.Up}" /></Trigger.ExitActions>
+            </Trigger>
+
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.4" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>

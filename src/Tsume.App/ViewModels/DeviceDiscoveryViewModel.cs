@@ -552,7 +552,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             HasQuickScan = true;
             StatusBanner = _inventory.Elevated
                 ? "Quick scan complete. Continue to Guided Capture or export the support bundle."
-                : "Quick scan complete (limited mode — start Tsume Helper for full hardware access).";
+                : "Quick scan complete (limited mode; start Tsume Helper for full hardware access).";
         }
         catch (OperationCanceledException) when (_disposed)
         {
@@ -1468,7 +1468,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             ? $"{ac} (plugged in & battery)"
             : $"{ac} (plugged in) · {dc} (battery)";
 
-        return boostDisabled ? $"{summary} — may cap power limits" : summary;
+        return boostDisabled ? $"{summary} (may cap power limits)" : summary;
     }
 
     private static (string Text, bool IsMuted) FormatPowerSensorsSummary(TimedDeltaSnapshot? td)
@@ -1711,12 +1711,12 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
                 new(1, "Switch to `Manual` / `Custom` power mode in your OEM app"),
                 new(2, "Set `17 W` / `23 W` (2 sliders) or `17 W` / `23 W` / `29 W` (3 sliders)",
                     "Intel (2 sliders): `PL1` (Sustained) to `17 W`, `PL2` (Boost) to `23 W`.\n" +
-                    "AMD (3 sliders — e.g. MSI Claw A8, ROG Ally, Legion Go): `SPL` (Sustained) to `17 W`, `SPPT` (Slow Boost) to `23 W`, `FPPT` (Fast Boost) to `29 W`.\n" +
+                    "AMD (3 sliders, e.g. MSI Claw A8, ROG Ally, Legion Go): `SPL` (Sustained) to `17 W`, `SPPT` (Slow Boost) to `23 W`, `FPPT` (Fast Boost) to `29 W`.\n" +
                     "Only 1 slider or different min/max limits? Pick distinct ascending values and write them in the note box below."),
                 new(3, "Wait about `2 seconds`, then click [[Capture Step]] below"),
             ],
             WhyItMatters = "Using unusual, unequal numbers (17 / 23 W on 2-slider Intel chips, or 17 / 23 / 29 W on 3-slider AMD chips) makes it unmistakable which hardware register or setting controls Sustained (PL1 / SPL), Slow Boost (PL2 / SPPT), and Fast Boost (FPPT) power, and how watts are scaled.",
-            NoteHint = "Optional note (type the exact wattages you set — especially if you used 1 slider or values other than 17 / 23 W or 17 / 23 / 29 W):",
+            NoteHint = "Optional note (type the exact wattages you set, especially if you used 1 slider or values other than 17 / 23 W or 17 / 23 / 29 W):",
         },
         new()
         {

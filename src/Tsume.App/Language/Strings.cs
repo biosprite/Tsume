@@ -270,10 +270,22 @@ public static class Strings
     public static string ShowFps => Find();
     public static string ShowFpsDetail => Find();
 
+    public static string InstallAs => Find();
+
     /// <summary>"Loads as winmm.dll"</summary>
     public static string LoadsAs(string proxy) => Fill(Find(), proxy);
     public static string LoadsAsAuto => Find();
     public static string LoadsAsDetail => Find();
+    public static string LoadsAsLockedInstalled(string proxy) => Fill(Find(), proxy);
+    public static string LoadsAsLockedExisting(string proxy) => Fill(Find(), proxy);
+    public static string ProxyAutoHint => Find();
+    public static string ProxyDxgiHint => Find();
+    public static string ProxyWinmmHint => Find();
+    public static string ProxyVersionHint => Find();
+    public static string ProxyD3d12Hint => Find();
+    public static string ProxyFallbackHint => Find();
+    public static string XmxLockedBuild => Find();
+    public static string XmxLockedUpdate => Find();
 
     /// <summary>"Nightly of 11 November"</summary>
     public static string NightlyOf(string night) => Fill(Find(), night);

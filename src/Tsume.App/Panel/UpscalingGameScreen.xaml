@@ -7,7 +7,7 @@
              xmlns:panel="clr-namespace:Tsume.App.Panel"
              Focusable="False">
 
-  <!-- OptiScaler in one game: its state, the actions, and its settings. -->
+  <!-- OptiScaler in one game: its state, its settings, and install/update/remove actions. -->
 
   <DockPanel DataContext="{Binding Upscaling.Game}">
 
@@ -50,26 +50,38 @@
                      TextWrapping="Wrap" TextTrimming="None" Text="{x:Static lang:Strings.OnlineGameCaution}" />
         </Border>
 
-        <!-- The first button is always the next sensible action. -->
-        <StackPanel Margin="-4,0,-4,0">
+        <!-- Once installed, Update / Repair / Remove / Forget sit at the top for quick access. -->
+        <StackPanel Margin="-4,0,-4,0" Visibility="{Binding TopActionsShown}">
           <controls:Tile Style="{StaticResource Tile.Row}" controls:Screen.TakesFocus="True"
                          Glyph="{Binding PrimaryGlyph}" Label="{Binding PrimaryLabel}"
-                         Visibility="{Binding PrimaryShown}"
+                         IsEnabled="{Binding CanAct}"
                          Command="{Binding Primary}" />
 
           <controls:Tile Style="{StaticResource Tile.Row}"
                          Glyph="{x:Static theme:Glyphs.Remove}" Label="{x:Static lang:Strings.RemoveOptiScaler}"
                          Visibility="{Binding RemoveShown}"
+                         IsEnabled="{Binding CanAct}"
                          Command="{Binding Remove}" />
+        </StackPanel>
+
+        <panel:UpscalerTuningView DataContext="{Binding Tuning}" Margin="0,20,0,0"
+                                  IsEnabled="{Binding DataContext.CanTune, RelativeSource={RelativeSource AncestorType=DockPanel}}"
+                                  Visibility="{Binding DataContext.TuningShown, RelativeSource={RelativeSource AncestorType=DockPanel}}" />
+
+        <!-- Before install, the Install button sits below the options so users pick what gets installed first. -->
+        <StackPanel Margin="-4,16,-4,0">
+          <controls:Tile Style="{StaticResource Tile.Row}"
+                         Glyph="{Binding PrimaryGlyph}" Label="{Binding PrimaryLabel}"
+                         Visibility="{Binding InstallBottomShown}"
+                         IsEnabled="{Binding CanAct}"
+                         Command="{Binding Primary}" />
 
           <controls:Tile Style="{StaticResource Tile.Row}"
                          Glyph="{x:Static theme:Glyphs.Quit}" Label="{x:Static lang:Strings.TakeOffList}"
                          Visibility="{Binding TakeOffListShown}"
+                         IsEnabled="{Binding CanAct}"
                          Command="{Binding TakeOffList}" />
         </StackPanel>
-
-        <panel:UpscalerTuningView DataContext="{Binding Tuning}" Margin="0,20,0,0"
-                                  Visibility="{Binding DataContext.TuningShown, RelativeSource={RelativeSource AncestorType=DockPanel}}" />
 
       </StackPanel>
     </ScrollViewer>

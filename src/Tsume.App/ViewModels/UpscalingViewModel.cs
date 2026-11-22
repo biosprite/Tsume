@@ -109,6 +109,26 @@ public sealed class UpscalingViewModel : LayerViewModel
     }
 
     /// <summary>
+    /// Settings to apply when updating an installed game: reads live overlay changes from OptiScaler.ini,
+    /// and if the game was installed without XMX (falling back to plain FSR 4) while Tsume now has XMX
+    /// and the user's remembered preference was XMX, restores XMX so the update activates it.
+    /// </summary>
+    public UpscalerSettings SettingsForUpdate(InstallManifest manifest, ListedGame listed)
+    {
+        var remembered = List.SettingsFor(listed.Game.Id);
+        var current = Installer.ReadSettings(manifest, remembered);
+
+        if (!Installer.HasXmx(manifest) && Xmx.Current() is not null
+            && remembered.Upscaler == UpscalerChoice.Fsr4Xmx
+            && current.Upscaler == UpscalerChoice.Fsr4)
+        {
+            return current with { Upscaler = UpscalerChoice.Fsr4Xmx, Model = remembered.Model };
+        }
+
+        return current;
+    }
+
+    /// <summary>
     /// Installs <paramref name="build"/> into a game, first removing any OptiScaler Tsume had put there.
     /// Call on a background thread.
     /// </summary>
@@ -119,10 +139,14 @@ public sealed class UpscalingViewModel : LayerViewModel
 
         if (Installer.Find(listed.Game.Id) is { } old)
         {
-            // A healthy install keeps its proxy name. If the game has replaced that file,
-            // the name belongs to the game now and must not be reused.
-            settings = settings with { Proxy = Installer.Check(old) == InstallState.Healthy ? old.Proxy : "" };
-            removed = Installer.Remove(old.GameId);
+            var healthy = Installer.Check(old) == InstallState.Healthy;
+
+            // A healthy install keeps its proxy name and overlay tuning. If the game replaced that file,
+            // do not reuse the replaced name; a repair also starts from a clean OptiScaler.ini.
+            var proxy = healthy ? old.Proxy
+                : settings.Proxy.Equals(old.Proxy, StringComparison.OrdinalIgnoreCase) ? "" : settings.Proxy;
+            settings = settings with { Proxy = proxy };
+            removed = Installer.Remove(old.GameId, keepSettings: healthy);
         }
 
         var facts = GameInspector.Inspect(listed.Game) ?? throw new UpscalingException(Trouble.FolderMissing, listed.Game.Folder);

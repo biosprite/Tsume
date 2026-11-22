@@ -125,8 +125,9 @@ public sealed class Installer(UpscalingPaths paths)
 
             // The XMX upscaler is installed whenever Tsume holds it, chosen or not, so choosing it later is only an ini change.
             var xmx = _xmx.Current() is { } held ? _xmx.Shared(held) : null;
+            var ueIntelAtomics = GameInspector.IsUnrealTarget(target) && GpuVendor.HasIntelGpu();
 
-            var plan = Plan(build, proxy, StageSettings(home, build, settings.Fitting(xmx is not null)), xmx);
+            var plan = Plan(build, proxy, StageSettings(home, build, settings.Fitting(xmx is not null), ueIntelAtomics), xmx);
 
             // Where the disk allows, the big libraries are not copied: the game gets a second name for Tsume's own file.
             var linking = Files.CanLink(Files.Inside(build.Folder, Program), target);
@@ -268,15 +269,15 @@ public sealed class Installer(UpscalingPaths paths)
     }
 
     /// <summary>
-    /// The settings file to install: the one saved from this game's last install (so overlay tuning survives),
-    /// else the build's blank one, with Tsume's settings written into it.
+    /// The settings file to install: the one saved from an update (so overlay tuning survives),
+    /// else the build's clean one, with Tsume's settings written into it.
     /// </summary>
-    private static string StageSettings(string home, StoredBuild build, UpscalerSettings settings)
+    private static string StageSettings(string home, StoredBuild build, UpscalerSettings settings, bool ueIntelAtomics)
     {
         var saved = Path.Combine(home, "Saved", SettingsFile);
         var ini = IniFile.Load(File.Exists(saved) ? saved : Path.Combine(build.Folder, SettingsFile));
 
-        settings.WriteTo(ini);
+        settings.WriteTo(ini, ueIntelAtomics);
 
         var staged = Path.Combine(home, "Staged", SettingsFile);
         ini.Save(staged);
@@ -310,7 +311,11 @@ public sealed class Installer(UpscalingPaths paths)
     /// Takes OptiScaler out of the game and puts the game's own files back.
     /// Safe to repeat: an interrupted removal picks up where it stopped.
     /// </summary>
-    public RemovalReport Remove(string gameId)
+    /// <param name="keepSettings">
+    /// True during a healthy update so in-game overlay tuning survives; false for an explicit removal or repair
+    /// so a broken OptiScaler.ini does not carry over into a fresh install.
+    /// </param>
+    public RemovalReport Remove(string gameId, bool keepSettings = false)
     {
         var manifest = Find(gameId) ?? throw new UpscalingException(Trouble.NotInstalled, gameId);
 
@@ -319,7 +324,7 @@ public sealed class Installer(UpscalingPaths paths)
 
         try
         {
-            var report = Undo(manifest, keepSettings: manifest.Complete);
+            var report = Undo(manifest, keepSettings: keepSettings && manifest.Complete);
             Log.Write($"removed from {manifest.Target}; left alone: {report.LeftAlone.Count}");
             return report;
         }
@@ -399,17 +404,18 @@ public sealed class Installer(UpscalingPaths paths)
         Files.Delete(ManifestFile(manifest.GameId));
         Files.Discard(originals);
         Files.Discard(Path.Combine(home, "Staged"));
+        if (!keepSettings) Files.Discard(Path.Combine(home, "Saved"));
 
         return new RemovalReport(leftAlone, kept);
     }
 
-    /// <summary>The game's settings as its OptiScaler.ini has them now.</summary>
+    /// <summary>The game's settings as its OptiScaler.ini has them now, keeping the remembered proxy preference.</summary>
     public static UpscalerSettings ReadSettings(InstallManifest manifest, UpscalerSettings remembered)
     {
         try
         {
             var ini = IniFile.Load(Path.Combine(manifest.Target, SettingsFile));
-            return remembered.CorrectedBy(ini) with { Proxy = manifest.Proxy };
+            return remembered.CorrectedBy(ini);
         }
         catch (IOException)
         {
@@ -426,8 +432,9 @@ public sealed class Installer(UpscalingPaths paths)
         {
             var file = Path.Combine(manifest.Target, SettingsFile);
             var ini = IniFile.Load(file);
+            var ueIntelAtomics = GameInspector.IsUnrealTarget(manifest.Target) && GpuVendor.HasIntelGpu();
 
-            settings.Fitting(HasXmx(manifest)).WriteTo(ini);
+            settings.Fitting(HasXmx(manifest)).WriteTo(ini, ueIntelAtomics);
             ini.Save(file);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)

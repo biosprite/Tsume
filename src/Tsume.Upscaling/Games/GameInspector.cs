@@ -137,7 +137,15 @@ public static class GameInspector
         var shipping = programs.Where(IsUnrealGame).ToList();
         if (shipping.Count > 0) return Best(shipping);
 
-        if (game.Executable is { } hint && File.Exists(hint)) return hint;
+        if (game.Executable is { } hint && File.Exists(hint))
+        {
+            // Always honour a program the user picked by hand. For store manifests (Epic/GOG), skip launchers
+            // like REDprelauncher.exe when a real game executable (especially next to upscaler DLLs) was found.
+            var hintFolder = Path.GetDirectoryName(hint)!;
+            if (game.Store == GameStore.Custom
+                || (!IsHelper(hint) && (upscalerFolders.Count == 0 || upscalerFolders.Contains(hintFolder))))
+                return hint;
+        }
 
         var games = programs.Where(program => !IsHelper(program)).ToList();
         return Best(games.Count > 0 ? games : programs);
@@ -151,6 +159,14 @@ public static class GameInspector
             .First();
     }
 
+    /// <summary>True when <paramref name="target"/> looks like an Unreal Engine binary folder.</summary>
+    public static bool IsUnrealTarget(string target)
+    {
+        var clean = target.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return clean.EndsWith(@"\Binaries\Win64", StringComparison.OrdinalIgnoreCase)
+            || clean.EndsWith(@"\Binaries\WinGDK", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool IsUnrealGame(string program)
     {
         var name = Path.GetFileNameWithoutExtension(program);
@@ -159,10 +175,7 @@ public static class GameInspector
         var shipping = name.EndsWith("-Shipping", StringComparison.OrdinalIgnoreCase)
                     || name.EndsWith("_Shipping", StringComparison.OrdinalIgnoreCase);
 
-        var inBinaries = folder.EndsWith(@"\Binaries\Win64", StringComparison.OrdinalIgnoreCase)
-                      || folder.EndsWith(@"\Binaries\WinGDK", StringComparison.OrdinalIgnoreCase);
-
-        return shipping && inBinaries && !folder.Contains(@"\Engine\", StringComparison.OrdinalIgnoreCase);
+        return shipping && IsUnrealTarget(folder) && !folder.Contains(@"\Engine\", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsHelper(string program)

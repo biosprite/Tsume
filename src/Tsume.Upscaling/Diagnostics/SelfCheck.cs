@@ -105,6 +105,18 @@ public static class SelfCheck
         var without = defaults.Fitting(hasXmx: false);
         Check(without is { Upscaler: UpscalerChoice.Fsr4, Model: Fsr4Model.Int8 } && defaults.Fitting(hasXmx: true) == defaults,
             "for a game without the XMX upscaler in it, plain FSR 4 stands in");
+
+        var fsr4Lite = new UpscalerSettings { Upscaler = UpscalerChoice.Fsr4, Model = Fsr4Model.Lite };
+        Check(fsr4Lite.Fitting(hasXmx: true) is { Upscaler: UpscalerChoice.Fsr4, Model: Fsr4Model.Int8 },
+            "plain FSR 4 clamps Lite to INT8 because AMD's DX12 upscaler has no Lite network");
+
+        var dlssgFg = new UpscalerSettings { FrameGen = FrameGenChoice.XeFG, Source = FrameGenSource.Dlssg, Multiplier = 2 };
+        ini = IniFile.Parse(blank);
+        dlssgFg.WriteTo(ini, ueIntelAtomics: true);
+        Check(ini.Get("FrameGen", "Enabled") == "auto" && ini.Get("FrameGen", "FGInput") == "dlssg"
+              && ini.Get("FrameGen", "FGOutput") == "xefg" && ini.Get("Spoofing", "UEIntelAtomics") == "true",
+            "DLSS-FG input leaves FrameGen.Enabled on auto and UE Intel spoofing enables UEIntelAtomics");
+        Check(new UpscalerSettings().CorrectedBy(ini) == dlssgFg, "and DLSS-FG reads back cleanly");
         Say("");
 
         Say("Games the stores report (read only)");
@@ -200,7 +212,7 @@ public static class SelfCheck
             Check(live.Get("Upscalers", "Dx12Upscaler") == "xess" && live.Get("Sharpness", "Sharpness") == "0.55",
                 "changing a setting in Tsume leaves the overlay's other tuning alone");
 
-            var removal = installer.Remove(a.Id);
+            var removal = installer.Remove(a.Id, keepSettings: true);
             var after = Snapshot(a.Folder);
             var mine = Path.Combine("OptiScaler", "plugins", "mine.asi");
 
@@ -211,7 +223,7 @@ public static class SelfCheck
             Check(installer.Find(a.Id) is null, "no record remains");
 
             var saved = Path.Combine(paths.InstallFolder(a.Id), "Saved", "OptiScaler.ini");
-            Check(File.Exists(saved) && IniFile.Load(saved).Get("Sharpness", "Sharpness") == "0.55", "the settings file was saved");
+            Check(File.Exists(saved) && IniFile.Load(saved).Get("Sharpness", "Sharpness") == "0.55", "an update removal saves the settings file");
 
             manifest = installer.Install(a, GameInspector.Inspect(a)!, build, new UpscalerSettings());
             live = IniFile.Load(Path.Combine(a.Folder, "OptiScaler.ini"));
@@ -219,6 +231,7 @@ public static class SelfCheck
                 "installed again: the saved tuning is back, under the settings chosen now");
 
             installer.Remove(a.Id);
+            Check(!File.Exists(saved), "a full removal clears Saved\\OptiScaler.ini so broken tuning does not stick");
             File.Delete(Path.Combine(a.Folder, mine));
             Directory.Delete(Path.Combine(a.Folder, "OptiScaler", "plugins"));
             Directory.Delete(Path.Combine(a.Folder, "OptiScaler"));
@@ -346,7 +359,7 @@ public static class SelfCheck
                 Check(live.Get("Upscalers", "Dx12Upscaler") == XmxLayout.Name && live.Get(XmxLayout.Name, "UpscalerIndex") == "3",
                     "and the settings file selects it, with 4.1.2 Lite");
                 Check(Installer.HasXmx(manifest) && installer.IsCurrent(manifest, build), "the install reads as up to date");
-                Check(Installer.ReadSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS }) == new UpscalerSettings { Proxy = manifest.Proxy },
+                Check(Installer.ReadSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS }) == new UpscalerSettings(),
                     "its settings read back as the defaults");
 
                 Installer.WriteSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS });

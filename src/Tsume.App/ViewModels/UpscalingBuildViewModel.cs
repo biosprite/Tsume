@@ -211,7 +211,7 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
             Status = $"{manifest.GameName}: {Strings.Installing}";
             try
             {
-                var settings = Installer.ReadSettings(manifest, _hub.List.SettingsFor(manifest.GameId));
+                var settings = _hub.SettingsForUpdate(manifest, listed);
                 await Task.Run(() => _hub.PutIn(listed, build, settings));
                 updated++;
             }

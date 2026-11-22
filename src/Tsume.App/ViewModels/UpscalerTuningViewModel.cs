@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Input;
 using Tsume.App.Language;
 using Tsume.App.Mvvm;
@@ -6,24 +7,26 @@ using Tsume.Upscaling.Install;
 
 namespace Tsume.App.ViewModels;
 
+/// <summary>One choice in the "Install as" proxy DLL dropdown.</summary>
+public sealed record ProxyOption(string Value, string Label, string Hint);
+
 /// <summary>
-/// Controls for the OptiScaler settings Tsume manages (upscaler, frame generation, switches).
+/// Controls for the OptiScaler settings Tsume manages (upscaler, frame generation, switches, proxy DLL).
 /// Used on each game's page and the defaults page; it edits settings and raises Changed, but does not store them.
 /// </summary>
 public sealed class UpscalerTuningViewModel : Observable
 {
+    private static readonly IReadOnlySet<int> DisabledXmx = new HashSet<int> { (int)UpscalerChoice.Fsr4Xmx };
+
     private bool _loading;
+    private string? _lockedProxy;
 
     public UpscalerTuningViewModel()
     {
         ToggleSpoof = new Command(() => Change(Settings with { SpoofNvidia = !Settings.SpoofNvidia }));
         ToggleFps = new Command(() => Change(Settings with { ShowFps = !Settings.ShowFps }));
-        NextProxy = new Command(() =>
-        {
-            // Tsume chooses → dxgi.dll → winmm.dll → … → Tsume chooses
-            var at = ProxyNames.All.ToList().FindIndex(name => name.Equals(Settings.Proxy, StringComparison.OrdinalIgnoreCase));
-            Change(Settings with { Proxy = at + 1 < ProxyNames.All.Count ? ProxyNames.All[at + 1] : "" });
-        });
+
+        ProxyOptions = BuildProxyOptions();
     }
 
     /// <summary>Raised when a control here changes a setting — not when settings are loaded.</summary>
@@ -31,14 +34,18 @@ public sealed class UpscalerTuningViewModel : Observable
 
     public UpscalerSettings Settings { get; private set; } = new();
 
-    /// <param name="canChooseName">False once OptiScaler is in the game: its file name is settled then.</param>
     /// <param name="hasXmx">True if the XMX upscaler is in the game, or would go in with an install.</param>
-    public void Load(UpscalerSettings settings, bool canChooseName, bool hasXmx)
+    /// <param name="isInstalled">True once OptiScaler is installed in this game (locks install-time choices).</param>
+    /// <param name="lockedProxy">
+    /// The fixed proxy DLL name when already installed (or already placed by another tool); null when editable.
+    /// </param>
+    public void Load(UpscalerSettings settings, bool hasXmx, bool isInstalled = false, string? lockedProxy = null)
     {
         _loading = true;
-        ShowsProxy = canChooseName;
         HasXmx = hasXmx;
-        Settings = settings;
+        IsInstalled = isInstalled;
+        _lockedProxy = lockedProxy;
+        Settings = settings.Fitting(hasXmx);
         Notify("");   // every control reads its value again
         _loading = false;
     }
@@ -54,43 +61,70 @@ public sealed class UpscalerTuningViewModel : Observable
 
     public IReadOnlyList<string> Upscalers { get; } = [Strings.ChoiceAuto, "XeSS", "FSR 4", "FSR 3", "XMX"];
 
+    /// <summary>Greys out XMX when Tsume has no XMX archive or the installed game does not carry XMX yet.</summary>
+    public IReadOnlySet<int>? DisabledUpscalers => HasXmx ? null : DisabledXmx;
+
     public int UpscalerIndex
     {
         get => (int)Settings.Upscaler;
-        set => Change(Settings with { Upscaler = (UpscalerChoice)value });
+        set
+        {
+            var choice = (UpscalerChoice)value;
+            if (choice == UpscalerChoice.Fsr4Xmx && !HasXmx) return;
+
+            var model = choice == UpscalerChoice.Fsr4 && Settings.Model == Fsr4Model.Lite
+                ? Fsr4Model.Int8
+                : Settings.Model;
+
+            Change(Settings with { Upscaler = choice, Model = model });
+        }
     }
 
     public string UpscalerDetail => Settings.Upscaler switch
     {
-        UpscalerChoice.XeSS => Strings.UpscalerXessDetail,
-        UpscalerChoice.Fsr4 => Strings.UpscalerFsr4Detail,
-        UpscalerChoice.Fsr3 => Strings.UpscalerFsr3Detail,
+        UpscalerChoice.XeSS    => Strings.UpscalerXessDetail,
+        UpscalerChoice.Fsr4    => Strings.UpscalerFsr4Detail,
+        UpscalerChoice.Fsr3    => Strings.UpscalerFsr3Detail,
         UpscalerChoice.Fsr4Xmx => HasXmx ? Strings.UpscalerXmxDetail : Strings.UpscalerXmxMissing,
-        _                   => Strings.UpscalerAutoDetail,
+        _                      => Strings.UpscalerAutoDetail,
     };
+
+    /// <summary>Explains why XMX is greyed out, when it is unavailable.</summary>
+    public string XmxHint => HasXmx ? "" : IsInstalled ? Strings.XmxLockedUpdate : Strings.XmxLockedBuild;
+
+    public Visibility XmxHintShown => XmxHint.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>False while Tsume has no XMX upscaler to put in, or the game was installed without one.</summary>
     public bool HasXmx { get; private set; }
 
-    /// <summary>FSR 4 comes as several networks; the others have nothing to choose.</summary>
+    /// <summary>True once OptiScaler is installed in the game.</summary>
+    public bool IsInstalled { get; private set; }
+
+    /// <summary>FSR 4 on DX12 offers Auto or the full INT8 network (AMD's DX12 DLL has no INT8 Lite).</summary>
     public bool ShowsModel => Settings.Upscaler == UpscalerChoice.Fsr4;
 
-    public IReadOnlyList<string> Models { get; } = [Strings.ChoiceAuto, "INT8", "INT8 Lite"];
+    public IReadOnlyList<string> Models { get; } = [Strings.ChoiceAuto, "INT8"];
 
     public int ModelIndex
     {
-        get => (int)Settings.Model;
-        set => Change(Settings with { Model = (Fsr4Model)value });
+        get => Settings.Upscaler == UpscalerChoice.Fsr4 && Settings.Model == Fsr4Model.Lite
+            ? (int)Fsr4Model.Int8
+            : (int)Settings.Model;
+        set
+        {
+            var model = (Fsr4Model)value;
+            if (Settings.Upscaler == UpscalerChoice.Fsr4 && model == Fsr4Model.Lite) model = Fsr4Model.Int8;
+            Change(Settings with { Model = model });
+        }
     }
 
     public string ModelDetail => Settings.Model switch
     {
-        Fsr4Model.Int8 => Strings.ModelInt8Detail,
-        Fsr4Model.Lite => Strings.ModelLiteDetail,
-        _              => Strings.ModelAutoDetail,
+        Fsr4Model.Int8 or Fsr4Model.Lite => Strings.ModelInt8Detail,
+        _                                => Strings.ModelAutoDetail,
     };
 
-    /// <summary>The XMX upscaler runs the same two networks, under their version's name.</summary>
+    /// <summary>The XMX upscaler runs both 4.1.2 networks.</summary>
     public bool ShowsXmxModel => Settings.Upscaler == UpscalerChoice.Fsr4Xmx;
 
     public IReadOnlyList<string> XmxModels { get; } = [Strings.ChoiceAuto, "4.1.2", "4.1.2 Lite"];
@@ -140,12 +174,55 @@ public sealed class UpscalerTuningViewModel : Observable
 
     public ICommand ToggleSpoof { get; }
     public ICommand ToggleFps { get; }
-    public ICommand NextProxy { get; }
 
     public bool SpoofNvidia => Settings.SpoofNvidia;
     public bool ShowFps => Settings.ShowFps;
 
-    public bool ShowsProxy { get; private set; } = true;
+    public IReadOnlyList<ProxyOption> ProxyOptions { get; }
 
-    public string ProxyLabel => Settings.Proxy.Length == 0 ? Strings.LoadsAsAuto : Strings.LoadsAs(Settings.Proxy);
+    /// <summary>True only before install and when no other OptiScaler proxy is already present.</summary>
+    public bool IsProxyEditable => !IsInstalled && _lockedProxy is null;
+
+    public string ProxyDetail =>
+        IsInstalled && _lockedProxy is not null ? Strings.LoadsAsLockedInstalled(_lockedProxy)
+        : _lockedProxy is not null ? Strings.LoadsAsLockedExisting(_lockedProxy)
+        : Strings.LoadsAsDetail;
+
+    public ProxyOption SelectedProxyOption
+    {
+        get
+        {
+            var active = _lockedProxy ?? Settings.Proxy;
+            return ProxyOptions.FirstOrDefault(option => option.Value.Equals(active, StringComparison.OrdinalIgnoreCase))
+                ?? ProxyOptions[0];
+        }
+        set
+        {
+            if (_loading || !IsProxyEditable || value is null) return;
+            Change(Settings with { Proxy = value.Value });
+        }
+    }
+
+    private static IReadOnlyList<ProxyOption> BuildProxyOptions()
+    {
+        var list = new List<ProxyOption>
+        {
+            new("", Strings.LoadsAsAuto, Strings.ProxyAutoHint),
+        };
+
+        foreach (var name in ProxyNames.All)
+        {
+            var hint = name.ToLowerInvariant() switch
+            {
+                "dxgi.dll"    => Strings.ProxyDxgiHint,
+                "winmm.dll"   => Strings.ProxyWinmmHint,
+                "version.dll" => Strings.ProxyVersionHint,
+                "d3d12.dll"   => Strings.ProxyD3d12Hint,
+                _             => Strings.ProxyFallbackHint,
+            };
+            list.Add(new ProxyOption(name, name, hint));
+        }
+
+        return list;
+    }
 }

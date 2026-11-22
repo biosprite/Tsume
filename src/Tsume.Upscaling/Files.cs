@@ -94,8 +94,8 @@ internal static class Files
     }
 
     /// <summary>
-    /// Lets every account on this PC read the file. A linked file keeps the permissions of Tsume's own data folder,
-    /// which only its owner may read; a game started from another account could not load it otherwise.
+    /// Lets every account and packaged app (Xbox / Game Pass AppContainer) on this PC read the file.
+    /// A hard-linked file keeps the permissions of Tsume's own data folder rather than inheriting the game folder's ACL.
     /// </summary>
     /// <returns>False if the permission could not be given.</returns>
     public static bool LetEveryoneRead(string path)
@@ -103,18 +103,30 @@ internal static class Files
         try
         {
             var file = new FileInfo(path);
-            var users = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
             var security = file.GetAccessControl(AccessControlSections.Access);
-
-            var already = security.GetAccessRules(true, true, typeof(SecurityIdentifier))
+            var rules = security.GetAccessRules(true, true, typeof(SecurityIdentifier))
                 .Cast<FileSystemAccessRule>()
-                .Any(rule => rule.AccessControlType == AccessControlType.Allow
-                    && rule.IdentityReference.Equals(users)
-                    && rule.FileSystemRights.HasFlag(FileSystemRights.ReadAndExecute));
-            if (already) return true;
+                .ToList();
 
-            security.AddAccessRule(new FileSystemAccessRule(users, FileSystemRights.ReadAndExecute, AccessControlType.Allow));
-            file.SetAccessControl(security);
+            SecurityIdentifier[] wanted =
+            [
+                new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null),
+                new SecurityIdentifier("S-1-15-2-1"),   // ALL APPLICATION PACKAGES (Xbox / MSIX AppContainer games)
+            ];
+
+            var changed = false;
+            foreach (var sid in wanted)
+            {
+                var already = rules.Any(rule => rule.AccessControlType == AccessControlType.Allow
+                    && rule.IdentityReference.Equals(sid)
+                    && rule.FileSystemRights.HasFlag(FileSystemRights.ReadAndExecute));
+                if (already) continue;
+
+                security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.ReadAndExecute, AccessControlType.Allow));
+                changed = true;
+            }
+
+            if (changed) file.SetAccessControl(security);
             return true;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or System.Security.SecurityException)

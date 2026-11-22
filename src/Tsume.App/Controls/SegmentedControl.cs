@@ -42,6 +42,10 @@ public sealed class SegmentedControl : Control
         new FrameworkPropertyMetadata(0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault,
             (d, _) => ((SegmentedControl)d).PlaceThumb(animate: true)));
 
+    public static readonly DependencyProperty DisabledIndicesProperty = DependencyProperty.Register(
+        nameof(DisabledIndices), typeof(IReadOnlySet<int>), typeof(SegmentedControl),
+        new PropertyMetadata(null, (d, _) => ((SegmentedControl)d).PlaceThumb(animate: false)));
+
     /// <summary>The labels, left to right.</summary>
     public IReadOnlyList<string> Segments
     {
@@ -54,6 +58,15 @@ public sealed class SegmentedControl : Control
         get => (int)GetValue(SelectedIndexProperty);
         set => SetValue(SelectedIndexProperty, value);
     }
+
+    /// <summary>Segment indices that are greyed out and cannot be selected.</summary>
+    public IReadOnlySet<int>? DisabledIndices
+    {
+        get => (IReadOnlySet<int>?)GetValue(DisabledIndicesProperty);
+        set => SetValue(DisabledIndicesProperty, value);
+    }
+
+    private bool IsDisabled(int index) => DisabledIndices?.Contains(index) == true;
 
     public override void OnApplyTemplate()
     {
@@ -102,9 +115,12 @@ public sealed class SegmentedControl : Control
 
         for (var i = 0; i < _labels.Children.Count; i++)
         {
-            var brush = (SolidColorBrush)((TextBlock)_labels.Children[i]).Foreground;
-            var colour = i == SelectedIndex ? ChosenText : RestingText;
+            var label = (TextBlock)_labels.Children[i];
+            var disabled = IsDisabled(i);
+            var brush = (SolidColorBrush)label.Foreground;
+            var colour = i == SelectedIndex && !disabled ? ChosenText : RestingText;
 
+            label.Opacity = disabled ? 0.35 : 1.0;
             brush.BeginAnimation(SolidColorBrush.ColorProperty,
                 new ColorAnimation(colour, animate ? Motion.Smooth : TimeSpan.Zero));
         }
@@ -115,7 +131,14 @@ public sealed class SegmentedControl : Control
         var step = e.Key switch { Key.Left => -1, Key.Right => +1, _ => 0 };
         if (step == 0) return;
 
-        SelectedIndex = Math.Clamp(SelectedIndex + step, 0, Segments.Count - 1);
+        for (var next = SelectedIndex + step; next >= 0 && next < Segments.Count; next += step)
+        {
+            if (IsDisabled(next)) continue;
+
+            SelectedIndex = next;
+            break;
+        }
+
         e.Handled = true;
     }
 
@@ -126,7 +149,8 @@ public sealed class SegmentedControl : Control
         Focus();
 
         var x = e.GetPosition(_labels).X;
-        SelectedIndex = Math.Clamp((int)(x / (_labels.ActualWidth / Segments.Count)), 0, Segments.Count - 1);
+        var target = Math.Clamp((int)(x / (_labels.ActualWidth / Segments.Count)), 0, Segments.Count - 1);
+        if (!IsDisabled(target)) SelectedIndex = target;
         e.Handled = true;
     }
 }

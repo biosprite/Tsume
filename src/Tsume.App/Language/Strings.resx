@@ -194,7 +194,7 @@
   <data name="ControllerNotFound" xml:space="preserve"><value>Controller not found</value></data>
   <data name="ControllerNotAnswering" xml:space="preserve"><value>The controller stopped answering</value></data>
   <data name="ControllerFirmwareTooOld" xml:space="preserve">
-    <value>Controller firmware {0} is too old — update it in MSI Center M</value>
+    <value>Controller firmware {0} is too old. Update it in MSI Center M</value>
     <comment>{0} = controller firmware version, e.g. 2.11</comment>
   </data>
   <data name="LightingMsiCenterRuns" xml:space="preserve"><value>MSI Center M is running and may undo these changes</value></data>
@@ -248,7 +248,7 @@
   <data name="Experimental" xml:space="preserve"><value>EXPERIMENTAL</value></data>
   <data name="ShowOptiScalerDetail" xml:space="preserve"><value>Better upscaling in your games. Nothing is downloaded until you ask.</value></data>
   <data name="ShowRtss" xml:space="preserve"><value>RTSS overlay tile</value></data>
-  <data name="ShowRtssDetail" xml:space="preserve"><value>Steam-style performance overlay and frame-rate cap. Links to Guru3D — nothing is bundled.</value></data>
+  <data name="ShowRtssDetail" xml:space="preserve"><value>Steam-style performance overlay and frame-rate cap. Links to Guru3D; nothing is bundled.</value></data>
   <data name="GamesWithOptiScaler" xml:space="preserve">
     <value>{0} games</value>
     <comment>{0} = how many games have OptiScaler installed</comment>
@@ -277,7 +277,7 @@
   <data name="GameNothingToRun" xml:space="preserve"><value>No program found</value></data>
   <data name="GameNoUpscaler" xml:space="preserve"><value>No upscaler files found</value></data>
   <data name="GameBlocked" xml:space="preserve">
-    <value>{0} — not offered</value>
+    <value>{0} · not offered</value>
     <comment>{0} = the name of an anti-cheat</comment>
   </data>
 
@@ -288,7 +288,7 @@
     <value>Installed · nightly of {0} · loads as {1}</value>
     <comment>{0} = a date, {1} = a file name such as dxgi.dll</comment>
   </data>
-  <data name="StateReplaced" xml:space="preserve"><value>Needs repair. The game replaced the file OptiScaler loads as — an update or a file check does that.</value></data>
+  <data name="StateReplaced" xml:space="preserve"><value>Needs repair. The game replaced the file OptiScaler loads as (an update or a file check does that).</value></data>
   <data name="StateCutShort" xml:space="preserve"><value>An install was interrupted. Repair finishes it; Remove undoes it.</value></data>
   <data name="StateFolderGone" xml:space="preserve"><value>The game's folder is gone. Nothing is left to remove; the record can be forgotten.</value></data>
   <data name="StateBlocked" xml:space="preserve">
@@ -323,7 +323,7 @@
   <data name="Unpacking" xml:space="preserve"><value>Checking and unpacking…</value></data>
   <data name="Installing" xml:space="preserve"><value>Copying into the game's folder…</value></data>
   <data name="Removing" xml:space="preserve"><value>Removing…</value></data>
-  <data name="InstalledDone" xml:space="preserve"><value>Installed. Start the game — Insert opens OptiScaler's menu.</value></data>
+  <data name="InstalledDone" xml:space="preserve"><value>Installed. Start the game and press Insert to open OptiScaler's menu.</value></data>
   <data name="RemovedDone" xml:space="preserve"><value>Removed. The game's folder is as it was.</value></data>
   <data name="RemovedButLeft" xml:space="preserve">
     <value>Removed. {0} file(s) had been changed since and were left alone; the originals they replaced are kept in Tsume's folder.</value>
@@ -336,13 +336,13 @@
 
   <data name="UpscalerHeading" xml:space="preserve"><value>UPSCALER</value></data>
   <data name="ChoiceAuto" xml:space="preserve"><value>Auto</value></data>
-  <data name="UpscalerAutoDetail" xml:space="preserve"><value>OptiScaler decides — on Intel Arc, XeSS</value></data>
+  <data name="UpscalerAutoDetail" xml:space="preserve"><value>OptiScaler decides (on Intel Arc, XeSS)</value></data>
   <data name="UpscalerXessDetail" xml:space="preserve"><value>Intel's own upscaler</value></data>
   <data name="UpscalerFsr4Detail" xml:space="preserve"><value>AMD's FSR 4, run on Arc through its INT8 network</value></data>
   <data name="UpscalerFsr3Detail" xml:space="preserve"><value>AMD's FSR 3.1, which runs on anything</value></data>
   <data name="ModelAutoDetail" xml:space="preserve"><value>OptiScaler picks the network it thinks the GPU supports</value></data>
-  <data name="ModelInt8Detail" xml:space="preserve"><value>The full network — the best picture</value></data>
-  <data name="ModelLiteDetail" xml:space="preserve"><value>A smaller network — faster, a little softer</value></data>
+  <data name="ModelInt8Detail" xml:space="preserve"><value>The full network, for the best picture</value></data>
+  <data name="ModelLiteDetail" xml:space="preserve"><value>A smaller network, faster and a little softer</value></data>
   <data name="FrameGenHeading" xml:space="preserve"><value>FRAME GENERATION</value></data>
   <data name="ChoiceOff" xml:space="preserve"><value>Off</value></data>
   <data name="SourceAny" xml:space="preserve"><value>Any game</value></data>
@@ -354,12 +354,29 @@
   <data name="SpoofNvidiaDetail" xml:space="preserve"><value>So the game offers DLSS for OptiScaler to take over</value></data>
   <data name="ShowFps" xml:space="preserve"><value>Frame-rate counter</value></data>
   <data name="ShowFpsDetail" xml:space="preserve"><value>OptiScaler's own, in a corner of the game</value></data>
+  <data name="InstallAs" xml:space="preserve"><value>Install as</value></data>
   <data name="LoadsAs" xml:space="preserve">
     <value>Loads as {0}</value>
     <comment>{0} = a file name such as dxgi.dll</comment>
   </data>
-  <data name="LoadsAsAuto" xml:space="preserve"><value>Loads as: Tsume chooses</value></data>
-  <data name="LoadsAsDetail" xml:space="preserve"><value>dxgi.dll suits most games; Vulkan games need winmm.dll. Press to change.</value></data>
+  <data name="LoadsAsAuto" xml:space="preserve"><value>Auto (Tsume chooses)</value></data>
+  <data name="LoadsAsDetail" xml:space="preserve"><value>dxgi.dll suits most DirectX games; Vulkan and Xbox games often need winmm.dll.</value></data>
+  <data name="LoadsAsLockedInstalled" xml:space="preserve">
+    <value>Installed as {0}. Remove and reinstall to change.</value>
+    <comment>{0} = a file name such as dxgi.dll</comment>
+  </data>
+  <data name="LoadsAsLockedExisting" xml:space="preserve">
+    <value>OptiScaler is already here as {0}; Tsume reuses that name.</value>
+    <comment>{0} = a file name such as winmm.dll</comment>
+  </data>
+  <data name="ProxyAutoHint" xml:space="preserve"><value>Recommended</value></data>
+  <data name="ProxyDxgiHint" xml:space="preserve"><value>Most DirectX games</value></data>
+  <data name="ProxyWinmmHint" xml:space="preserve"><value>Vulkan &amp; Xbox games</value></data>
+  <data name="ProxyVersionHint" xml:space="preserve"><value>Xbox / fallback</value></data>
+  <data name="ProxyD3d12Hint" xml:space="preserve"><value>DirectX 12 fallback</value></data>
+  <data name="ProxyFallbackHint" xml:space="preserve"><value>Fallback</value></data>
+  <data name="XmxLockedBuild" xml:space="preserve"><value>XMX is greyed out until you add the XMX archive on the OptiScaler build page.</value></data>
+  <data name="XmxLockedUpdate" xml:space="preserve"><value>XMX is not in this game yet. Press Update above to add it.</value></data>
 
   <!-- OptiScaler: the build -->
 
@@ -437,11 +454,11 @@
   <data name="TroubleDiskFull" xml:space="preserve"><value>Not enough room on the disk. OptiScaler needs about 300 MB in the game's folder.</value></data>
   <data name="TroubleFileInUse" xml:space="preserve"><value>A file is in use. Close the game and its launcher, then try again.</value></data>
   <data name="TroubleAlreadyInstalled" xml:space="preserve"><value>OptiScaler is already installed here.</value></data>
-  <data name="UpscalerXmxDetail" xml:space="preserve"><value>AMD's FSR 4 on the Arc's XMX units — the fastest way to run it. Pick FSR or DLSS in the game, not XeSS. DirectX 12 games only</value></data>
+  <data name="UpscalerXmxDetail" xml:space="preserve"><value>AMD's FSR 4 on the Arc's XMX units, the fastest way to run it. Pick FSR or DLSS in the game, not XeSS. DirectX 12 games only</value></data>
   <data name="UpscalerXmxMissing" xml:space="preserve"><value>Needs the XMX upscaler, which Tsume has not been given: add it on the build page. Until then FSR 4 is used</value></data>
   <data name="XmxModelAutoDetail" xml:space="preserve"><value>Whichever model is picked in OptiScaler's menu in the game</value></data>
-  <data name="XmxModelFullDetail" xml:space="preserve"><value>FSR 4.1.2's full network — the best picture</value></data>
-  <data name="XmxModelLiteDetail" xml:space="preserve"><value>FSR 4.1.2's smaller network — faster, a little softer</value></data>
+  <data name="XmxModelFullDetail" xml:space="preserve"><value>FSR 4.1.2's full network, for the best picture</value></data>
+  <data name="XmxModelLiteDetail" xml:space="preserve"><value>FSR 4.1.2's smaller network, faster and a little softer</value></data>
   <data name="XmxHeading" xml:space="preserve"><value>XMX UPSCALER</value></data>
   <data name="XmxExplained" xml:space="preserve"><value>A test build that runs FSR 4.1.2 on Intel's XMX units. Tsume doesn't download it: get amd_fidelityfx_upscaler_dx12.7z from OptiScaler's Discord, save it to the Desktop or Downloads, then add it here.</value></data>
   <data name="AddXmx" xml:space="preserve"><value>Add the XMX upscaler</value></data>
@@ -516,7 +533,7 @@
   <data name="RtssOverlayHeading" xml:space="preserve"><value>OVERLAY</value></data>
   <data name="RtssUseTsumeOverlay" xml:space="preserve"><value>Steam-style overlay</value></data>
   <data name="RtssUseTsumeOverlayOn" xml:space="preserve"><value>Drawn by Tsume through RTSS</value></data>
-  <data name="RtssUseTsumeOverlayOff" xml:space="preserve"><value>Off — your own RTSS overlay is left alone</value></data>
+  <data name="RtssUseTsumeOverlayOff" xml:space="preserve"><value>Off. Your own RTSS overlay is left alone</value></data>
 
   <data name="RtssLevelOff" xml:space="preserve"><value>Off</value></data>
   <data name="RtssLevelFps" xml:space="preserve"><value>FPS</value></data>
@@ -616,7 +633,7 @@
   <data name="GameBarDefaultDetail" xml:space="preserve"><value>Leaves Win+G alone so Windows opens Xbox Game Bar as normal</value></data>
   <data name="GameBarNonNativeDefaultDetail" xml:space="preserve"><value>Opens Xbox Game Bar when pressed</value></data>
   <data name="GameBarCustomDetail" xml:space="preserve"><value>Intercepts the button so Xbox Game Bar does not open</value></data>
-  <data name="GameBarMsiCenterWarning" xml:space="preserve"><value>MSI Center M is running and may still open its Quick Settings widget — pause it in Settings</value></data>
+  <data name="GameBarMsiCenterWarning" xml:space="preserve"><value>MSI Center M is running and may still open its Quick Settings widget. Pause it in Settings</value></data>
 
   <data name="MButton" xml:space="preserve"><value>M button</value></data>
   <data name="MButtonDefault" xml:space="preserve"><value>Open Tsume (Default)</value></data>
@@ -624,7 +641,7 @@
   <data name="MButtonDetailTsume" xml:space="preserve"><value>Short-press the M button to toggle Tsume (while MSI Center M is paused)</value></data>
   <data name="MButtonDetailCustom" xml:space="preserve"><value>Runs this action on short-press (while MSI Center M is paused)</value></data>
   <data name="MButtonDetailDisabled" xml:space="preserve"><value>M button is ignored by Tsume</value></data>
-  <data name="MButtonMsiCenterWarning" xml:space="preserve"><value>MSI Center M is running and owns the M button — pause it in Settings to remap</value></data>
+  <data name="MButtonMsiCenterWarning" xml:space="preserve"><value>MSI Center M is running and owns the M button. Pause it in Settings to remap</value></data>
 
   <data name="BackButtonsHeading" xml:space="preserve"><value>BACK BUTTONS</value></data>
   <data name="BackButtonUnbound" xml:space="preserve"><value>Unbound</value></data>
@@ -675,7 +692,7 @@
   <data name="RunModeCheckDetail" xml:space="preserve"><value>Tests Balanced &amp; Endurance (~35 s load, fans spin up) then restores</value></data>
   <data name="RunModeCheckBusy" xml:space="preserve"><value>Running mode check (~35 s, fans will spin up)…</value></data>
   <data name="FirmwareCheckLogged" xml:space="preserve"><value>Logged to firmware-checks.log · Share logs to send</value></data>
-  <data name="FirmwareCheckLoggedMsiWarning" xml:space="preserve"><value>Logged (MSI Center M was running — pause it for clean checks)</value></data>
+  <data name="FirmwareCheckLoggedMsiWarning" xml:space="preserve"><value>Logged (MSI Center M was running; pause it for clean checks)</value></data>
   <data name="FirmwareCheckFailed" xml:space="preserve">
     <value>Check failed: {0}</value>
     <comment>{0} = error message</comment>

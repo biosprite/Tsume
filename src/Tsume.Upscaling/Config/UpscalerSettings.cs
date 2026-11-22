@@ -95,23 +95,37 @@ public sealed record UpscalerSettings
     private const string XmxRunAs = "Model";
 
     /// <summary>
-    /// Falls back to plain FSR 4 when the XMX upscaler is chosen but not in the game's folder. Its full network
-    /// is used because AMD's upscaler does not offer the Lite one to DirectX 12 games.
+    /// Adjusts settings for what the target game actually supports: falls back to plain FSR 4 (INT8) when XMX
+    /// is chosen but not in the game's folder, and maps plain FSR 4's Lite choice to INT8 (AMD's DX12 upscaler
+    /// does not offer the Lite network).
     /// </summary>
-    public UpscalerSettings Fitting(bool hasXmx) => Upscaler == UpscalerChoice.Fsr4Xmx && !hasXmx
-        ? this with { Upscaler = UpscalerChoice.Fsr4, Model = Fsr4Model.Int8 }
-        : this;
+    public UpscalerSettings Fitting(bool hasXmx)
+    {
+        if (Upscaler == UpscalerChoice.Fsr4Xmx && !hasXmx)
+            return this with { Upscaler = UpscalerChoice.Fsr4, Model = Fsr4Model.Int8 };
+
+        if (Upscaler == UpscalerChoice.Fsr4 && Model == Fsr4Model.Lite)
+            return this with { Model = Fsr4Model.Int8 };
+
+        return this;
+    }
 
     /// <summary>Writes these settings into the file, and only these.</summary>
-    public void WriteTo(IniFile ini)
+    /// <param name="ueIntelAtomics">
+    /// True for an Unreal Engine game on an Intel GPU: sets <c>UEIntelAtomics=true</c> while Nvidia spoofing is on
+    /// so Unreal does not fail with a DirectX 12 unsupported error.
+    /// </param>
+    public void WriteTo(IniFile ini, bool ueIntelAtomics = false)
     {
         // Each graphics API names its upscalers differently. The XMX upscaler is DirectX 12 only; XeSS covers the other two.
+        // Native DX11 XeSS is Intel Arc only (non-Intel GPUs use dx11on12); native DX11 FSR 3.1 avoids dx11on12 instability.
+        var dx11Xess = GpuVendor.HasIntelGpu() ? "xess" : "xess_12";
         var (dx11, dx12, vulkan, backend) = Upscaler switch
         {
-            UpscalerChoice.XeSS    => ("xess", "xess", "xess", Auto),
+            UpscalerChoice.XeSS    => (dx11Xess, "xess", "xess", Auto),
             UpscalerChoice.Fsr4    => ("ffx_12", "ffx", "ffx_12", "0"),
-            UpscalerChoice.Fsr3    => ("ffx_12", "ffx", "ffx", "1"),
-            UpscalerChoice.Fsr4Xmx => ("xess", Xmx.XmxLayout.Name, "xess", Auto),
+            UpscalerChoice.Fsr3    => ("fsr31", "ffx", "ffx", "1"),
+            UpscalerChoice.Fsr4Xmx => (dx11Xess, Xmx.XmxLayout.Name, "xess", Auto),
             _                      => (Auto, Auto, Auto, Auto),
         };
 
@@ -132,12 +146,12 @@ public sealed record UpscalerSettings
         ini.Set("Upscalers", "VulkanUpscaler", vulkan);
         ini.Set("FSR", "UpscalerIndex", backend);
 
-        // FSR 4 checks for a Radeon; Fsr4GpuSupport overrides that for the INT8 networks, and Fsr4Model names the one to run.
+        // FSR 4 checks for a Radeon; Fsr4GpuSupport overrides that for the INT8 network, and Fsr4Model names it.
+        // AMD's DX12 upscaler does not include INT8 Lite (only Vulkan driver FSR does), so Lite maps to INT8.
         var (support, model) = (Upscaler, Model) switch
         {
-            (UpscalerChoice.Fsr4, Fsr4Model.Int8) => ("2", "1"),
-            (UpscalerChoice.Fsr4, Fsr4Model.Lite) => ("4", "3"),
-            _                                     => (Auto, Auto),
+            (UpscalerChoice.Fsr4, Fsr4Model.Int8 or Fsr4Model.Lite) => ("2", "1"),
+            _                                                       => (Auto, Auto),
         };
 
         // Fed from a game's XeSS inputs, the XMX upscaler hung the graphics driver and the game then crashed at every
@@ -148,8 +162,10 @@ public sealed record UpscalerSettings
         ini.Set("FSR", "Fsr4Model", model);
 
         var generating = FrameGen != FrameGenChoice.Off;
+        // With dlssg FG input, auto follows the game's own DLSS Frame Generation toggle instead of forcing it on.
+        var followsGameFg = generating && Source == FrameGenSource.Dlssg;
 
-        ini.Set("FrameGen", "Enabled", generating ? "true" : Auto);
+        ini.Set("FrameGen", "Enabled", !generating || followsGameFg ? Auto : "true");
         ini.Set("FrameGen", "FGOutput", FrameGen switch
         {
             FrameGenChoice.XeFG  => "xefg",
@@ -169,6 +185,7 @@ public sealed record UpscalerSettings
             : Auto);
 
         ini.Set("Spoofing", "Dxgi", SpoofNvidia ? Auto : "false");
+        if (ueIntelAtomics) ini.Set("Spoofing", "UEIntelAtomics", SpoofNvidia ? "true" : Auto);
         ini.Set("Menu", "ShowFps", ShowFps ? "true" : Auto);
     }
 
@@ -186,8 +203,12 @@ public sealed record UpscalerSettings
             _                    => UpscalerChoice.Auto,
         };
 
-        var frameGen = !Is(ini.Get("FrameGen", "Enabled"), "true") ? FrameGenChoice.Off
-            : ini.Get("FrameGen", "FGOutput") switch
+        var fgEnabled = ini.Get("FrameGen", "Enabled");
+        var fgInput = ini.Get("FrameGen", "FGInput")?.ToLowerInvariant();
+        var fgActive = Is(fgEnabled, "true") || (Is(fgEnabled, Auto) && fgInput == "dlssg");
+
+        var frameGen = !fgActive ? FrameGenChoice.Off
+            : ini.Get("FrameGen", "FGOutput")?.ToLowerInvariant() switch
             {
                 "xefg"  => FrameGenChoice.XeFG,
                 "fsrfg" => FrameGenChoice.FsrFG,
@@ -202,9 +223,8 @@ public sealed record UpscalerSettings
             {
                 UpscalerChoice.Fsr4 => ini.Get("FSR", "Fsr4Model") switch
                 {
-                    "1" => Fsr4Model.Int8,
-                    "3" => Fsr4Model.Lite,
-                    _   => Fsr4Model.Auto,
+                    "1" or "3" => Fsr4Model.Int8,
+                    _          => Fsr4Model.Auto,
                 },
                 UpscalerChoice.Fsr4Xmx => ini.Get(Xmx.XmxLayout.Name, XmxVersion) switch
                 {
@@ -217,7 +237,7 @@ public sealed record UpscalerSettings
 
             FrameGen = frameGen,
 
-            Source = frameGen == FrameGenChoice.Off ? Source : ini.Get("FrameGen", "FGInput") switch
+            Source = frameGen == FrameGenChoice.Off ? Source : fgInput switch
             {
                 "dlssg" => FrameGenSource.Dlssg,
                 "fsrfg" => FrameGenSource.FsrFg,

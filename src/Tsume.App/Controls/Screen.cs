@@ -125,12 +125,13 @@ public sealed class Screen : ContentControl
             }
         });
 
-    /// <summary>The first control under <paramref name="parent"/> marked with <see cref="TakesFocusProperty"/>.</summary>
+    /// <summary>The first visible, enabled control under <paramref name="parent"/> marked with <see cref="TakesFocusProperty"/>.</summary>
     private static UIElement? Marked(DependencyObject parent)
     {
         foreach (var child in LogicalTreeHelper.GetChildren(parent).OfType<DependencyObject>())
         {
-            if (child is UIElement element && GetTakesFocus(element)) return element;
+            if (child is UIElement element && GetTakesFocus(element) && element.IsVisible && element.IsEnabled)
+                return element;
             if (Marked(child) is { } deeper) return deeper;
         }
 

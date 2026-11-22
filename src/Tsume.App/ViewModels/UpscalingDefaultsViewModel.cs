@@ -21,5 +21,5 @@ public sealed class UpscalingDefaultsViewModel : LayerViewModel
 
     public UpscalerTuningViewModel Tuning { get; } = new();
 
-    protected override void OnOpened() => Tuning.Load(_hub.List.Defaults, canChooseName: true, hasXmx: _hub.Xmx.Current() is not null);
+    protected override void OnOpened() => Tuning.Load(_hub.List.Defaults, hasXmx: _hub.Xmx.Current() is not null);
 }

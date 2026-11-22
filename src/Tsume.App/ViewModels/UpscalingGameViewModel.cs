@@ -27,6 +27,14 @@ public sealed class UpscalingGameViewModel : LayerViewModel
     public UpscalingGameViewModel(UpscalingViewModel hub)
     {
         _hub = hub;
+        _hub.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(UpscalingViewModel.IsBusy))
+            {
+                Notify(nameof(CanAct));
+                Notify(nameof(CanTune));
+            }
+        };
 
         Tuning.Changed += OnTuned;
 
@@ -104,7 +112,10 @@ public sealed class UpscalingGameViewModel : LayerViewModel
             ? Installer.HasXmx(_manifest)
             : _hub.Xmx.Current() is not null;
 
-        Tuning.Load(settings, canChooseName: _manifest is null, _hasXmx);
+        var isInstalled = _manifest is not null;
+        var lockedProxy = _manifest?.Proxy ?? Facts?.ExistingProxy;
+
+        Tuning.Load(settings, _hasXmx, isInstalled, lockedProxy);
         Notify("");
     }
 
@@ -176,7 +187,17 @@ public sealed class UpscalingGameViewModel : LayerViewModel
         _                                   => Glyphs.Update,
     };
 
-    public Visibility PrimaryShown => IsBlocked ? Visibility.Collapsed : Visibility.Visible;
+    /// <summary>False while files are being downloaded, installed, or removed.</summary>
+    public bool CanAct => !_hub.IsBusy;
+
+    /// <summary>False while files are being changed so settings cannot race an install or removal.</summary>
+    public bool CanTune => !_hub.IsBusy;
+
+    /// <summary>Action buttons sit above the options once installed (Update / Repair / Remove / Forget).</summary>
+    public Visibility TopActionsShown => !IsBlocked && _state != InstallState.None ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Before install, the Install button sits below the options so users configure what gets installed first.</summary>
+    public Visibility InstallBottomShown => !IsBlocked && _state == InstallState.None ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>Remove gets a button of its own while the first one says Update or Repair.</summary>
     public Visibility RemoveShown =>
@@ -217,7 +238,9 @@ public sealed class UpscalingGameViewModel : LayerViewModel
     private async Task InstallAsync()
     {
         var listed = _listed!;
-        var settings = Tuning.Settings;
+        var settings = _manifest is not null && _state == InstallState.Healthy
+            ? _hub.SettingsForUpdate(_manifest, listed)
+            : Tuning.Settings;
 
         var build = await _hub.NeedBuildAsync(text => Status = text);
 
@@ -251,9 +274,12 @@ public sealed class UpscalingGameViewModel : LayerViewModel
     /// <summary>A setting changed: remember it, and write it to the game if OptiScaler is in it.</summary>
     private void OnTuned()
     {
-        if (_listed is not { } listed) return;
+        if (_listed is not { } listed || _hub.IsBusy) return;
 
-        listed.Settings = Tuning.Settings;
+        // Keep the user's proxy preference untouched while installed (the proxy dropdown is locked).
+        listed.Settings = _manifest is not null
+            ? Tuning.Settings with { Proxy = listed.Settings?.Proxy ?? "" }
+            : Tuning.Settings;
         _hub.SaveList();
 
         if (_manifest is null || _state != InstallState.Healthy) return;
@@ -266,7 +292,7 @@ public sealed class UpscalingGameViewModel : LayerViewModel
             if (Tuning.Settings.Upscaler == UpscalerChoice.Fsr4Xmx && !_hasXmx)
             {
                 // XMX is not in this game yet: show what was actually written instead.
-                Tuning.Load(Installer.ReadSettings(_manifest, Tuning.Settings), canChooseName: false, hasXmx: false);
+                Tuning.Load(Installer.ReadSettings(_manifest, Tuning.Settings), hasXmx: false, isInstalled: true, lockedProxy: _manifest.Proxy);
                 Status = Strings.XmxNotInGame;
             }
         }
