@@ -71,6 +71,8 @@ public partial class DeviceDiscoveryWindow
         Resources["Dev.SubCard"] = Freeze(isLight
             ? Color.FromArgb(0x0C, 0x00, 0x00, 0x00)
             : Color.FromArgb(0x40, 0x08, 0x0A, 0x0E));
+        Resources["Dev.ScrollThumb"] = Freeze(text);
+        Resources["Dev.ScrollTrack"] = Freeze(text);
     }
 
     private static Color Mix(Color from, Color to, double amount)

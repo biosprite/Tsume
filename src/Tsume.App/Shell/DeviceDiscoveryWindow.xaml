@@ -18,6 +18,360 @@
   <Window.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVis" />
     <SolidColorBrush x:Key="Dev.SubCard" Color="#40080A0E" />
+    <SolidColorBrush x:Key="Dev.ScrollThumb" Color="#FFF4F6FA" />
+    <SolidColorBrush x:Key="Dev.ScrollTrack" Color="#FFF4F6FA" />
+
+    <!-- Modern Fluent-style slim pill scrollbars (no legacy arrow buttons, smooth hover expand) -->
+    <Style x:Key="Dev.ScrollBar.PageButton" TargetType="RepeatButton">
+      <Setter Property="OverridesDefaultStyle" Value="True" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="IsTabStop" Value="False" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RepeatButton">
+            <Border Background="Transparent" />
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="Dev.ScrollBar.Thumb.Vertical" TargetType="Thumb">
+      <Setter Property="OverridesDefaultStyle" Value="True" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="IsTabStop" Value="False" />
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Thumb">
+            <Grid Background="Transparent" Margin="0,2">
+              <Grid x:Name="Pill" Width="4" HorizontalAlignment="Center">
+                <Border x:Name="BaseFill" Background="{DynamicResource Dev.ScrollThumb}" CornerRadius="4" Opacity="0.26" />
+                <Border x:Name="HoverFill" Background="{DynamicResource Dev.ScrollThumb}" CornerRadius="4" Opacity="0" />
+                <Border x:Name="DragFill" Background="{DynamicResource Dev.ScrollThumb}" CornerRadius="4" Opacity="0" />
+              </Grid>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <MultiDataTrigger>
+                <MultiDataTrigger.Conditions>
+                  <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ScrollBar}}" Value="False" />
+                  <Condition Binding="{Binding IsDragging, RelativeSource={RelativeSource Self}}" Value="False" />
+                </MultiDataTrigger.Conditions>
+                <MultiDataTrigger.EnterActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="Pill" Storyboard.TargetProperty="Width"
+                                       To="4" Duration="0:0:0.18">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                      </DoubleAnimation>
+                      <DoubleAnimation Storyboard.TargetName="BaseFill" Storyboard.TargetProperty="Opacity"
+                                       To="0.26" Duration="0:0:0.18" />
+                    </Storyboard>
+                  </BeginStoryboard>
+                </MultiDataTrigger.EnterActions>
+                <MultiDataTrigger.ExitActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="Pill" Storyboard.TargetProperty="Width"
+                                       To="7" Duration="0:0:0.14">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                      </DoubleAnimation>
+                      <DoubleAnimation Storyboard.TargetName="BaseFill" Storyboard.TargetProperty="Opacity"
+                                       To="0.46" Duration="0:0:0.14" />
+                    </Storyboard>
+                  </BeginStoryboard>
+                </MultiDataTrigger.ExitActions>
+              </MultiDataTrigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Trigger.EnterActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="HoverFill" Storyboard.TargetProperty="Opacity"
+                                       To="0.22" Duration="0:0:0.12" />
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="HoverFill" Storyboard.TargetProperty="Opacity"
+                                       To="0" Duration="0:0:0.16" />
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.ExitActions>
+              </Trigger>
+              <Trigger Property="IsDragging" Value="True">
+                <Trigger.EnterActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="DragFill" Storyboard.TargetProperty="Opacity"
+                                       To="0.48" Duration="0:0:0.08" />
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="DragFill" Storyboard.TargetProperty="Opacity"
+                                       To="0" Duration="0:0:0.16" />
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.ExitActions>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="Dev.ScrollBar.Thumb.Horizontal" TargetType="Thumb">
+      <Setter Property="OverridesDefaultStyle" Value="True" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="IsTabStop" Value="False" />
+      <Setter Property="MinWidth" Value="28" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Thumb">
+            <Grid Background="Transparent" Margin="2,0">
+              <Grid x:Name="Pill" Height="4" VerticalAlignment="Center">
+                <Border x:Name="BaseFill" Background="{DynamicResource Dev.ScrollThumb}" CornerRadius="4" Opacity="0.26" />
+                <Border x:Name="HoverFill" Background="{DynamicResource Dev.ScrollThumb}" CornerRadius="4" Opacity="0" />
+                <Border x:Name="DragFill" Background="{DynamicResource Dev.ScrollThumb}" CornerRadius="4" Opacity="0" />
+              </Grid>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <MultiDataTrigger>
+                <MultiDataTrigger.Conditions>
+                  <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ScrollBar}}" Value="False" />
+                  <Condition Binding="{Binding IsDragging, RelativeSource={RelativeSource Self}}" Value="False" />
+                </MultiDataTrigger.Conditions>
+                <MultiDataTrigger.EnterActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="Pill" Storyboard.TargetProperty="Height"
+                                       To="4" Duration="0:0:0.18">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                      </DoubleAnimation>
+                      <DoubleAnimation Storyboard.TargetName="BaseFill" Storyboard.TargetProperty="Opacity"
+                                       To="0.26" Duration="0:0:0.18" />
+                    </Storyboard>
+                  </BeginStoryboard>
+                </MultiDataTrigger.EnterActions>
+                <MultiDataTrigger.ExitActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="Pill" Storyboard.TargetProperty="Height"
+                                       To="7" Duration="0:0:0.14">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                      </DoubleAnimation>
+                      <DoubleAnimation Storyboard.TargetName="BaseFill" Storyboard.TargetProperty="Opacity"
+                                       To="0.46" Duration="0:0:0.14" />
+                    </Storyboard>
+                  </BeginStoryboard>
+                </MultiDataTrigger.ExitActions>
+              </MultiDataTrigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Trigger.EnterActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="HoverFill" Storyboard.TargetProperty="Opacity"
+                                       To="0.22" Duration="0:0:0.12" />
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="HoverFill" Storyboard.TargetProperty="Opacity"
+                                       To="0" Duration="0:0:0.16" />
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.ExitActions>
+              </Trigger>
+              <Trigger Property="IsDragging" Value="True">
+                <Trigger.EnterActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="DragFill" Storyboard.TargetProperty="Opacity"
+                                       To="0.48" Duration="0:0:0.08" />
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="DragFill" Storyboard.TargetProperty="Opacity"
+                                       To="0" Duration="0:0:0.16" />
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.ExitActions>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <ControlTemplate x:Key="Dev.ScrollBar.Vertical" TargetType="ScrollBar">
+      <Grid x:Name="Root" Background="Transparent" SnapsToDevicePixels="True">
+        <Border x:Name="TrackPill" Width="10" CornerRadius="5" HorizontalAlignment="Center"
+                Background="{DynamicResource Dev.ScrollTrack}" Opacity="0" />
+        <Track x:Name="PART_Track" IsDirectionReversed="True">
+          <Track.DecreaseRepeatButton>
+            <RepeatButton Style="{StaticResource Dev.ScrollBar.PageButton}" Command="ScrollBar.PageUpCommand" />
+          </Track.DecreaseRepeatButton>
+          <Track.Thumb>
+            <Thumb Style="{StaticResource Dev.ScrollBar.Thumb.Vertical}" />
+          </Track.Thumb>
+          <Track.IncreaseRepeatButton>
+            <RepeatButton Style="{StaticResource Dev.ScrollBar.PageButton}" Command="ScrollBar.PageDownCommand" />
+          </Track.IncreaseRepeatButton>
+        </Track>
+      </Grid>
+      <ControlTemplate.Triggers>
+        <MultiTrigger>
+          <MultiTrigger.Conditions>
+            <Condition Property="IsMouseOver" Value="False" />
+            <Condition Property="IsMouseCaptureWithin" Value="False" />
+          </MultiTrigger.Conditions>
+          <MultiTrigger.EnterActions>
+            <BeginStoryboard>
+              <Storyboard>
+                <DoubleAnimation Storyboard.TargetName="TrackPill" Storyboard.TargetProperty="Opacity"
+                                 To="0" Duration="0:0:0.20" />
+              </Storyboard>
+            </BeginStoryboard>
+          </MultiTrigger.EnterActions>
+          <MultiTrigger.ExitActions>
+            <BeginStoryboard>
+              <Storyboard>
+                <DoubleAnimation Storyboard.TargetName="TrackPill" Storyboard.TargetProperty="Opacity"
+                                 To="0.08" Duration="0:0:0.14" />
+              </Storyboard>
+            </BeginStoryboard>
+          </MultiTrigger.ExitActions>
+        </MultiTrigger>
+        <Trigger Property="IsEnabled" Value="False">
+          <Setter TargetName="Root" Property="Opacity" Value="0.35" />
+        </Trigger>
+      </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <ControlTemplate x:Key="Dev.ScrollBar.Horizontal" TargetType="ScrollBar">
+      <Grid x:Name="Root" Background="Transparent" SnapsToDevicePixels="True">
+        <Border x:Name="TrackPill" Height="10" CornerRadius="5" VerticalAlignment="Center"
+                Background="{DynamicResource Dev.ScrollTrack}" Opacity="0" />
+        <Track x:Name="PART_Track" IsDirectionReversed="False">
+          <Track.DecreaseRepeatButton>
+            <RepeatButton Style="{StaticResource Dev.ScrollBar.PageButton}" Command="ScrollBar.PageLeftCommand" />
+          </Track.DecreaseRepeatButton>
+          <Track.Thumb>
+            <Thumb Style="{StaticResource Dev.ScrollBar.Thumb.Horizontal}" />
+          </Track.Thumb>
+          <Track.IncreaseRepeatButton>
+            <RepeatButton Style="{StaticResource Dev.ScrollBar.PageButton}" Command="ScrollBar.PageRightCommand" />
+          </Track.IncreaseRepeatButton>
+        </Track>
+      </Grid>
+      <ControlTemplate.Triggers>
+        <MultiTrigger>
+          <MultiTrigger.Conditions>
+            <Condition Property="IsMouseOver" Value="False" />
+            <Condition Property="IsMouseCaptureWithin" Value="False" />
+          </MultiTrigger.Conditions>
+          <MultiTrigger.EnterActions>
+            <BeginStoryboard>
+              <Storyboard>
+                <DoubleAnimation Storyboard.TargetName="TrackPill" Storyboard.TargetProperty="Opacity"
+                                 To="0" Duration="0:0:0.20" />
+              </Storyboard>
+            </BeginStoryboard>
+          </MultiTrigger.EnterActions>
+          <MultiTrigger.ExitActions>
+            <BeginStoryboard>
+              <Storyboard>
+                <DoubleAnimation Storyboard.TargetName="TrackPill" Storyboard.TargetProperty="Opacity"
+                                 To="0.08" Duration="0:0:0.14" />
+              </Storyboard>
+            </BeginStoryboard>
+          </MultiTrigger.ExitActions>
+        </MultiTrigger>
+        <Trigger Property="IsEnabled" Value="False">
+          <Setter TargetName="Root" Property="Opacity" Value="0.35" />
+        </Trigger>
+      </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <Style TargetType="ScrollBar">
+      <Setter Property="OverridesDefaultStyle" Value="True" />
+      <Setter Property="Stylus.IsPressAndHoldEnabled" Value="False" />
+      <Setter Property="Stylus.IsFlicksEnabled" Value="False" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Width" Value="12" />
+      <Setter Property="MinWidth" Value="12" />
+      <Setter Property="Margin" Value="2" />
+      <Setter Property="Template" Value="{StaticResource Dev.ScrollBar.Vertical}" />
+      <Style.Triggers>
+        <Trigger Property="Orientation" Value="Horizontal">
+          <Setter Property="Width" Value="Auto" />
+          <Setter Property="MinWidth" Value="0" />
+          <Setter Property="Height" Value="12" />
+          <Setter Property="MinHeight" Value="12" />
+          <Setter Property="Template" Value="{StaticResource Dev.ScrollBar.Horizontal}" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style TargetType="ScrollViewer">
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ScrollViewer">
+            <Grid Background="{TemplateBinding Background}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
+
+              <ScrollContentPresenter x:Name="PART_ScrollContentPresenter"
+                                      Grid.Column="0" Grid.Row="0"
+                                      Margin="{TemplateBinding Padding}"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      CanContentScroll="{TemplateBinding CanContentScroll}"
+                                      SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+
+              <ScrollBar x:Name="PART_VerticalScrollBar"
+                         Grid.Column="1" Grid.Row="0"
+                         AutomationProperties.AutomationId="VerticalScrollBar"
+                         Cursor="Arrow"
+                         Orientation="Vertical"
+                         Minimum="0"
+                         Maximum="{TemplateBinding ScrollableHeight}"
+                         ViewportSize="{TemplateBinding ViewportHeight}"
+                         Value="{Binding VerticalOffset, Mode=OneWay, RelativeSource={RelativeSource TemplatedParent}}"
+                         Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}" />
+
+              <ScrollBar x:Name="PART_HorizontalScrollBar"
+                         Grid.Column="0" Grid.Row="1"
+                         AutomationProperties.AutomationId="HorizontalScrollBar"
+                         Cursor="Arrow"
+                         Orientation="Horizontal"
+                         Minimum="0"
+                         Maximum="{TemplateBinding ScrollableWidth}"
+                         ViewportSize="{TemplateBinding ViewportWidth}"
+                         Value="{Binding HorizontalOffset, Mode=OneWay, RelativeSource={RelativeSource TemplatedParent}}"
+                         Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}" />
+
+              <Border Grid.Column="1" Grid.Row="1" Background="Transparent" />
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
 
     <Style x:Key="Dev.Button" TargetType="Button">
       <Setter Property="Background" Value="{DynamicResource Surface}" />
@@ -809,7 +1163,12 @@
                     <Border Background="#FF0A0C10" BorderBrush="{DynamicResource Panel.Edge}" BorderThickness="1"
                             CornerRadius="10" Padding="10" Height="175">
                       <ListBox ItemsSource="{Binding ButtonFeed}" Background="Transparent" BorderThickness="0"
-                               Foreground="#FFE6ECF5" FontFamily="Consolas" FontSize="11.5" />
+                               Foreground="#FFE6ECF5" FontFamily="Consolas" FontSize="11.5">
+                        <ListBox.Resources>
+                          <SolidColorBrush x:Key="Dev.ScrollThumb" Color="#FFE6ECF5" />
+                          <SolidColorBrush x:Key="Dev.ScrollTrack" Color="#FFE6ECF5" />
+                        </ListBox.Resources>
+                      </ListBox>
                     </Border>
                     <WrapPanel Orientation="Horizontal" Margin="0,8,0,0">
                       <Button Style="{StaticResource Dev.Button}" Padding="11,6" Margin="0,0,8,4"
@@ -907,7 +1266,12 @@
             <DockPanel>
               <TextBlock DockPanel.Dock="Top" Style="{StaticResource Text.Heading}" Text="LIVE TIMELINE (FIRMWARE / REGISTRY / HID DIFFS + BUTTON EVENTS)" Margin="0,0,0,8" />
               <ListBox ItemsSource="{Binding LiveFeed}" Background="#FF0A0C10" BorderBrush="{DynamicResource Panel.Edge}"
-                       BorderThickness="1" Foreground="#FFE6ECF5" FontFamily="Consolas" FontSize="12" Padding="6" />
+                       BorderThickness="1" Foreground="#FFE6ECF5" FontFamily="Consolas" FontSize="12" Padding="6">
+                <ListBox.Resources>
+                  <SolidColorBrush x:Key="Dev.ScrollThumb" Color="#FFE6ECF5" />
+                  <SolidColorBrush x:Key="Dev.ScrollTrack" Color="#FFE6ECF5" />
+                </ListBox.Resources>
+              </ListBox>
             </DockPanel>
           </Border>
         </DockPanel>
@@ -923,7 +1287,12 @@
           <TextBox Text="{Binding ReportPreviewText, Mode=OneWay}" IsReadOnly="True"
                    Background="#FF0A0C10" Foreground="#FFE6ECF5" BorderBrush="{DynamicResource Panel.Edge}"
                    BorderThickness="1" FontFamily="Consolas" FontSize="12" Padding="12"
-                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
+                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+            <TextBox.Resources>
+              <SolidColorBrush x:Key="Dev.ScrollThumb" Color="#FFE6ECF5" />
+              <SolidColorBrush x:Key="Dev.ScrollTrack" Color="#FFE6ECF5" />
+            </TextBox.Resources>
+          </TextBox>
         </DockPanel>
 
       </Grid>
