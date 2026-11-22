@@ -14,7 +14,7 @@
     <Product>Tsume</Product>
     <Company>Tsume contributors</Company>
     <Copyright>Copyright (C) 2026 Tsume contributors. GPL-3.0-only.</Copyright>
-    <Version>1.0</Version>
+    <Version>1.1</Version>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>
   </PropertyGroup>
