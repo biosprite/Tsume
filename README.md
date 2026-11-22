@@ -17,7 +17,7 @@
 | | Device | Replaces |
 |---|---|---|
 | ✅ | MSI Claw 8 EX AI+ (board MS-1T91) | MSI Center M and its Game Bar Quick Settings widget |
-| ✅ | MSI Claw 8 AI+ (board MS-1T52) | MSI Center M and its Game Bar Quick Settings widget |
+| 🧪 | MSI Claw 8 AI+ (board MS-1T52, beta) | MSI Center M and its Game Bar Quick Settings widget |
 
 Tsume is built so that more devices can be added. On a machine it does not know
 yet, the panel runs but leaves the firmware alone.
