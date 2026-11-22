@@ -475,7 +475,19 @@ public sealed class BackButtonEditor : Observable
 
     private void RemoveSlot(KeySlotViewModel slot)
     {
-        if (Slots.Count <= 1) return;
+        if (Slots.Count <= 1)
+        {
+            var hadBinding = slot.SelectedKey.Code != BackButtonKey.UnboundCode || _isMacro;
+            _isMacro = false;
+
+            _absorbing = true;
+            slot.SelectedKey = BackButtonKey.Unbound;
+            _absorbing = false;
+
+            SyncMeta();
+            if (hadBinding) Emit();
+            return;
+        }
 
         _isMacro = false;
         Slots.Remove(slot);
@@ -495,10 +507,7 @@ public sealed class BackButtonEditor : Observable
     private void SyncMeta()
     {
         for (var i = 0; i < Slots.Count; i++)
-        {
             Slots[i].Number = i + 1;
-            Slots[i].CanRemove = Slots.Count > 1;
-        }
 
         var binding = CurrentBinding();
         Summary = binding.FormatSummary(Strings.BackButtonUnbound, Strings.BackButtonMacro, MaxKeys);
@@ -553,17 +562,6 @@ public sealed class KeySlotViewModel : Observable
     }
 
     public string SlotLabel => Strings.BackButtonKeySlot(Number);
-
-    public bool CanRemove
-    {
-        get;
-        set
-        {
-            if (Set(ref field, value)) Notify(nameof(RemoveVisibility));
-        }
-    }
-
-    public Visibility RemoveVisibility => CanRemove ? Visibility.Visible : Visibility.Collapsed;
 
     private BackButtonKey _selectedKey;
 

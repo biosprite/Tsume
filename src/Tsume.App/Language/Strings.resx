@@ -592,7 +592,7 @@
   <!-- Controls & layout screen -->
 
   <data name="ControlsHeading" xml:space="preserve"><value>CONTROLS</value></data>
-  <data name="ControlsAndLayout" xml:space="preserve"><value>Controls &amp; layout</value></data>
+  <data name="ControlsAndLayout" xml:space="preserve"><value>Controls &amp; Layout</value></data>
   <data name="ControlsAndLayoutDetail" xml:space="preserve"><value>Panel side, dedicated buttons, and back-button bindings</value></data>
 
   <data name="PanelPositionHeading" xml:space="preserve"><value>PANEL SIDE</value></data>

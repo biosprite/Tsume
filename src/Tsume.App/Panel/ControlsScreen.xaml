@@ -47,7 +47,6 @@
                                  Width="42" Height="42" Margin="8,0,0,0"
                                  Glyph="{x:Static theme:Glyphs.Quit}"
                                  AutomationProperties.Name="{x:Static lang:Strings.BackButtonRemoveKey}"
-                                 Visibility="{Binding RemoveVisibility}"
                                  Click="OnRemoveKeyClick"
                                  Command="{Binding Remove}" />
 
