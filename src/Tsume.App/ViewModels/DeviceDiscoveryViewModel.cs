@@ -16,6 +16,23 @@ public sealed record GuidedActionStep(int Number, string Headline, string? Detai
     public bool HasDetail => !string.IsNullOrWhiteSpace(Detail);
 }
 
+public sealed record QuickScanRow(
+    string Label,
+    string Value,
+    bool IsFirst = false,
+    bool IsWarning = false,
+    bool IsMuted = false);
+
+public sealed record QuickScanSection(
+    string Title,
+    string Glyph,
+    IReadOnlyList<QuickScanRow> Rows,
+    string? BadgeText = null,
+    bool IsWarningBadge = false)
+{
+    public bool HasBadge => !string.IsNullOrWhiteSpace(BadgeText);
+}
+
 public sealed class GuidedStepItem : Observable
 {
     public required string Id { get; init; }
@@ -272,12 +289,17 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
     public bool HasExportMessage => !string.IsNullOrWhiteSpace(ExportMessage);
 
     // Quick scan summary fields
-    public bool HasQuickScan { get; private set => Set(ref field, value); }
-    public string QuickIdentityText { get; private set => Set(ref field, value); } = "Not scanned yet.";
-    public string QuickFirmwareText { get; private set => Set(ref field, value); } = "Not scanned yet.";
-    public string QuickPowerDisplayText { get; private set => Set(ref field, value); } = "Not scanned yet.";
-    public string QuickHidText { get; private set => Set(ref field, value); } = "Not scanned yet.";
-    public string QuickOemText { get; private set => Set(ref field, value); } = "Not scanned yet.";
+    public bool HasQuickScan
+    {
+        get;
+        private set
+        {
+            if (Set(ref field, value)) Notify(nameof(QuickScanButtonLabel));
+        }
+    }
+
+    public string QuickScanButtonLabel => HasQuickScan ? "Scan Again" : "Run Quick Scan";
+    public ObservableCollection<QuickScanSection> QuickScanSections { get; } = [];
 
     // Guided capture state
     private GuidedStepItem _selectedStep;
@@ -451,8 +473,8 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         IsBusy = true;
         ExportMessage = "";
         StatusBanner = IncludeTimedLoad
-            ? "Scanning hardware, WMI/MOF, HID bus, OEM footprint and 3-second load delta (read-only)…"
-            : "Scanning hardware, WMI/MOF, HID bus and OEM footprint (read-only)…";
+            ? "Scanning your handheld (including 3-second load test, read-only)…"
+            : "Scanning your handheld (read-only)…";
 
         var cancel = _lifetimeCts.Token;
         try
@@ -490,8 +512,8 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             PopulateQuickSummary();
             HasQuickScan = true;
             StatusBanner = _inventory.Elevated
-                ? "Quick scan complete (elevated firmware + full HID/WMI/OEM capture)."
-                : "Quick scan complete (unelevated fallback; start TsumeHelper service for full EC/WMI reads).";
+                ? "Quick scan complete. Continue to Guided Capture or export the support bundle."
+                : "Quick scan complete (limited mode — start Tsume Helper for full hardware access).";
         }
         catch (OperationCanceledException) when (_disposed)
         {
@@ -1226,8 +1248,6 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
                 _inventory = await DeviceSupportExporter.CollectInventoryAsync(_helper, includeTimedLoad: true, allowUacFallback: AllowUacFallback, cancel);
                 if (_disposed) return;
                 AbsorbVolatileMask(_inventory);
-                PopulateQuickSummary();
-                HasQuickScan = true;
             }
 
             _hid ??= await Task.Run(() => HidInventory.CaptureAsync(readVendorProfiles: true), cancel);
@@ -1235,6 +1255,12 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
             _display ??= DisplayInventory.Capture();
             _envCheck ??= await DeviceSupportExporter.RunEnvironmentCheckAsync(_helper, _inventory, _hid, cancel);
             if (_disposed) return;
+
+            if (!HasQuickScan)
+            {
+                PopulateQuickSummary();
+                HasQuickScan = true;
+            }
 
             var bundle = BuildCurrentBundle();
             var zipPath = await DeviceSupportExporter.ExportBundleAsync(_helper, bundle, cancel);
@@ -1300,50 +1326,220 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
 
     private void PopulateQuickSummary()
     {
+        QuickScanSections.Clear();
+
         if (_inventory is { } inv)
         {
             var id = inv.Identity;
-            QuickIdentityText =
-                $"{id.BaseBoardManufacturer} {id.BaseBoardProduct}  ·  Model: {id.SystemModel}\n" +
-                $"BIOS: {id.BiosVersion}  ·  CPU: {id.CpuName} ({id.CpuCores}C/{id.CpuLogicalProcessors}T)\n" +
-                $"GPU: {string.Join(", ", id.Gpus.Select(g => g.Name))}";
+            var model = FirstNonEmpty(id.SystemModel, id.ProductName, id.BaseBoardProduct) ?? "Unknown";
+            var board = JoinNonEmpty(" · ", CleanSpaces(id.BaseBoardManufacturer), CleanSpaces(id.BaseBoardProduct));
+            var cpuName = CleanSpaces(id.CpuName);
+            var cpu = string.IsNullOrWhiteSpace(cpuName)
+                ? "Unknown"
+                : id.CpuCores > 0
+                    ? $"{cpuName} · {CountLabel(id.CpuCores, "core")}, {CountLabel(id.CpuLogicalProcessors, "thread")}"
+                    : cpuName;
+            var gpus = string.Join(", ", id.Gpus.Select(g => CleanSpaces(g.Name)).Where(n => !string.IsNullOrWhiteSpace(n)));
+            var bios = CleanSpaces(id.BiosVersion);
 
-            var fwLine = inv.Firmware is { } fw
-                ? $"Matched prober: {fw.VendorFamily} ({fw.Values.Count} values, EC dump={(fw.EcMemoryHex is not null ? "256 bytes" : "none")})"
-                : "No built-in OEM prober matched (generic WMI MOF + ACPI capture active)";
-            var volCount = (inv.TimedDelta?.VolatileEcBytes.Count ?? 0) + (inv.TimedDelta?.VolatileValues.Count ?? 0);
-            QuickFirmwareText =
-                $"{fwLine}\n" +
-                $"Vendor WMI classes: {inv.WmiClasses.Count} ({inv.WmiClasses.Count(c => c.IsEvent)} event classes)  ·  " +
-                $"ACPI/PCI power devices: {inv.AcpiPowerDevices.Count}  ·  Volatile telemetry keys: {volCount}";
+            QuickScanSections.Add(new QuickScanSection(
+                "DEVICE",
+                Glyphs.Chip,
+                BuildRows(
+                    ("Model", model, false, model == "Unknown"),
+                    ("Motherboard", string.IsNullOrWhiteSpace(board) ? "Unknown" : board, false, string.IsNullOrWhiteSpace(board)),
+                    ("Processor", cpu, false, cpu == "Unknown"),
+                    ("Graphics", string.IsNullOrWhiteSpace(gpus) ? "Unknown" : gpus, false, string.IsNullOrWhiteSpace(gpus)),
+                    ("BIOS", string.IsNullOrWhiteSpace(bios) ? "Unknown" : bios, false, string.IsNullOrWhiteSpace(bios)))));
 
             var pp = inv.PowerPlan;
-            var boostWarn = pp.CpuBoostModeAc == 0 || pp.CpuBoostModeDc == 0 ? "  [!] BOOST DISABLED" : "";
-            var dispLine = _display is { } d
-                ? $"Display: {d.ActiveWidth}×{d.ActiveHeight} @ {d.CurrentRefreshHz} Hz (signal: [{string.Join(", ", d.SignalRefreshRates)}] Hz)"
-                : "Display: n/a";
-            var emLine = inv.TimedDelta?.EnergyMeters is { Count: > 0 } ems
-                ? $"Energy meters: {string.Join(", ", ems.Select(e => $"{e.InstanceName}={e.LoadWatts?.ToString("F1") ?? "?"}W"))}"
-                : "Energy meter: none";
-            QuickPowerDisplayText =
-                $"Plan: {pp.ActiveSchemeName ?? "?"}  ·  Boost AC/DC: {pp.CpuBoostModeAcLabel ?? "?"}/{pp.CpuBoostModeDcLabel ?? "?"}{boostWarn}\n" +
-                $"{dispLine}\n{emLine}";
+            var boostDisabled = pp.CpuBoostModeAc == 0 || pp.CpuBoostModeDc == 0;
+            var displayText = FormatDisplaySummary(_display);
+            var planText = string.IsNullOrWhiteSpace(pp.ActiveSchemeName) ? "Unknown" : pp.ActiveSchemeName;
+            var boostText = FormatBoostSummary(pp, boostDisabled);
+            var (powerText, powerMuted) = FormatPowerSensorsSummary(inv.TimedDelta);
 
-            QuickOemText =
-                $"Processes: {inv.OemFootprint.Processes.Count}  ·  Services: {inv.OemFootprint.Services.Count}  ·  " +
-                $"Scheduled tasks: {inv.OemFootprint.ScheduledTasks.Count}  ·  Config registry keys: {inv.OemFootprint.RegistryValues.Count}";
+            QuickScanSections.Add(new QuickScanSection(
+                "DISPLAY & POWER",
+                Glyphs.Desktop,
+                BuildRows(
+                    ("Display", displayText, false, displayText == "Unavailable"),
+                    ("Power plan", planText, false, planText == "Unknown"),
+                    ("CPU boost", boostText, boostDisabled, boostText == "Unknown"),
+                    ("Power sensors", powerText, false, powerMuted)),
+                BadgeText: boostDisabled ? "Boost disabled" : null,
+                IsWarningBadge: boostDisabled));
         }
 
         if (_hid is { } hid)
         {
-            var vc = hid.VendorControllers.Count > 0
-                ? string.Join(", ", hid.VendorControllers.Select(c => $"{c.Protocol} {c.VendorId:X4}:{c.ProductId:X4} fw {c.FirmwareVersion} ({c.ProfileLength}B)"))
-                : "none recognized yet (full HID table captured)";
-            QuickHidText =
-                $"HID collections: {hid.Collections.Count}  ·  XInput slots: {(hid.XInputActiveSlots.Count == 0 ? "none" : string.Join(", ", hid.XInputActiveSlots))}  ·  LampArray: {hid.LampArrayDevices.Count}\n" +
-                $"Vendor controllers: {vc}";
+            var controllerText = hid.VendorControllers.Count > 0
+                ? string.Join(", ", hid.VendorControllers.Select(FormatVendorController))
+                : "Generic USB/HID (full device table logged)";
+            var gamepadText = hid.XInputActiveSlots.Count > 0
+                ? $"{CountLabel(hid.XInputActiveSlots.Count, "Xbox gamepad")} ({string.Join(", ", hid.XInputActiveSlots.Select(s => $"Player {s + 1}"))})"
+                : "None active right now";
+            var hidText = $"{CountLabel(hid.Collections.Count, "interface")} logged";
+            var lightingText = hid.LampArrayDevices.Count > 0
+                ? $"{CountLabel(hid.LampArrayDevices.Count, "Dynamic Lighting device")} logged"
+                : "None detected";
+
+            QuickScanSections.Add(new QuickScanSection(
+                "CONTROLLERS & LIGHTING",
+                Glyphs.Gamepad,
+                BuildRows(
+                    ("Built-in controller", controllerText, false, hid.VendorControllers.Count == 0),
+                    ("Active gamepads", gamepadText, false, hid.XInputActiveSlots.Count == 0),
+                    ("USB / HID devices", hidText, false, hid.Collections.Count == 0),
+                    ("Windows lighting", lightingText, false, hid.LampArrayDevices.Count == 0))));
+        }
+
+        if (_inventory is { } invLogs)
+        {
+            var fwText = invLogs.Firmware is { } fw
+                ? $"{FormatVendorFamily(fw.VendorFamily)} detected ({CountLabel(fw.Values.Count, "reading")}{(fw.EcMemoryHex is not null ? " + EC snapshot" : "")} logged)"
+                : "Generic scan (vendor WMI & ACPI tables logged)";
+
+            var interfacesText =
+                $"{CountLabel(invLogs.WmiClasses.Count, "vendor interface")} · " +
+                $"{CountLabel(invLogs.AcpiPowerDevices.Count, "power device")} logged";
+
+            var volCount = (invLogs.TimedDelta?.VolatileEcBytes.Count ?? 0) + (invLogs.TimedDelta?.VolatileValues.Count ?? 0);
+            var (telemetryText, telemetryMuted) = invLogs.TimedDelta is null
+                ? ("Load test skipped", true)
+                : volCount > 0
+                    ? ($"{CountLabel(volCount, "active sensor reading")} identified", false)
+                    : ("No changing sensor values detected", true);
+
+            var (oemText, oemMuted) = FormatOemSummary(invLogs.OemFootprint);
+
+            QuickScanSections.Add(new QuickScanSection(
+                "LOGGED FOR SUPPORT",
+                Glyphs.Inspect,
+                BuildRows(
+                    ("Firmware", fwText, false, invLogs.Firmware is null),
+                    ("System interfaces", interfacesText, false, false),
+                    ("Live telemetry", telemetryText, false, telemetryMuted),
+                    ("OEM software", oemText, false, oemMuted)),
+                BadgeText: invLogs.Elevated ? "Full access" : "Limited access",
+                IsWarningBadge: !invLogs.Elevated));
         }
     }
+
+    private static IReadOnlyList<QuickScanRow> BuildRows(params (string Label, string Value, bool IsWarning, bool IsMuted)[] items)
+    {
+        var rows = new List<QuickScanRow>(items.Length);
+        for (var i = 0; i < items.Length; i++)
+        {
+            var (label, value, isWarning, isMuted) = items[i];
+            rows.Add(new QuickScanRow(label, value, IsFirst: i == 0, IsWarning: isWarning, IsMuted: isMuted));
+        }
+        return rows;
+    }
+
+    private static string FormatDisplaySummary(DisplayInventorySnapshot? display)
+    {
+        if (display is not { ActiveWidth: > 0, ActiveHeight: > 0 }) return "Unavailable";
+        var rates = display.SignalRefreshRates.Distinct().Order().ToList();
+        var baseText = $"{display.ActiveWidth} × {display.ActiveHeight} at {display.CurrentRefreshHz} Hz";
+        return rates.Count > 1
+            ? $"{baseText} (supports {string.Join(" / ", rates)} Hz)"
+            : baseText;
+    }
+
+    private static string FormatBoostSummary(PowerPlanSnapshot pp, bool boostDisabled)
+    {
+        var ac = pp.CpuBoostModeAcLabel;
+        var dc = pp.CpuBoostModeDcLabel;
+        if (string.IsNullOrWhiteSpace(ac) && string.IsNullOrWhiteSpace(dc)) return "Unknown";
+
+        ac ??= "Unknown";
+        dc ??= "Unknown";
+        var summary = string.Equals(ac, dc, StringComparison.OrdinalIgnoreCase)
+            ? $"{ac} (plugged in & battery)"
+            : $"{ac} (plugged in) · {dc} (battery)";
+
+        return boostDisabled ? $"{summary} — may cap power limits" : summary;
+    }
+
+    private static (string Text, bool IsMuted) FormatPowerSensorsSummary(TimedDeltaSnapshot? td)
+    {
+        if (td is null) return ("Load test skipped", true);
+
+        var valid = td.EnergyMeters.Where(e => e.LoadWatts.HasValue || e.IdleWatts.HasValue).ToList();
+        if (valid.Count == 0) return ("Not exposed by Windows", true);
+
+        var pkg = valid.FirstOrDefault(e => e.InstanceName.EndsWith("_PKG", StringComparison.OrdinalIgnoreCase))
+                  ?? valid.FirstOrDefault(e =>
+                      e.InstanceName.Contains("Package", StringComparison.OrdinalIgnoreCase)
+                      && !e.InstanceName.Contains("DRAM", StringComparison.OrdinalIgnoreCase)
+                      && !e.InstanceName.Contains("PP0", StringComparison.OrdinalIgnoreCase)
+                      && !e.InstanceName.Contains("PP1", StringComparison.OrdinalIgnoreCase));
+
+        var countNote = $"{CountLabel(valid.Count, "sensor")} logged";
+        if (pkg?.LoadWatts is { } loadW)
+        {
+            return pkg.IdleWatts is { } idleW
+                ? ($"Idle {idleW:F1} W → Load {loadW:F1} W ({countNote})", false)
+                : ($"{loadW:F1} W under load ({countNote})", false);
+        }
+
+        return ($"{CountLabel(valid.Count, "power sensor")} logged", false);
+    }
+
+    private static string FormatVendorController(VendorControllerSnapshot controller)
+    {
+        var name = controller.Protocol switch
+        {
+            "msi-hid-v1" => "MSI controller",
+            _ => controller.Protocol,
+        };
+        var fw = CleanSpaces(controller.FirmwareVersion);
+        return string.IsNullOrWhiteSpace(fw) ? name : $"{name} (firmware {fw})";
+    }
+
+    private static string FormatVendorFamily(string family) => family switch
+    {
+        "msi-acpi" => "MSI ACPI",
+        "asus-atk-wmi" => "ASUS WMI",
+        "lenovo-wmi" => "Lenovo WMI",
+        _ => family,
+    };
+
+    private static (string Text, bool IsMuted) FormatOemSummary(OemFootprintSnapshot oem)
+    {
+        var parts = new List<string>();
+        if (oem.Processes.Count > 0) parts.Add(CountLabel(oem.Processes.Count, "running app"));
+        if (oem.Services.Count > 0) parts.Add(CountLabel(oem.Services.Count, "service"));
+        if (oem.ScheduledTasks.Count > 0) parts.Add(CountLabel(oem.ScheduledTasks.Count, "scheduled task"));
+        if (oem.RegistryValues.Count > 0) parts.Add(CountLabel(oem.RegistryValues.Count, "config setting"));
+
+        return parts.Count > 0
+            ? ($"{string.Join(" · ", parts)} logged", false)
+            : ("No OEM software detected", true);
+    }
+
+    private static string CountLabel(int count, string singular, string? plural = null) =>
+        count == 1 ? $"1 {singular}" : $"{count} {plural ?? singular + "s"}";
+
+    private static string CleanSpaces(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "";
+        return string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            var clean = CleanSpaces(value);
+            if (!string.IsNullOrWhiteSpace(clean)) return clean;
+        }
+        return null;
+    }
+
+    private static string JoinNonEmpty(string separator, params string[] values) =>
+        string.Join(separator, values.Where(v => !string.IsNullOrWhiteSpace(v)));
 
     private void UpdateSummaryPill()
     {

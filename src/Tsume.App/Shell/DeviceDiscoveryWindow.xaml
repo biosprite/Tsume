@@ -646,56 +646,156 @@
             <Border Style="{StaticResource Dev.Card}">
               <DockPanel>
                 <Button DockPanel.Dock="Right" Style="{StaticResource Dev.PrimaryButton}"
-                        Content="Run Quick Scan" Padding="20,12" Margin="16,0,0,0" VerticalAlignment="Center"
+                        Content="{Binding QuickScanButtonLabel}" Padding="20,12" Margin="16,0,0,0" VerticalAlignment="Center"
                         IsEnabled="{Binding IsNotBusy}" Command="{Binding RunQuickScanCommand}" />
                 <StackPanel>
-                  <TextBlock Style="{StaticResource Text.Body}" Text="Hands-Free Automatic Discovery (~10 seconds)" FontSize="15" />
-                  <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,4,0,10"
-                             Text="Captures SMBIOS/CPU/GPU identity, display timings, Windows power plan &amp; boost mode, vendor WMI classes + MOF schemas, safe OEM firmware reads, a 3-second live-telemetry load delta, full HID/XInput/LampArray/controller topology, and OEM software footprint." />
+                  <TextBlock Style="{StaticResource Text.Body}" Text="Quick Hardware Scan (~10 seconds)" FontSize="15" FontWeight="SemiBold" />
+                  <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,4,0,10" LineHeight="18"
+                             Text="Automatically reads your device specs, display, power settings, controllers, and OEM software for Tsume support logs. Nothing is changed on your handheld." />
                   <WrapPanel Orientation="Horizontal">
-                    <CheckBox Content="Include 3-second CPU load delta (identifies live temp/fan/power bytes)"
-                              IsChecked="{Binding IncludeTimedLoad}" Foreground="{DynamicResource Text}" Margin="0,0,18,4" />
-                    <CheckBox Content="Allow UAC fallback if Helper service is offline"
-                              IsChecked="{Binding AllowUacFallback}" Foreground="{DynamicResource Text}" Margin="0,0,0,4" />
+                    <CheckBox Content="Run 3-second CPU load test (helps spot live temp, fan &amp; power sensors)"
+                              IsChecked="{Binding IncludeTimedLoad}" Foreground="{DynamicResource Text}"
+                              VerticalContentAlignment="Center" Margin="0,0,18,4" />
+                    <CheckBox Content="Ask for admin access if Tsume Helper is offline"
+                              IsChecked="{Binding AllowUacFallback}" Foreground="{DynamicResource Text}"
+                              VerticalContentAlignment="Center" Margin="0,0,0,4" />
                   </WrapPanel>
                 </StackPanel>
               </DockPanel>
             </Border>
 
-            <Border Style="{StaticResource Dev.Card}">
-              <StackPanel>
-                <TextBlock Style="{StaticResource Text.Heading}" Text="SYSTEM IDENTITY" Margin="0,0,0,6" />
-                <TextBlock Style="{StaticResource Text.Body}" Text="{Binding QuickIdentityText}" TextWrapping="Wrap" FontWeight="Normal" />
+            <!-- Empty state before first scan -->
+            <Border Padding="24,26" Margin="0,0,0,10">
+              <Border.Style>
+                <Style TargetType="Border" BasedOn="{StaticResource Dev.Card}">
+                  <Setter Property="Visibility" Value="Visible" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding HasQuickScan}" Value="True">
+                      <Setter Property="Visibility" Value="Collapsed" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Border.Style>
+              <StackPanel HorizontalAlignment="Center" MaxWidth="520">
+                <TextBlock Style="{StaticResource Text.Icon}" Text="{x:Static theme:Glyphs.Inspect}"
+                           FontSize="24" Foreground="{x:Static theme:Accent.Brush}"
+                           HorizontalAlignment="Center" Margin="0,0,0,8" />
+                <TextBlock Style="{StaticResource Text.Body}" Text="No scan captured yet"
+                           FontSize="14.5" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextAlignment="Center"
+                           LineHeight="18" Margin="0,4,0,0"
+                           Text="Click Run Quick Scan above to capture a readable overview of your handheld. Detailed technical data is logged automatically for Report Preview and the exported support bundle." />
               </StackPanel>
             </Border>
 
-            <Border Style="{StaticResource Dev.Card}">
-              <StackPanel>
-                <TextBlock Style="{StaticResource Text.Heading}" Text="FIRMWARE &amp; WMI SURFACE" Margin="0,0,0,6" />
-                <TextBlock Style="{StaticResource Text.Body}" Text="{Binding QuickFirmwareText}" TextWrapping="Wrap" FontWeight="Normal" />
-              </StackPanel>
-            </Border>
+            <!-- Structured scan summary cards -->
+            <ItemsControl ItemsSource="{Binding QuickScanSections}"
+                          Visibility="{Binding HasQuickScan, Converter={StaticResource BoolToVis}}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border Style="{StaticResource Dev.Card}" Padding="16,13">
+                    <StackPanel>
+                      <DockPanel Margin="0,0,0,10">
+                        <Border DockPanel.Dock="Right" CornerRadius="8" Padding="8,2" BorderThickness="1"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding HasBadge, Converter={StaticResource BoolToVis}}">
+                          <Border.Style>
+                            <Style TargetType="Border">
+                              <Setter Property="Background" Value="#1F3DDC97" />
+                              <Setter Property="BorderBrush" Value="#553DDC97" />
+                              <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsWarningBadge}" Value="True">
+                                  <Setter Property="Background" Value="#1AF5B841" />
+                                  <Setter Property="BorderBrush" Value="#55F5B841" />
+                                </DataTrigger>
+                              </Style.Triggers>
+                            </Style>
+                          </Border.Style>
+                          <TextBlock Text="{Binding BadgeText}" FontFamily="{StaticResource Font.Words}"
+                                     FontSize="11" FontWeight="SemiBold">
+                            <TextBlock.Style>
+                              <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{StaticResource Signal.Good}" />
+                                <Style.Triggers>
+                                  <DataTrigger Binding="{Binding IsWarningBadge}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource Signal.Warn}" />
+                                  </DataTrigger>
+                                </Style.Triggers>
+                              </Style>
+                            </TextBlock.Style>
+                          </TextBlock>
+                        </Border>
 
-            <Border Style="{StaticResource Dev.Card}">
-              <StackPanel>
-                <TextBlock Style="{StaticResource Text.Heading}" Text="WINDOWS POWER, BOOST MODE &amp; DISPLAY" Margin="0,0,0,6" />
-                <TextBlock Style="{StaticResource Text.Body}" Text="{Binding QuickPowerDisplayText}" TextWrapping="Wrap" FontWeight="Normal" />
-              </StackPanel>
-            </Border>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                          <TextBlock Style="{StaticResource Text.Icon}" Text="{Binding Glyph}"
+                                     FontSize="13.5" Foreground="{x:Static theme:Accent.Brush}"
+                                     Margin="0,0,8,0" VerticalAlignment="Center" />
+                          <TextBlock Style="{StaticResource Text.Heading}" Text="{Binding Title}"
+                                     Margin="0" VerticalAlignment="Center" />
+                        </StackPanel>
+                      </DockPanel>
 
-            <Border Style="{StaticResource Dev.Card}">
-              <StackPanel>
-                <TextBlock Style="{StaticResource Text.Heading}" Text="CONTROLLERS, HID &amp; LIGHTING" Margin="0,0,0,6" />
-                <TextBlock Style="{StaticResource Text.Body}" Text="{Binding QuickHidText}" TextWrapping="Wrap" FontWeight="Normal" />
-              </StackPanel>
-            </Border>
+                      <Border Background="{DynamicResource Dev.SubCard}" BorderBrush="{DynamicResource Surface.Divider}"
+                              BorderThickness="1" CornerRadius="10" Padding="12,3">
+                        <ItemsControl ItemsSource="{Binding Rows}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                              <Border BorderBrush="{DynamicResource Surface.Divider}" Padding="0,6">
+                                <Border.Style>
+                                  <Style TargetType="Border">
+                                    <Setter Property="BorderThickness" Value="0,1,0,0" />
+                                    <Style.Triggers>
+                                      <DataTrigger Binding="{Binding IsFirst}" Value="True">
+                                        <Setter Property="BorderThickness" Value="0" />
+                                      </DataTrigger>
+                                    </Style.Triggers>
+                                  </Style>
+                                </Border.Style>
+                                <Grid>
+                                  <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="156" />
+                                    <ColumnDefinition Width="*" />
+                                  </Grid.ColumnDefinitions>
+                                  <TextBlock Grid.Column="0" Style="{StaticResource Text.Caption}"
+                                             Text="{Binding Label}" FontSize="12.5"
+                                             Foreground="{DynamicResource Text.Muted}"
+                                             VerticalAlignment="Top" Margin="0,1,12,0" />
+                                  <TextBlock Grid.Column="1" FontFamily="{StaticResource Font.Words}"
+                                             Text="{Binding Value}" FontSize="13" TextWrapping="Wrap"
+                                             VerticalAlignment="Top">
+                                    <TextBlock.Style>
+                                      <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+                                        <Setter Property="FontWeight" Value="Medium" />
+                                        <Style.Triggers>
+                                          <DataTrigger Binding="{Binding IsWarning}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource Signal.Warn}" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                          </DataTrigger>
+                                          <DataTrigger Binding="{Binding IsMuted}" Value="True">
+                                            <Setter Property="Foreground" Value="{DynamicResource Text.Muted}" />
+                                            <Setter Property="FontWeight" Value="Normal" />
+                                          </DataTrigger>
+                                        </Style.Triggers>
+                                      </Style>
+                                    </TextBlock.Style>
+                                  </TextBlock>
+                                </Grid>
+                              </Border>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </Border>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
-            <Border Style="{StaticResource Dev.Card}">
-              <StackPanel>
-                <TextBlock Style="{StaticResource Text.Heading}" Text="OEM SOFTWARE FOOTPRINT" Margin="0,0,0,6" />
-                <TextBlock Style="{StaticResource Text.Body}" Text="{Binding QuickOemText}" TextWrapping="Wrap" FontWeight="Normal" />
-              </StackPanel>
-            </Border>
+            <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text.Faint}"
+                       FontSize="11.5" Margin="4,0,4,6" TextWrapping="Wrap"
+                       Visibility="{Binding HasQuickScan, Converter={StaticResource BoolToVis}}"
+                       Text="Full technical details (WMI schemas, raw HID tables, and power sensor logs) are available in Report Preview and included in the exported .zip bundle." />
           </StackPanel>
         </ScrollViewer>
 
