@@ -99,13 +99,16 @@ public sealed class UpscalingViewModel : LayerViewModel
         return await FetchAsync(newest, say);
     }
 
-    public async Task<StoredBuild> FetchAsync(NightlyBuild build, Action<string> say)
+    public async Task<StoredBuild> FetchAsync(NightlyBuild build, Action<string> say, CancellationToken cancel = default)
     {
         // Progress<T> marshals the download thread's reports back to this thread.
         var progress = new Progress<double>(done =>
-            say(done < 1 ? Strings.Downloading((int)(done * 100)) : Strings.Unpacking));
+        {
+            if (cancel.IsCancellationRequested) return;
+            say(done < 1 ? Strings.Downloading((int)(done * 100)) : Strings.Unpacking);
+        });
 
-        return await Task.Run(() => Builds.FetchAsync(build, progress));
+        return await Task.Run(() => Builds.FetchAsync(build, progress, cancel), cancel);
     }
 
     /// <summary>

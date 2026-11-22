@@ -69,6 +69,7 @@ public sealed class BuildStore(UpscalingPaths paths)
             await UnpackAsync(archive, contents, cancel).ConfigureAwait(false);
 
             var stored = new StoredBuild(build, contents, TakeStock(contents));
+            cancel.ThrowIfCancellationRequested();
             Files.WriteWhole(Path.Combine(making, Record), JsonSerializer.Serialize(stored, Format));
 
             Files.Discard(home);
@@ -80,7 +81,7 @@ public sealed class BuildStore(UpscalingPaths paths)
         finally
         {
             Files.Discard(making);
-            try { File.Delete(archive); } catch (IOException) { }
+            try { File.Delete(archive); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
         }
     }
 
@@ -139,6 +140,8 @@ public sealed class BuildStore(UpscalingPaths paths)
     /// </summary>
     internal static async Task UnpackAsync(string archive, string into, CancellationToken cancel)
     {
+        cancel.ThrowIfCancellationRequested();
+
         var tar = Path.Combine(Environment.SystemDirectory, "tar.exe");
         if (!File.Exists(tar)) throw new UpscalingException(Trouble.CannotUnpack, "Windows has no tar.exe");
 
@@ -164,7 +167,15 @@ public sealed class BuildStore(UpscalingPaths paths)
             }
             catch (OperationCanceledException)
             {
-                unpack.Kill();
+                try
+                {
+                    if (!unpack.HasExited)
+                    {
+                        unpack.Kill();
+                        unpack.WaitForExit(3000);
+                    }
+                }
+                catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception) { }
                 throw;
             }
 

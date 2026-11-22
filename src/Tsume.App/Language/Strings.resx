@@ -387,7 +387,16 @@
   </data>
   <data name="NoBuildOnDisk" xml:space="preserve"><value>Nothing downloaded yet</value></data>
   <data name="NightlyExplained" xml:space="preserve"><value>Tsume uses OptiScaler's nightly builds; the numbered releases are months behind. About 75 MB to download.</value></data>
-  <data name="GetNewestBuild" xml:space="preserve"><value>Get the newest build</value></data>
+  <data name="CheckForNewerBuild" xml:space="preserve"><value>Check for a newer build</value></data>
+  <data name="CheckingNewerBuild" xml:space="preserve"><value>Checking for a newer build…</value></data>
+  <data name="NewerBuildAvailableHeading" xml:space="preserve"><value>NEWER BUILD AVAILABLE</value></data>
+  <data name="BuildAvailableHeading" xml:space="preserve"><value>BUILD AVAILABLE</value></data>
+  <data name="DownloadingBuildHeading" xml:space="preserve"><value>DOWNLOADING BUILD</value></data>
+  <data name="DownloadBuild" xml:space="preserve"><value>Download</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="CancelDownload" xml:space="preserve"><value>Cancel download</value></data>
+  <data name="CheckCancelled" xml:space="preserve"><value>Check cancelled.</value></data>
+  <data name="DownloadCancelled" xml:space="preserve"><value>Download cancelled.</value></data>
   <data name="HaveNewest" xml:space="preserve"><value>This is the newest build.</value></data>
   <data name="GotNewer" xml:space="preserve">
     <value>Downloaded the nightly of {0}.</value>

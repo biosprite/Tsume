@@ -30,24 +30,115 @@
         <Border Style="{StaticResource Card.Note}">
           <StackPanel>
             <TextBlock Style="{StaticResource Text.Body}" Text="{Binding BuildLine}" />
-            <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding VersionLine}" Margin="0,4,0,0" />
+            <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding VersionLine}"
+                       Visibility="{Binding VersionLineShown}" Margin="0,4,0,0" />
             <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text.Faint}"
                        TextWrapping="Wrap" TextTrimming="None"
                        Text="{x:Static lang:Strings.NightlyExplained}" Margin="0,8,0,0" />
           </StackPanel>
         </Border>
 
+        <!-- Checking for a newer nightly build: small Hardware Discovery-style loading ring. -->
+        <Border Style="{StaticResource Card.Info}"
+                Background="{x:Static theme:Accent.Tint}"
+                BorderBrush="{x:Static theme:Accent.Wash}"
+                Padding="16,12"
+                Visibility="{Binding CheckingShown}">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <controls:ProgressRing Grid.Column="0" Width="16" Height="16" RingThickness="2"
+                                   Margin="0,0,12,0" VerticalAlignment="Center"
+                                   Foreground="{x:Static theme:Accent.Brush}"
+                                   TrackBrush="{DynamicResource Switch.Groove}"
+                                   IsActive="{Binding IsChecking}" />
+            <TextBlock Grid.Column="1" Style="{StaticResource Text.Body}"
+                       Text="{x:Static lang:Strings.CheckingNewerBuild}"
+                       TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <!-- Newer build found (and active download progress while downloading it). -->
+        <Border Style="{StaticResource Card.Info}"
+                Background="{x:Static theme:Accent.Tint}"
+                BorderBrush="{x:Static theme:Accent.Wash}"
+                Padding="16,12"
+                Visibility="{Binding AvailableShown}">
+          <StackPanel>
+            <TextBlock Style="{StaticResource Text.Heading}"
+                       Foreground="{x:Static theme:Accent.Brush}"
+                       Text="{Binding AvailableHeading}" Margin="0,0,0,4" />
+            <TextBlock Style="{StaticResource Text.Body}"
+                       TextWrapping="Wrap" TextTrimming="None"
+                       Text="{Binding AvailableBuildLine}" />
+            <TextBlock Style="{StaticResource Text.Caption}"
+                       Foreground="{DynamicResource Text}"
+                       TextWrapping="Wrap" TextTrimming="None"
+                       Text="{Binding AvailableDetailLine}"
+                       Visibility="{Binding AvailableDetailShown}" Margin="0,3,0,0" />
+            <TextBlock Style="{StaticResource Text.Caption}"
+                       Foreground="{DynamicResource Text.Muted}"
+                       TextWrapping="Wrap" TextTrimming="None"
+                       Text="{Binding AvailableTagLine}"
+                       Visibility="{Binding AvailableTagShown}" Margin="0,2,0,0" />
+
+            <Grid Margin="0,10,0,0" Visibility="{Binding DownloadingShown}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <controls:ProgressRing Grid.Column="0" Width="16" Height="16" RingThickness="2"
+                                     Margin="0,0,10,0" VerticalAlignment="Center"
+                                     Foreground="{x:Static theme:Accent.Brush}"
+                                     TrackBrush="{DynamicResource Switch.Groove}"
+                                     IsActive="{Binding IsDownloading}" />
+              <TextBlock Grid.Column="1" Style="{StaticResource Text.Caption}"
+                         Foreground="{DynamicResource Text}"
+                         Text="{Binding DownloadProgress}"
+                         TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center" />
+            </Grid>
+          </StackPanel>
+        </Border>
+
         <StackPanel Margin="-4,0,-4,0">
           <controls:Tile Style="{StaticResource Tile.Row}" controls:Screen.TakesFocus="True"
-                         Glyph="{x:Static theme:Glyphs.Download}" Label="{x:Static lang:Strings.GetNewestBuild}"
-                         Command="{Binding GetNewest}" />
+                         Glyph="{x:Static theme:Glyphs.Inspect}" Label="{x:Static lang:Strings.CheckForNewerBuild}"
+                         IsEnabled="{Binding CanAct}"
+                         Visibility="{Binding CheckShown}"
+                         Command="{Binding CheckForNewer}" />
+
+          <controls:Tile Style="{StaticResource Tile.Row}" controls:Screen.TakesFocus="True"
+                         Glyph="{x:Static theme:Glyphs.Quit}" Label="{x:Static lang:Strings.Cancel}"
+                         Visibility="{Binding CheckingShown}"
+                         Command="{Binding CancelUpdate}" />
+
+          <UniformGrid Columns="2" Visibility="{Binding ConfirmDownloadShown}">
+            <controls:Tile Style="{StaticResource Tile.Row}" controls:Screen.TakesFocus="True"
+                           IsOn="True"
+                           Glyph="{x:Static theme:Glyphs.Download}" Label="{x:Static lang:Strings.DownloadBuild}"
+                           IsEnabled="{Binding CanAct}"
+                           Command="{Binding DownloadNewer}" />
+            <controls:Tile Style="{StaticResource Tile.Row}"
+                           Glyph="{x:Static theme:Glyphs.Quit}" Label="{x:Static lang:Strings.Cancel}"
+                           IsEnabled="{Binding CanAct}"
+                           Command="{Binding CancelUpdate}" />
+          </UniformGrid>
+
+          <controls:Tile Style="{StaticResource Tile.Row}" controls:Screen.TakesFocus="True"
+                         Glyph="{x:Static theme:Glyphs.Quit}" Label="{x:Static lang:Strings.CancelDownload}"
+                         Visibility="{Binding DownloadingShown}"
+                         Command="{Binding CancelUpdate}" />
 
           <controls:Tile Style="{StaticResource Tile.Row}"
                          Glyph="{x:Static theme:Glyphs.Update}" Label="{Binding UpdateLabel}"
+                         IsEnabled="{Binding CanAct}"
                          Command="{Binding UpdateGames}" />
 
           <controls:Tile Style="{StaticResource Tile.Row}"
                          Glyph="{x:Static theme:Glyphs.Remove}" Label="{Binding RemoveOldLabel}"
+                         IsEnabled="{Binding CanAct}"
                          Command="{Binding RemoveOld}" />
         </StackPanel>
 
@@ -59,6 +150,7 @@
                        Glyph="{x:Static theme:Glyphs.Chip}"
                        Label="{Binding XmxLabel}"
                        Detail="{Binding XmxLine}"
+                       IsEnabled="{Binding CanAct}"
                        Command="{Binding AddXmx}" />
 
         <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"

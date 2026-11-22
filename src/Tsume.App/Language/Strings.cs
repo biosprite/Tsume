@@ -292,7 +292,16 @@ public static class Strings
     public static string NightlyOf(string night) => Fill(Find(), night);
     public static string NoBuildOnDisk => Find();
     public static string NightlyExplained => Find();
-    public static string GetNewestBuild => Find();
+    public static string CheckForNewerBuild => Find();
+    public static string CheckingNewerBuild => Find();
+    public static string NewerBuildAvailableHeading => Find();
+    public static string BuildAvailableHeading => Find();
+    public static string DownloadingBuildHeading => Find();
+    public static string DownloadBuild => Find();
+    public static string Cancel => Find();
+    public static string CancelDownload => Find();
+    public static string CheckCancelled => Find();
+    public static string DownloadCancelled => Find();
     public static string HaveNewest => Find();
     public static string GotNewer(string night) => Fill(Find(), night);
 
@@ -307,6 +316,8 @@ public static class Strings
     public static string OldBuildsInUse => Find();
 
     /// <summary>"283 MB", "1.4 GB".</summary>
+    public static string FormatSize(long bytes) => Size(bytes);
+
     private static string Size(long bytes) => bytes >= 1L << 30
         ? Fill(Find("SizeGB"), bytes / (double)(1L << 30))
         : Fill(Find("SizeMB"), Math.Max(1, bytes >> 20));

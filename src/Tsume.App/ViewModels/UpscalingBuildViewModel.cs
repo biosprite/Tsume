@@ -12,21 +12,30 @@ using Tsume.Upscaling.Xmx;
 namespace Tsume.App.ViewModels;
 
 /// <summary>
-/// The build page: the nightly on disk, fetching a newer one, updating installed games, XMX, and the extras folder.
-/// Tsume goes online only when asked: "Get the newest build", or a first install with no build on disk.
+/// The build page: the nightly on disk, checking for and downloading a newer one, updating installed games, XMX, and the extras folder.
+/// Tsume goes online only when asked: "Check for a newer build", or a first install with no build on disk.
 /// </summary>
 public sealed class UpscalingBuildViewModel : LayerViewModel
 {
     private readonly UpscalingViewModel _hub;
     private StoredBuild? _build;
+    private NightlyBuild? _available;
     private XmxUpscaler? _xmx;
+    private CancellationTokenSource? _operationCancel;
+    private bool _busyHere;
 
     /// <param name="dismiss">Closes the panel and completes once it is fully off screen.</param>
     public UpscalingBuildViewModel(UpscalingViewModel hub, Func<Task> dismiss)
     {
         _hub = hub;
+        _hub.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(UpscalingViewModel.IsBusy)) Notify(nameof(CanAct));
+        };
 
-        GetNewest = new Command(() => _ = RunAsync(GetNewestAsync));
+        CheckForNewer = new Command(() => _ = RunCancellableAsync(CheckForNewerAsync, Strings.CheckCancelled));
+        DownloadNewer = new Command(() => _ = RunCancellableAsync(DownloadNewerAsync, Strings.DownloadCancelled, clearAvailableOnCancel: true));
+        CancelUpdate = new Command(OnCancelUpdate);
         UpdateGames = new Command(() => _ = RunAsync(UpdateGamesAsync));
         AddXmx = new Command(() => _ = RunAsync(AddXmxAsync));
         RemoveOld = new Command(() => _ = RunAsync(RemoveOldAsync));
@@ -47,7 +56,9 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
     /// <summary>Raised after an action, when buttons may have come or gone.</summary>
     public event Action? Settled;
 
-    public ICommand GetNewest { get; }
+    public ICommand CheckForNewer { get; }
+    public ICommand DownloadNewer { get; }
+    public ICommand CancelUpdate { get; }
     public ICommand UpdateGames { get; }
     public ICommand AddXmx { get; }
     public ICommand RemoveOld { get; }
@@ -55,13 +66,17 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
 
     protected override void OnOpened()
     {
-        Status = "";
+        if (!IsDownloading) _available = null;
+        if (!_busyHere) Status = "";
+
         Look();
     }
 
     private void Look()
     {
         _build = _hub.Builds.Current();
+        if (_available is not null && _build?.Build.Tag == _available.Tag) _available = null;
+
         _xmx = _hub.Xmx.Current();
         Outdated = _build is null ? [] : [.. GamesOnAnotherBuild(_build)];
         OldSize = _hub.Builds.Old(_hub.Installer.BuildsInUse()).Sum(old => old.Size);
@@ -82,12 +97,69 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
 
     private IReadOnlyList<InstallManifest> Outdated { get; set; } = [];
 
+    /// <summary>False while a check, download, update, or removal is running.</summary>
+    public bool CanAct => !_hub.IsBusy;
+
+    /// <summary>True while querying GitHub for the newest nightly build.</summary>
+    public bool IsChecking { get; private set => Set(ref field, value); }
+
+    /// <summary>True while downloading and unpacking the available newer build.</summary>
+    public bool IsDownloading { get; private set => Set(ref field, value); }
+
+    /// <summary>Live progress line shown next to the spinner while downloading/unpacking.</summary>
+    public string DownloadProgress { get; private set => Set(ref field, value); } = "";
+
+    public Visibility CheckShown => !IsChecking && _available is null && !IsDownloading ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility CheckingShown => IsChecking ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility AvailableShown => _available is not null ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility ConfirmDownloadShown => _available is not null && !IsDownloading ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility DownloadingShown => IsDownloading ? Visibility.Visible : Visibility.Collapsed;
+
+    public string AvailableHeading => IsDownloading
+        ? Strings.DownloadingBuildHeading
+        : _build is null
+            ? Strings.BuildAvailableHeading
+            : Strings.NewerBuildAvailableHeading;
+
+    public string AvailableBuildLine => _available is null
+        ? ""
+        : Strings.NightlyOf(UpscalingViewModel.Night(_available.Tag));
+
+    /// <summary>E.g. "OptiScaler 10.0.0-pre1 · 76 MB".</summary>
+    public string AvailableDetailLine
+    {
+        get
+        {
+            if (_available is null) return "";
+            var version = string.IsNullOrEmpty(_available.Version) ? "" : $"OptiScaler {_available.Version}";
+            var size = _available.Size > 0 ? Strings.FormatSize(_available.Size) : "";
+            return (version.Length > 0, size.Length > 0) switch
+            {
+                (true, true) => $"{version} · {size}",
+                (true, false) => version,
+                (false, true) => size,
+                _ => "",
+            };
+        }
+    }
+
+    public Visibility AvailableDetailShown => AvailableDetailLine.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>The exact GitHub release tag (e.g. "nightly-20261115") when the main line displays the parsed date.</summary>
+    public string AvailableTagLine => _available is { Date: not null } ? _available.Tag : "";
+
+    public Visibility AvailableTagShown => AvailableTagLine.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
     public string BuildLine => _build is null
         ? Strings.NoBuildOnDisk
         : Strings.NightlyOf(UpscalingViewModel.Night(_build.Build.Tag));
 
     /// <summary>E.g. "OptiScaler 10.0.0-pre1".</summary>
-    public string VersionLine => _build is null ? "" : $"OptiScaler {_build.Build.Version}";
+    public string VersionLine => _build is null || string.IsNullOrEmpty(_build.Build.Version)
+        ? ""
+        : $"OptiScaler {_build.Build.Version}";
+
+    public Visibility VersionLineShown => VersionLine.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>Always offered; says how many games when some are behind.</summary>
     public string UpdateLabel => Outdated.Count > 0 ? Strings.UpdateGames(Outdated.Count) : Strings.UpdateAllGames;
@@ -111,6 +183,7 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
     {
         if (_hub.IsBusy) return;
         _hub.IsBusy = true;
+        _busyHere = true;
 
         try
         {
@@ -122,25 +195,105 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
         }
         finally
         {
+            _busyHere = false;
             _hub.IsBusy = false;
             Look();
+            if (!IsOpen && _hub.IsOpen) _hub.ShowGames();
             Settled?.Invoke();
         }
     }
 
-    private async Task GetNewestAsync()
+    private async Task RunCancellableAsync(Func<CancellationToken, Task> action, string cancelledStatus, bool clearAvailableOnCancel = false)
     {
-        Status = Strings.CheckingBuild;
-        var newest = await NightlyFeed.NewestAsync();
+        if (_hub.IsBusy) return;
+        _hub.IsBusy = true;
+        _busyHere = true;
 
-        if (_build?.Build.Tag == newest.Tag)
+        using var cancel = new CancellationTokenSource();
+        _operationCancel = cancel;
+
+        try
+        {
+            await action(cancel.Token);
+        }
+        catch (Exception) when (cancel.IsCancellationRequested)
+        {
+            if (clearAvailableOnCancel) _available = null;
+            Status = cancelledStatus;
+        }
+        catch (Exception error)
+        {
+            Status = Strings.Explain(error);
+        }
+        finally
+        {
+            if (ReferenceEquals(_operationCancel, cancel)) _operationCancel = null;
+            IsChecking = false;
+            IsDownloading = false;
+            DownloadProgress = "";
+            _busyHere = false;
+            _hub.IsBusy = false;
+            Look();
+            if (!IsOpen && _hub.IsOpen) _hub.ShowGames();
+            Settled?.Invoke();
+        }
+    }
+
+    private async Task CheckForNewerAsync(CancellationToken cancel)
+    {
+        _available = null;
+        Status = "";
+        IsChecking = true;
+        Notify("");
+        Settled?.Invoke();
+
+        var newest = await NightlyFeed.NewestAsync(cancel);
+        cancel.ThrowIfCancellationRequested();
+        var currentTag = _hub.Builds.Current()?.Build.Tag;
+
+        if (currentTag == newest.Tag)
         {
             Status = Strings.HaveNewest;
             return;
         }
 
-        await _hub.FetchAsync(newest, text => Status = text);
-        Status = Strings.GotNewer(UpscalingViewModel.Night(newest.Tag));
+        _available = newest;
+        Status = "";
+    }
+
+    private async Task DownloadNewerAsync(CancellationToken cancel)
+    {
+        if (_available is not { } target) return;
+
+        Status = "";
+        IsDownloading = true;
+        DownloadProgress = Strings.Downloading(0);
+        Notify("");
+        Settled?.Invoke();
+
+        await _hub.FetchAsync(target, text =>
+        {
+            if (IsDownloading && !cancel.IsCancellationRequested) DownloadProgress = text;
+        }, cancel);
+
+        _available = null;
+        Status = Strings.GotNewer(UpscalingViewModel.Night(target.Tag));
+    }
+
+    private void OnCancelUpdate()
+    {
+        if (_operationCancel is { } cancel)
+        {
+            cancel.Cancel();
+            return;
+        }
+
+        if (_hub.IsBusy || _available is null) return;
+
+        _available = null;
+        Status = "";
+        Notify("");
+        Settled?.Invoke();
     }
 
     /// <summary>
