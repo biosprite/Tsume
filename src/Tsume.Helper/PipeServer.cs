@@ -119,6 +119,12 @@ public sealed class PipeServer(RequestHandler handler)
         if (request is SetRtssStartup startup)
             return RtssProfileWriter.SetStartup(startup.Enabled, CallerUserSid(pipe));
 
+        if (request is StartRtss)
+            return RtssProfileWriter.Start(CallerSession(pipe));
+
+        if (request is SetRtssOverlay overlay)
+            return RtssOverlayWriter.Apply(overlay);
+
         if (request is GetHardwareInventory inv)
             return DiscoveryWorker.HandleInventory(inv);
 

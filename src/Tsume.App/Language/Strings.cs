@@ -510,11 +510,15 @@ public static class Strings
     public static string RtssLevelDetailedDetail => Find();
     public static string RtssLevelFullDetail => Find();
 
-    public static string RtssCornerTopLeft => Find();
-    public static string RtssCornerTopRight => Find();
-    public static string RtssCornerBottomLeft => Find();
-    public static string RtssCornerBottomRight => Find();
-    public static string RtssScale => Find();
+    public static string RtssTheme => Find();
+    public static string RtssThemeDark => Find();
+    public static string RtssThemeSmoke => Find();
+    public static string RtssThemeWhite => Find();
+    public static string RtssThemeFloat => Find();
+    public static string RtssOverlayCredit => Find();
+    public static string RtssAidaConflictAida64 => Find();
+    public static string RtssAidaConflictWinhanced => Find();
+    public static string RtssAidaConflictOther => Find();
 
     public static string RtssShowOwnOsd => Find();
     public static string RtssShowOwnOsdDetail => Find();

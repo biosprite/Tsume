@@ -714,7 +714,7 @@
 
   <data name="RtssOverlayHeading" xml:space="preserve"><value>OVERLAY</value></data>
   <data name="RtssUseTsumeOverlay" xml:space="preserve"><value>FPS Overlay</value></data>
-  <data name="RtssUseTsumeOverlayOn" xml:space="preserve"><value>Tsume shows its own stats in games using RTSS</value></data>
+  <data name="RtssUseTsumeOverlayOn" xml:space="preserve"><value>RTSS shows Tsume's pick of the Essential overlays in games</value></data>
   <data name="RtssUseTsumeOverlayOff" xml:space="preserve"><value>Off. RTSS shows your own overlay setup instead</value></data>
 
   <data name="RtssLevelOff" xml:space="preserve"><value>Off</value></data>
@@ -724,16 +724,20 @@
   <data name="RtssLevelFull" xml:space="preserve"><value>Full</value></data>
 
   <data name="RtssLevelOffDetail" xml:space="preserve"><value>Tsume's overlay is hidden.</value></data>
-  <data name="RtssLevelFpsDetail" xml:space="preserve"><value>Minimal green frame-rate counter, Steam Deck style.</value></data>
-  <data name="RtssLevelBarDetail" xml:space="preserve"><value>Compact horizontal strip: battery, GPU, CPU, RAM and FPS.</value></data>
-  <data name="RtssLevelDetailedDetail" xml:space="preserve"><value>Stacked readout with temperatures, VRAM, fan speed and power.</value></data>
-  <data name="RtssLevelFullDetail" xml:space="preserve"><value>Full stats, power mode and a live frametime graph.</value></data>
+  <data name="RtssLevelFpsDetail" xml:space="preserve"><value>A small pill with the frame rate and 1% low.</value></data>
+  <data name="RtssLevelBarDetail" xml:space="preserve"><value>Essential Sleek: CPU and GPU usage rings, temperatures, power, FPS and 1% low.</value></data>
+  <data name="RtssLevelDetailedDetail" xml:space="preserve"><value>Essential Sleek Compact: adds clocks, RAM, VRAM, 0.1% low, frametime and a frametime graph.</value></data>
+  <data name="RtssLevelFullDetail" xml:space="preserve"><value>Essential Performance: a full side panel with CPU, GPU and frametime graphs.</value></data>
 
-  <data name="RtssCornerTopLeft" xml:space="preserve"><value>Top left</value></data>
-  <data name="RtssCornerTopRight" xml:space="preserve"><value>Top right</value></data>
-  <data name="RtssCornerBottomLeft" xml:space="preserve"><value>Bot. left</value></data>
-  <data name="RtssCornerBottomRight" xml:space="preserve"><value>Bot. right</value></data>
-  <data name="RtssScale" xml:space="preserve"><value>Overlay scale</value></data>
+  <data name="RtssTheme" xml:space="preserve"><value>Overlay theme</value></data>
+  <data name="RtssThemeDark" xml:space="preserve"><value>Dark</value></data>
+  <data name="RtssThemeSmoke" xml:space="preserve"><value>Smoke</value></data>
+  <data name="RtssThemeWhite" xml:space="preserve"><value>White</value></data>
+  <data name="RtssThemeFloat" xml:space="preserve"><value>Float</value></data>
+  <data name="RtssOverlayCredit" xml:space="preserve"><value>Essential overlays by realHfde (MIT). Drawn by RTSS's OverlayEditor. Level changes apply live; changing theme restarts RTSS.</value></data>
+  <data name="RtssAidaConflictAida64" xml:space="preserve"><value>AIDA64 is already using RTSS's sensor channel. Turn off AIDA64's shared memory or switch off FPS Overlay to keep your own setup.</value></data>
+  <data name="RtssAidaConflictWinhanced" xml:space="preserve"><value>Winhanced is already using RTSS's sensor channel. Close Winhanced or disable WinhancedOverlayBridge.dll in RTSS to use Tsume's overlay.</value></data>
+  <data name="RtssAidaConflictOther" xml:space="preserve"><value>Another app is already using RTSS's AIDA64 sensor channel. Close it or switch off FPS Overlay to keep your own setup.</value></data>
 
   <data name="RtssShowOwnOsd" xml:space="preserve"><value>Show on-screen display</value></data>
   <data name="RtssShowOwnOsdDetail" xml:space="preserve"><value>Toggles your own RTSS overlay on or off</value></data>

@@ -1,0 +1,81 @@
+[Master]
+Implementation=2
+FontFace=Inter
+FontHeight=-20
+FontWeight=700
+ZoomRatio=1
+[Settings]
+Name=Tsume FPS (Essential Sleek Smoke)
+EnvVars=
+RefreshPeriod=500
+LockUserSettings=1
+EmbeddedImage=essential_sleek_smoke_atlas.png
+PingAddr=127.0.0.1
+[General]
+Sources=0
+Tables=0
+Layers=7
+[Layer0]
+Name=Panel left
+Text=<I=0,0,0,0,36,72>
+PositionX=834
+PositionY=24
+ExtentX=36
+ExtentY=72
+ExtentOrigin=0
+[Layer1]
+Name=Panel middle
+Text=<I=0,0,150,0,180,72>
+PositionX=870
+PositionY=24
+ExtentX=180
+ExtentY=72
+ExtentOrigin=0
+[Layer2]
+Name=Panel right
+Text=<I=0,0,444,0,36,72>
+PositionX=1050
+PositionY=24
+ExtentX=36
+ExtentY=72
+ExtentOrigin=0
+[Layer3]
+Name=FPS label
+Text=FPS
+PositionX=871
+PositionY=38
+ExtentX=105
+ExtentY=11
+ExtentOrigin=4
+Size=62
+TextColor=E5E5EA
+[Layer4]
+Name=FPS
+Text=%Framerate%
+PositionX=871
+PositionY=52
+ExtentX=105
+ExtentY=28
+ExtentOrigin=4
+Size=142
+TextColor=FFFFFF
+[Layer5]
+Name=1% low label
+Text=1% LOW
+PositionX=945
+PositionY=38
+ExtentX=105
+ExtentY=11
+ExtentOrigin=4
+Size=62
+TextColor=E5E5EA
+[Layer6]
+Name=1% low
+Text=%Framerate 1% Low%
+PositionX=945
+PositionY=52
+ExtentX=105
+ExtentY=28
+ExtentOrigin=4
+Size=142
+TextColor=FFFFFF

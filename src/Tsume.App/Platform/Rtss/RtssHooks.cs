@@ -23,9 +23,6 @@ public sealed class RtssHooks : IDisposable
     private const string PropEnableFill = "EnableFill";
     private const string PropFillColor = "FillColor";
 
-    /// <summary>Dark translucent SteamOS pill background (AARRGGBB).</summary>
-    public const uint SteamFillColor = 0xB80E1117;
-
     private static readonly Journal Log = new("rtss");
 
     private nint _library;
@@ -164,39 +161,6 @@ public sealed class RtssHooks : IDisposable
         }
     }
 
-    /// <summary>Captures the user's current Global OSD position, zoom and fill so Tsume can restore them later.</summary>
-    public RtssAppearanceBackup? ReadAppearance(string? rtssFolder)
-    {
-        var values = rtssFolder is not null ? ReadProfileValues(rtssFolder) : null;
-
-        int x = ParseInt(values, "OSD.PositionX") ?? 1;
-        int y = ParseInt(values, "OSD.PositionY") ?? 1;
-        int zoom = ParseInt(values, "OSD.ZoomRatio") ?? 2;
-        int enableFill = ParseInt(values, "OSD.EnableFill") ?? 0;
-        uint fillColor = ParseHexUInt(values, "OSD.FillColor") ?? 0x80000000u;
-
-        if (values is not null)
-            return new RtssAppearanceBackup(x, y, zoom, enableFill, fillColor);
-
-        if (_loadProfile is null || _getProfileProperty is null) return null;
-
-        try
-        {
-            _loadProfile(GlobalProfile);
-            if (TryReadInt(PropPositionX, out var px)) x = px;
-            if (TryReadInt(PropPositionY, out var py)) y = py;
-            if (TryReadInt(PropZoomRatio, out var pz)) zoom = pz;
-            if (TryReadInt(PropEnableFill, out var pf)) enableFill = pf;
-            if (TryReadUInt(PropFillColor, out var pc)) fillColor = pc;
-            return new RtssAppearanceBackup(x, y, zoom, enableFill, fillColor);
-        }
-        catch (Exception error)
-        {
-            Log.Write($"ReadAppearance failed: {error.Message}");
-            return null;
-        }
-    }
-
     /// <summary>Direct fallback for writing Global profile properties when the helper service is offline.</summary>
     public bool TryWriteProfileDirect(int? limit = null, int? x = null, int? y = null, int? zoom = null, int? enableFill = null, uint? fillColor = null)
     {
@@ -208,7 +172,7 @@ public sealed class RtssHooks : IDisposable
             if (limit is { } l) TryWriteInt(PropFramerateLimit, Math.Clamp(l, 0, RtssSettings.MaxCustomFps));
             if (x is { } px) TryWriteInt(PropPositionX, px);
             if (y is { } py) TryWriteInt(PropPositionY, py);
-            if (zoom is { } pz) TryWriteInt(PropZoomRatio, Math.Clamp(pz, RtssSettings.MinScale, RtssSettings.MaxScale));
+            if (zoom is { } pz) TryWriteInt(PropZoomRatio, Math.Clamp(pz, 1, 8));
             if (enableFill is { } pf) TryWriteInt(PropEnableFill, pf != 0 ? 1 : 0);
             if (fillColor is { } pc) TryWriteUInt(PropFillColor, pc);
             _saveProfile(GlobalProfile);
@@ -220,15 +184,6 @@ public sealed class RtssHooks : IDisposable
             return false;
         }
     }
-
-    public static (int X, int Y) CoordinatesFor(RtssCorner corner) => corner switch
-    {
-        RtssCorner.TopLeft     => (8, 8),
-        RtssCorner.TopRight    => (-8, 8),
-        RtssCorner.BottomLeft  => (8, -8),
-        RtssCorner.BottomRight => (-8, -8),
-        _                      => (8, 8),
-    };
 
     private static Dictionary<string, string>? ReadProfileValues(string rtssFolder)
     {

@@ -46,7 +46,7 @@ internal static class RtssProfileWriter
         "DesktopOverlayHost64",
     ];
 
-    private static readonly Lock FileGate = new();
+    internal static readonly Lock FileGate = new();
 
     public static HelperReply Apply(SetRtssProfile request)
     {
@@ -195,6 +195,22 @@ internal static class RtssProfileWriter
             Log.Write($"Could not stop RTSS: {error.Message}");
             return HelperReply.Failure(error.Message);
         }
+    }
+
+    /// <summary>Starts RTSS minimized to the tray in the caller's session without a UAC prompt.</summary>
+    public static HelperReply Start(int session)
+    {
+        var installDir = FindRtssInstallDir();
+        if (installDir is null)
+            return HelperReply.Failure("RTSS is not installed.");
+
+        if (Process.GetProcessesByName("RTSS").Length > 0)
+            return new HelperReply { Ok = true };
+
+        // Do not pass /s here: RTSS treats /s as a Windows-startup launch and exits immediately when StartWithWindows=0.
+        return PanelStarter.StartElevated(session, Path.Combine(installDir, "RTSS.exe"), "")
+            ? new HelperReply { Ok = true }
+            : HelperReply.Failure("RTSS could not be started.");
     }
 
     public static HelperReply GetStartup(string? userSid)
@@ -549,7 +565,7 @@ internal static class RtssProfileWriter
         }
     }
 
-    private static void SetKey(List<string> lines, string section, string key, string value)
+    internal static void SetKey(List<string> lines, string section, string key, string value)
     {
         var sectionHeader = $"[{section}]";
         var sectionStart = -1;
@@ -601,7 +617,7 @@ internal static class RtssProfileWriter
         lines.Insert(insertAt, $"{key}={value}");
     }
 
-    private static string? FindRtssInstallDir()
+    internal static string? FindRtssInstallDir()
     {
         string[] registryKeys =
         [

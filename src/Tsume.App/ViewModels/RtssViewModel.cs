@@ -10,13 +10,11 @@ namespace Tsume.App.ViewModels;
 
 /// <summary>
 /// The RTSS tile and screen: detects an existing RTSS installation (linking to Guru3D rather than
-/// bundling RTSS), drives Tsume's Steam-style RTSS overlay with an option to leave the user's own
-/// RTSS overlay untouched, and controls RTSS's global OSD visibility and frame-rate cap.
+/// bundling RTSS), picks which Essential overlay layout and theme RTSS's OverlayEditor shows, with an option
+/// to leave the user's own RTSS overlay untouched, and controls RTSS's global OSD visibility and frame-rate cap.
 /// </summary>
 public sealed class RtssViewModel : LayerViewModel
 {
-    public const double MinScale = RtssSettings.MinScale;
-    public const double MaxScale = RtssSettings.MaxScale;
     public const double MinCustomFps = RtssSettings.MinCustomFps;
     public const double MaxCustomFps = RtssSettings.MaxCustomFps;
 
@@ -42,6 +40,10 @@ public sealed class RtssViewModel : LayerViewModel
     {
         _service = service;
         _dismiss = dismiss;
+
+        // Tsume restarts RTSS when the overlay theme changes or Tsume's overlay is toggled; show the new state once it is back.
+        _service.Restarted += () => Application.Current?.Dispatcher.InvokeAsync(RefreshState);
+        _service.ConflictChanged += () => Application.Current?.Dispatcher.InvokeAsync(NotifyConflict);
 
         _capSettle.Tick += (_, _) => { _capSettle.Stop(); ApplyFrameRateLimit(CustomCap); };
 
@@ -152,12 +154,12 @@ public sealed class RtssViewModel : LayerViewModel
         Strings.RtssLevelFull,
     ];
 
-    public IReadOnlyList<string> Corners { get; } =
+    public IReadOnlyList<string> Themes { get; } =
     [
-        Strings.RtssCornerTopLeft,
-        Strings.RtssCornerTopRight,
-        Strings.RtssCornerBottomLeft,
-        Strings.RtssCornerBottomRight,
+        Strings.RtssThemeDark,
+        Strings.RtssThemeSmoke,
+        Strings.RtssThemeWhite,
+        Strings.RtssThemeFloat,
     ];
 
     public IReadOnlyList<string> FrameCapModes { get; } =
@@ -441,6 +443,8 @@ public sealed class RtssViewModel : LayerViewModel
             Notify(nameof(UsesCustomOverlay));
             Notify(nameof(UseTsumeOverlayDetail));
             Notify(nameof(IsTsumeOverlayShown));
+            Notify(nameof(HasSharedMemoryConflict));
+            Notify(nameof(SharedMemoryConflictText));
             NotifyTile();
         }
     }
@@ -473,6 +477,22 @@ public sealed class RtssViewModel : LayerViewModel
 
     public bool IsTsumeOverlayShown => UseTsumeOverlay && LevelIndex > 0;
 
+    public bool HasSharedMemoryConflict => UseTsumeOverlay && _service.SharedMemoryConflict != AidaConflictKind.None;
+
+    public string SharedMemoryConflictText => _service.SharedMemoryConflict switch
+    {
+        AidaConflictKind.Aida64    => Strings.RtssAidaConflictAida64,
+        AidaConflictKind.Winhanced => Strings.RtssAidaConflictWinhanced,
+        AidaConflictKind.Other     => Strings.RtssAidaConflictOther,
+        _                          => "",
+    };
+
+    private void NotifyConflict()
+    {
+        Notify(nameof(HasSharedMemoryConflict));
+        Notify(nameof(SharedMemoryConflictText));
+    }
+
     public string LevelDetail => (RtssOverlayLevel)LevelIndex switch
     {
         RtssOverlayLevel.Fps      => Strings.RtssLevelFpsDetail,
@@ -482,29 +502,17 @@ public sealed class RtssViewModel : LayerViewModel
         _                         => Strings.RtssLevelOffDetail,
     };
 
-    public int CornerIndex
+    public int ThemeIndex
     {
         get;
         set
         {
-            var clamped = Math.Clamp(value, 0, Corners.Count - 1);
+            var clamped = Math.Clamp(value, 0, Themes.Count - 1);
             if (!Set(ref field, clamped) || _absorbing) return;
 
-            _service.ApplySettings(_service.Settings with { Corner = (RtssCorner)clamped });
+            _service.ApplySettings(_service.Settings with { Theme = (RtssOverlayTheme)clamped });
         }
     }
-
-    public double Scale
-    {
-        get;
-        set
-        {
-            var rounded = Math.Clamp(Math.Round(value), MinScale, MaxScale);
-            if (!Set(ref field, rounded) || _absorbing) return;
-
-            _service.ApplySettings(_service.Settings with { Scale = (int)rounded });
-        }
-    } = 2;
 
     public bool IsOsdVisible
     {
@@ -616,6 +624,8 @@ public sealed class RtssViewModel : LayerViewModel
         if (running == IsRunning) return;
 
         RefreshState();
+        _service.RetrySharedMemoryIfConflicted();
+        NotifyConflict();
         Status = DefaultStatus();
         Settled?.Invoke();
     }
@@ -631,6 +641,8 @@ public sealed class RtssViewModel : LayerViewModel
         }
 
         RefreshState();
+        _service.RetrySharedMemoryIfConflicted();
+        NotifyConflict();
         Status = DefaultStatus();
         if (IsInstalled)
         {
@@ -671,8 +683,7 @@ public sealed class RtssViewModel : LayerViewModel
         UseTsumeOverlay = settings.UseTsumeOverlay;
         SkipAntiCheatGames = settings.SkipAntiCheatGames;
         LevelIndex = (int)settings.Level;
-        CornerIndex = (int)settings.Corner;
-        Scale = Math.Clamp(settings.Scale, RtssSettings.MinScale, RtssSettings.MaxScale);
+        ThemeIndex = (int)settings.Theme;
         CustomCap = Math.Clamp(settings.CustomFrameRateLimit, RtssSettings.MinCustomFps, RtssSettings.MaxCustomFps);
 
         if (osdVisible is { } visible) IsOsdVisible = visible;
@@ -707,8 +718,7 @@ public sealed class RtssViewModel : LayerViewModel
         UseTsumeOverlay = settings.UseTsumeOverlay;
         SkipAntiCheatGames = settings.SkipAntiCheatGames;
         LevelIndex = (int)settings.Level;
-        CornerIndex = (int)settings.Corner;
-        Scale = Math.Clamp(settings.Scale, RtssSettings.MinScale, RtssSettings.MaxScale);
+        ThemeIndex = (int)settings.Theme;
         CustomCap = Math.Clamp(settings.CustomFrameRateLimit, RtssSettings.MinCustomFps, RtssSettings.MaxCustomFps);
         _absorbing = false;
 
@@ -1009,8 +1019,11 @@ public sealed class RtssViewModel : LayerViewModel
 
         try
         {
+            // Configure OverlayEditor before launch so RTSS starts straight into the chosen theme with no second restart.
+            await _service.EnsureSyncedAsync();
+
             // Launch off the UI thread so any Windows UAC prompt never freezes the panel.
-            var launched = await Task.Run(() => RtssInstallation.Launch(install, minimized: true));
+            var launched = await Task.Run(() => _service.LaunchRtssAsync(install));
             if (!launched)
             {
                 Status = Strings.RtssStartFailed;
@@ -1024,7 +1037,8 @@ public sealed class RtssViewModel : LayerViewModel
                 if (_service.IsRunning && (RtssSharedMemory.IsAvailable() || attempt >= 8))
                 {
                     RefreshState();
-                    _service.ApplySettings(_service.Settings);
+                    await _service.EnsureSyncedAsync();
+                    NotifyConflict();
                     if (SkipAntiCheatGames) _ = SyncAntiCheatAsync();
                     Status = DefaultStatus();
                     Settled?.Invoke();
@@ -1157,8 +1171,7 @@ public sealed class RtssViewModel : LayerViewModel
         _excludedGamesCount = 2;
         Notify(nameof(SkipAntiCheatDetail));
         LevelIndex = (int)level;
-        CornerIndex = (int)RtssCorner.TopLeft;
-        Scale = 2;
+        ThemeIndex = (int)RtssOverlayTheme.Dark;
         IsOsdVisible = true;
         ActiveFrameRateLimit = isRunning ? frameRateLimit : 0;
 

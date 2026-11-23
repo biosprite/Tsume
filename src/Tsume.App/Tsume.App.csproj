@@ -31,4 +31,12 @@
     <PackageReference Include="System.Management" Version="10.0.14" />
   </ItemGroup>
 
+  <ItemGroup Label="RTSS overlay layouts">
+    <!-- Combined Essential overlays (realHfde, MIT) + stitched atlases drawn by RTSS's OverlayEditor plugin. -->
+    <None Include="Overlays\Essential\LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Overlays\Essential\README.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Overlays\Essential\*\essential_tsume*.ovl" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Overlays\Essential\*\essential_tsume*_atlas.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

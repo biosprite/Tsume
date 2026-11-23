@@ -7,7 +7,7 @@ namespace Tsume.App.ViewModels;
 
 /// <summary>
 /// Everything the panel shows, grouped the same way the panel is laid out.
-/// Nothing here runs while the panel is closed, except the optional Steam-style RTSS overlay when turned on.
+/// Nothing here runs while the panel is closed. The optional RTSS overlay is drawn by RTSS itself.
 /// </summary>
 public sealed class PanelViewModel : IDisposable
 {
@@ -26,11 +26,7 @@ public sealed class PanelViewModel : IDisposable
         Actions = new ActionsViewModel(dismiss);
         Power = new PowerViewModel(dismiss);
 
-        _rtssService = new RtssOverlayService(helper, state, () =>
-        {
-            var limits = Performance.ActiveLimits;
-            return (PerformanceViewModel.Label(Performance.Mode), limits?.Sustained, limits?.Boost);
-        });
+        _rtssService = new RtssOverlayService(helper, state);
 
         Settings = new SettingsViewModel(helper, state, Performance, dismiss, _rtssService.SetFeatureEnabled);
         Lighting = new LightingViewModel();

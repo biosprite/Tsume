@@ -30,7 +30,7 @@ public sealed class SavedState
     /// <summary>Whether the RTSS tile is on the main screen. Hiding it uninstalls nothing.</summary>
     public bool ShowRtss { get; set; } = true;
 
-    /// <summary>RTSS Steam-style overlay and frame-rate limiter preferences. Null: defaults apply.</summary>
+    /// <summary>RTSS overlay and frame-rate limiter preferences. Null: defaults apply.</summary>
     public Platform.Rtss.RtssSettings? Rtss { get; set; }
 
     /// <summary>Tsume's own colours, chosen on the customization page. Null: the default scheme.</summary>

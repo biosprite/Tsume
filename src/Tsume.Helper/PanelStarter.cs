@@ -299,6 +299,91 @@ internal static class PanelStarter
         return copy;
     }
 
+    /// <summary>
+    /// Starts <paramref name="path"/> in <paramref name="session"/> as the person signed in there, with the full-rights
+    /// half of their administrator token, so a program whose manifest demands elevation starts without a UAC prompt.
+    /// Only for a program path the helper resolved itself (RTSS from its own install record), never a caller's path.
+    /// A standard user has no full-rights token, so nothing starts for them.
+    /// </summary>
+    internal static bool StartElevated(int session, string path, string arguments)
+    {
+        if (session < 0 || !WTSQueryUserToken((uint)session, out var person)) return false;
+
+        try
+        {
+            var token = FullRightsToken(person);
+            if (token == 0)
+            {
+                Log.Write($"No administrator token in session {session}; not starting {Path.GetFileName(path)}");
+                return false;
+            }
+
+            try
+            {
+                if (!CreateEnvironmentBlock(out var environment, token, inherit: false)) throw new Win32Exception();
+
+                try
+                {
+                    var start = new StartupInfo
+                    {
+                        Size = Marshal.SizeOf<StartupInfo>(),
+                        Desktop = @"winsta0\default",
+                        Flags = StartfUseShowWindow,
+                        ShowWindow = SwShowMinNoActive,
+                    };
+                    var command = string.IsNullOrWhiteSpace(arguments)
+                        ? new StringBuilder($"\"{path}\"")
+                        : new StringBuilder($"\"{path}\" {arguments}");
+
+                    if (!CreateProcessAsUser(token, path, command, 0, 0, false, UnicodeEnvironment,
+                            environment, Path.GetDirectoryName(path)!, ref start, out var started))
+                    {
+                        throw new Win32Exception();
+                    }
+
+                    CloseHandle(started.Thread);
+                    CloseHandle(started.Process);
+                    return true;
+                }
+                finally
+                {
+                    DestroyEnvironmentBlock(environment);
+                }
+            }
+            finally
+            {
+                CloseHandle(token);
+            }
+        }
+        catch (Win32Exception error)
+        {
+            Log.Write($"Could not start {Path.GetFileName(path)} elevated: {error.Message}");
+            return false;
+        }
+        finally
+        {
+            CloseHandle(person);
+        }
+    }
+
+    /// <summary>
+    /// The person's elevated token: the linked full token when UAC split it (needs SeTcbPrivilege for a primary
+    /// token), or a copy of the token itself when it is already elevated. Zero for a standard user.
+    /// </summary>
+    private static nint FullRightsToken(nint person)
+    {
+        if (!GetTokenInformation(person, TokenElevationType, out var type, sizeof(int), out _)) return 0;
+
+        if (type == ElevationTypeLimited)
+        {
+            if (!TcbEnabled.Value) return 0;
+            return GetTokenHandle(person, TokenLinkedToken, out var linked, IntPtr.Size, out _) ? linked : 0;
+        }
+
+        if (!GetTokenInformation(person, TokenElevation, out var elevated, sizeof(int), out _) || elevated == 0) return 0;
+        return DuplicateTokenEx(person, TokenForLaunch, 0, SecurityImpersonation, TokenPrimary, out var copy) ? copy : 0;
+    }
+
     private static readonly Lazy<bool> TcbEnabled = new(EnableTcbPrivilege);
 
     /// <summary>Enables SeTcbPrivilege on this service once, so <see cref="SetTokenInformation"/> may set UIAccess.</summary>
@@ -330,8 +415,14 @@ internal static class PanelStarter
 
     private const uint UnicodeEnvironment = 0x0400;   // CREATE_UNICODE_ENVIRONMENT
     private const uint WaitObject0 = 0x0000_0000;     // WAIT_OBJECT_0
+    private const int StartfUseShowWindow = 0x0001;   // STARTF_USESHOWWINDOW
+    private const short SwShowMinNoActive = 7;        // SW_SHOWMINNOACTIVE
 
     private const int TokenUIAccess = 26;             // TOKEN_INFORMATION_CLASS.TokenUIAccess
+    private const int TokenElevationType = 18;        // TOKEN_INFORMATION_CLASS.TokenElevationType
+    private const int TokenLinkedToken = 19;          // TOKEN_INFORMATION_CLASS.TokenLinkedToken
+    private const int TokenElevation = 20;            // TOKEN_INFORMATION_CLASS.TokenElevation
+    private const int ElevationTypeLimited = 3;       // TOKEN_ELEVATION_TYPE.TokenElevationTypeLimited
     private const int TokenPrimary = 1;               // TOKEN_TYPE.TokenPrimary
     private const int SecurityImpersonation = 2;      // SECURITY_IMPERSONATION_LEVEL
     private const int SePrivilegeEnabled = 0x2;       // SE_PRIVILEGE_ENABLED
@@ -392,6 +483,12 @@ internal static class PanelStarter
 
     [DllImport("advapi32.dll", SetLastError = true)]
     private static extern bool SetTokenInformation(nint token, int infoClass, ref int info, int length);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool GetTokenInformation(nint token, int infoClass, out int info, int length, out int returned);
+
+    [DllImport("advapi32.dll", EntryPoint = "GetTokenInformation", SetLastError = true)]
+    private static extern bool GetTokenHandle(nint token, int infoClass, out nint info, int length, out int returned);
 
     [DllImport("advapi32.dll", SetLastError = true)]
     private static extern bool OpenProcessToken(nint process, uint access, out nint token);

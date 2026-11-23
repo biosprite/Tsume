@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Tsume.App.Platform.Rtss;
 
-/// <summary>SteamOS-style performance overlay levels drawn by Tsume through RTSS.</summary>
+/// <summary>Performance overlay levels drawn by Tsume through RTSS, each mapped to an Essential layout.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum RtssOverlayLevel
 {
@@ -13,19 +13,19 @@ public enum RtssOverlayLevel
     Full = 4,
 }
 
-/// <summary>Which screen corner Tsume's Steam-style RTSS overlay anchors to.</summary>
+/// <summary>Color variant of the Essential overlay layouts.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
-public enum RtssCorner
+public enum RtssOverlayTheme
 {
-    TopLeft = 0,
-    TopRight = 1,
-    BottomLeft = 2,
-    BottomRight = 3,
+    Dark = 0,
+    Smoke = 1,
+    White = 2,
+    Float = 3,
 }
 
 /// <summary>
-/// Snapshot of the user's own RTSS Global profile appearance taken before Tsume applies its
-/// Steam-style styling, so turning Tsume's overlay off puts their settings back.
+/// Snapshot of the user's own RTSS Global profile appearance that older Tsume versions took before restyling
+/// RTSS for their Steam-style overlay. Tsume now only reads it once, to put those values back.
 /// </summary>
 public sealed record RtssAppearanceBackup(
     int PositionX,
@@ -37,23 +37,18 @@ public sealed record RtssAppearanceBackup(
 /// <summary>Saved RTSS preferences, stored inside <see cref="SavedState"/>.</summary>
 public sealed record RtssSettings
 {
-    public const int MinScale = 1;
-    public const int MaxScale = 4;
     public const int MinCustomFps = 15;
     public const int MaxCustomFps = 240;
 
     /// <summary>
-    /// True to draw Tsume's Steam-style overlay into RTSS; false to leave the overlay layout
+    /// True to draw Tsume's overlay into RTSS; false to leave the overlay layout
     /// completely to the user's own RTSS / Afterburner / HWiNFO setup.
     /// </summary>
     public bool UseTsumeOverlay { get; init; } = true;
 
     public RtssOverlayLevel Level { get; init; } = RtssOverlayLevel.Off;
 
-    public RtssCorner Corner { get; init; } = RtssCorner.TopLeft;
-
-    /// <summary>RTSS zoom factor (1–4) when Tsume's Steam-style overlay is active.</summary>
-    public int Scale { get; init; } = 2;
+    public RtssOverlayTheme Theme { get; init; } = RtssOverlayTheme.Dark;
 
     /// <summary>Last custom frame-rate limit chosen with the slider (FPS).</summary>
     public int CustomFrameRateLimit { get; init; } = 45;

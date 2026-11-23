@@ -7,7 +7,7 @@
              xmlns:vm="clr-namespace:Tsume.App.ViewModels"
              Focusable="False">
 
-  <!-- RTSS: Steam-style performance overlay (optional — can leave the user's own overlay alone),
+  <!-- RTSS: Essential performance overlay via RTSS's OverlayEditor (optional — can leave the user's own overlay alone),
        global frame-rate cap, and a link to the download page (install, Guru3D, uninstall). -->
 
   <DockPanel DataContext="{Binding Rtss}">
@@ -117,7 +117,7 @@
               <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.RtssOverlayHeading}"
                          Margin="4,10,0,10" />
 
-              <!-- Lets the user opt out of Tsume's Steam-style overlay and keep their own RTSS layout untouched. -->
+              <!-- Lets the user opt out of Tsume's overlay and keep their own RTSS layout untouched. -->
               <controls:Tile Style="{StaticResource Tile.Switch}"
                              Glyph="{x:Static theme:Glyphs.Overlay}"
                              Label="{x:Static lang:Strings.RtssUseTsumeOverlay}"
@@ -125,7 +125,7 @@
                              IsOn="{Binding UseTsumeOverlay}"
                              Command="{Binding ToggleUseTsumeOverlay}" />
 
-              <!-- Tsume's built-in Steam-style overlay controls. -->
+              <!-- Level and theme of the Essential layouts RTSS's OverlayEditor draws. -->
               <controls:Reveal IsOpen="{Binding UseTsumeOverlay}">
                 <StackPanel>
 
@@ -135,19 +135,27 @@
                   <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
                              Text="{Binding LevelDetail}" Margin="6,6,6,0" />
 
+                  <controls:Reveal IsOpen="{Binding HasSharedMemoryConflict}">
+                    <Border Style="{StaticResource Card.Warning}" Margin="0,10,0,0">
+                      <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Icon}" FontSize="15"
+                                   Foreground="{StaticResource Signal.Warn}" VerticalAlignment="Top" Margin="0,1,10,0"
+                                   Text="{x:Static theme:Glyphs.Warning}" />
+                        <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
+                                   TextWrapping="Wrap" TextTrimming="None"
+                                   Text="{Binding SharedMemoryConflictText}" />
+                      </DockPanel>
+                    </Border>
+                  </controls:Reveal>
+
                   <controls:Reveal IsOpen="{Binding IsTsumeOverlayShown}">
                     <StackPanel>
                       <controls:SegmentedControl Margin="0,10,0,0"
-                                                 Segments="{Binding Corners}" SelectedIndex="{Binding CornerIndex}" />
+                                                 AutomationProperties.Name="{x:Static lang:Strings.RtssTheme}"
+                                                 Segments="{Binding Themes}" SelectedIndex="{Binding ThemeIndex}" />
 
-                      <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Upscaling}"
-                                            Label="{x:Static lang:Strings.RtssScale}" Unit="×"
-                                            AutomationProperties.Name="{x:Static lang:Strings.RtssScale}"
-                                            Minimum="{x:Static vm:RtssViewModel.MinScale}"
-                                            Maximum="{x:Static vm:RtssViewModel.MaxScale}"
-                                            LargeChange="1"
-                                            Value="{Binding Scale}"
-                                            Margin="0,8,0,0" />
+                      <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+                                 Text="{x:Static lang:Strings.RtssOverlayCredit}" Margin="6,6,6,0" />
                     </StackPanel>
                   </controls:Reveal>
 

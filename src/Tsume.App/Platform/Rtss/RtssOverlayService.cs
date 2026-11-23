@@ -9,66 +9,99 @@ using Tsume.Upscaling.Games;
 namespace Tsume.App.Platform.Rtss;
 
 /// <summary>
-/// Coordinates Tsume's Steam-style RTSS overlay loop, helper-backed Global profile updates
-/// (position, scale, fill, frame-rate cap), and instant in-game reload signalling.
-/// Runs zero background work when Tsume's Steam-style overlay is turned off or its level is Off.
+/// Drives Tsume's RTSS overlay through RTSS's own OverlayEditor plugin using one combined Essential layout
+/// (realHfde, MIT) per theme. OverlayEditor stays enabled while <see cref="RtssSettings.UseTsumeOverlay"/> is on;
+/// switching levels (including Off) updates <c>AIDA64_SensorValues</c> live with no helper call and no RTSS restart.
+/// Only toggling Tsume's overlay on/off or changing theme updates <c>OverlayEditor.cfg</c> and restarts RTSS (without UAC).
+/// When Tsume exits, the shared-memory handle closes and the overlay disappears automatically.
 /// </summary>
 public sealed class RtssOverlayService : IDisposable
 {
-    private static readonly TimeSpan ActiveInterval = TimeSpan.FromSeconds(1);
-    private static readonly TimeSpan WaitingInterval = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan TelemetryInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan ConflictRetryInterval = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan ThemeDebounceInterval = TimeSpan.FromMilliseconds(450);
     private static readonly Journal Log = new("rtss");
 
     private readonly HelperClient _helper;
     private readonly SavedState _state;
-    private readonly Func<(string ModeLabel, int? Sustained, int? Boost)> _readPowerInfo;
     private readonly RtssHooks _hooks = new();
-    private readonly SystemTelemetry _telemetry = new();
+    private readonly AidaSensorBridge _aida = new();
+    private readonly EnergyMeterTelemetry _energy = new();
     private readonly Lock _gate = new();
+    private readonly SemaphoreSlim _sync = new(1, 1);
 
     private RtssSettings _settings;
     private RtssInstallInfo? _install;
-    private CancellationTokenSource? _loopCts;
-    private bool _appearanceApplied;
+    private CancellationTokenSource? _telemetryCts;
+    private CancellationTokenSource? _themeDebounceCts;
+    private AidaConflictKind _lastReportedConflict;
+    private int? _lastCpuTemp;
+    private double? _lastCpuWatts;
+    private double? _lastGpuWatts;
+    private double? _lastCpuClockMhz;
     private bool _disposed;
 
-    public RtssOverlayService(
-        HelperClient helper,
-        SavedState state,
-        Func<(string ModeLabel, int? Sustained, int? Boost)> readPowerInfo)
+    public RtssOverlayService(HelperClient helper, SavedState state)
     {
         _helper = helper;
         _state = state;
-        _readPowerInfo = readPowerInfo;
         _settings = state.Rtss ?? new RtssSettings();
     }
+
+    /// <summary>Raised (off the UI thread) after Tsume restarted RTSS so it loads a new overlay theme.</summary>
+    public event Action? Restarted;
+
+    /// <summary>Raised (off the UI thread) when <see cref="SharedMemoryConflict"/> changes.</summary>
+    public event Action? ConflictChanged;
 
     public RtssSettings Settings => _settings;
 
     public RtssInstallInfo? Install => _install;
 
-    /// <summary>Starts the background overlay updater if the tile is enabled and Tsume's overlay is turned on.</summary>
+    /// <summary>Non-None when AIDA64, Winhanced, or another app already owns <c>AIDA64_SensorValues</c>.</summary>
+    public AidaConflictKind SharedMemoryConflict => _aida.Conflict;
+
+    private bool IsOverlayPluginWanted => _state.ShowRtss && _settings.UseTsumeOverlay;
+
+    private bool IsOverlayVisibleWanted => IsOverlayPluginWanted && _settings.Level != RtssOverlayLevel.Off;
+
+    /// <summary>Checks the overlay setup once at start-up (and clears any slot left by older Tsume versions).</summary>
     public void StartIfEnabled()
     {
         var install = RefreshInstallation();
+        RtssSharedMemory.ClearSlot();
+
         if (_state.ShowRtss && install is not null && _settings.SkipAntiCheatGames)
             _ = Task.Run(() => SyncAntiCheatExclusionsAsync());
 
-        if (_state.ShowRtss && ShouldRenderOverlay) StartLoop();
+        ApplyLiveLevelState();
+
+        if (install is not null) _ = Task.Run(SyncOverlayPluginAsync);
     }
 
-    /// <summary>Pauses or resumes Tsume's background overlay when the RTSS tile itself is hidden or shown in Settings.</summary>
+    /// <summary>Hands the overlay back to the user's own setup, or takes it again, when the RTSS tile is hidden or shown in Settings.</summary>
     public void SetFeatureEnabled(bool enabled)
     {
-        if (!enabled)
-        {
-            StopLoop();
-            RtssSharedMemory.ClearSlot();
-            _telemetry.Reset();
-            return;
-        }
+        CancelThemeDebounce();
+        ApplyLiveLevelState();
+        _ = Task.Run(SyncOverlayPluginAsync);
+    }
 
-        if (ShouldRenderOverlay) StartLoop();
+    /// <summary>Re-checks <c>AIDA64_SensorValues</c> if a previous conflict prevented Tsume from claiming it.</summary>
+    public void RetrySharedMemoryIfConflicted()
+    {
+        if (IsOverlayVisibleWanted && !_aida.IsOwned)
+            ApplyLiveLevelState();
+    }
+
+    /// <summary>
+    /// Ensures OverlayEditor is configured for the current theme before starting RTSS (so RTSS loads the right
+    /// layout on its very first boot without needing a second restart), and refreshes the live AIDA64 state.
+    /// </summary>
+    public async Task EnsureSyncedAsync()
+    {
+        ApplyLiveLevelState(ensureOsdVisible: IsOverlayVisibleWanted);
+        await SyncOverlayPluginAsync().ConfigureAwait(false);
     }
 
     /// <summary>Re-scans for RTSS and loads <c>RTSSHooks64.dll</c> directly from its install folder if found.</summary>
@@ -87,12 +120,7 @@ public sealed class RtssOverlayService : IDisposable
     /// Lets go of <c>RTSSHooks64.dll</c> so RTSS's uninstaller can delete it. The next
     /// <see cref="RefreshInstallation"/> loads it again if RTSS is still there.
     /// </summary>
-    public void ReleaseHooks()
-    {
-        StopLoop();
-        _hooks.Dispose();
-        _appearanceApplied = false;
-    }
+    public void ReleaseHooks() => _hooks.Dispose();
 
     public bool IsRunning => RtssInstallation.IsRunning();
 
@@ -134,11 +162,6 @@ public sealed class RtssOverlayService : IDisposable
     /// <summary>Stops RTSS completely via the elevated helper (falling back to direct kill if unelevated).</summary>
     public async Task<bool> StopRtssAsync()
     {
-        StopLoop();
-        RtssSharedMemory.ClearSlot();
-        _telemetry.Reset();
-        _appearanceApplied = false;
-
         var reply = await _helper.SendAsync(new StopRtss()).ConfigureAwait(false);
         if (!reply.Ok)
         {
@@ -160,6 +183,24 @@ public sealed class RtssOverlayService : IDisposable
         }
 
         return !IsRunning;
+    }
+
+    /// <summary>
+    /// Starts RTSS, which demands elevation. The helper starts it in this session with the signed-in administrator's
+    /// full token, so there is no UAC prompt; only when the helper cannot be reached does Windows ask instead.
+    /// </summary>
+    public async Task<bool> LaunchRtssAsync(RtssInstallInfo install)
+    {
+        var reply = await _helper.SendAsync(new StartRtss()).ConfigureAwait(false);
+        if (reply.Ok) return true;
+        if (!reply.Unreachable)
+        {
+            Log.Write($"helper rtss.start failed ({reply.Error})");
+            return false;
+        }
+
+        Log.Write("helper offline; starting RTSS through Windows (UAC prompt)");
+        return RtssInstallation.Launch(install, minimized: true);
     }
 
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -284,109 +325,287 @@ public sealed class RtssOverlayService : IDisposable
     }
 
     /// <summary>
-    /// Saves and applies new RTSS overlay settings.
-    /// Turning <see cref="RtssSettings.UseTsumeOverlay"/> off immediately clears Tsume's OSD slot
-    /// and restores the user's original RTSS Global appearance so their custom overlay is untouched.
+    /// Saves new overlay settings and applies them:
+    /// - Level changes (including Off) only update <c>AIDA64_SensorValues</c> live, with no helper call and no RTSS restart.
+    /// - Toggling <see cref="RtssSettings.UseTsumeOverlay"/> updates OverlayEditor immediately and restarts RTSS if changed.
+    /// - Theme changes are debounced so stepping across themes only restarts RTSS once on the final choice.
     /// </summary>
     public void ApplySettings(RtssSettings next)
     {
         var previous = _settings;
         _settings = next;
+        SaveSettings();
 
-        EnsureHooks();
+        var pluginChanged = previous.UseTsumeOverlay != next.UseTsumeOverlay;
+        var themeChanged = previous.Theme != next.Theme;
+        var levelChanged = previous.Level != next.Level;
 
-        if (!next.UseTsumeOverlay)
+        if (pluginChanged || levelChanged)
+            ApplyLiveLevelState(ensureOsdVisible: levelChanged && next.Level != RtssOverlayLevel.Off);
+
+        if (pluginChanged)
         {
-            StopLoop();
-            RtssSharedMemory.ClearSlot();
-            _telemetry.Reset();
+            CancelThemeDebounce();
+            _ = Task.Run(SyncOverlayPluginAsync);
+        }
+        else if (themeChanged && IsOverlayPluginWanted)
+        {
+            ScheduleDebouncedPluginSync();
+        }
+    }
 
-            var backup = next.SavedAppearance;
-            if (backup is not null)
+    private void ApplyLiveLevelState(bool ensureOsdVisible = false)
+    {
+        if (_disposed) return;
+
+        if (!IsOverlayVisibleWanted)
+        {
+            StopTelemetryLoop();
+            _energy.Reset();
+            _aida.Release();
+            CheckConflictChanged();
+            return;
+        }
+
+        var level = _settings.Level;
+        int? cpuTemp;
+        double? cpuWatts;
+        double? gpuWatts;
+        double? cpuClockMhz;
+        lock (_gate)
+        {
+            cpuTemp = _lastCpuTemp;
+            cpuWatts = _lastCpuWatts;
+            gpuWatts = _lastGpuWatts;
+            cpuClockMhz = _lastCpuClockMhz;
+        }
+
+        _aida.TryPublish(new AidaSensorSnapshot((int)level, cpuTemp, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz), _install?.Folder);
+        CheckConflictChanged();
+
+        if (ensureOsdVisible && IsRunning)
+        {
+            EnsureHooks();
+            _hooks.SetOsdVisible(true);
+        }
+
+        if (level >= RtssOverlayLevel.Bar)
+        {
+            StartTelemetryLoop();
+        }
+        else
+        {
+            StopTelemetryLoop();
+            _energy.Reset();
+        }
+    }
+
+    private void StartTelemetryLoop()
+    {
+        lock (_gate)
+        {
+            if (_disposed || _telemetryCts is not null) return;
+            _telemetryCts = new CancellationTokenSource();
+            var token = _telemetryCts.Token;
+            _ = Task.Run(() => RunTelemetryLoopAsync(token), token);
+        }
+    }
+
+    private void StopTelemetryLoop()
+    {
+        CancellationTokenSource? cts;
+        lock (_gate)
+        {
+            cts = _telemetryCts;
+            _telemetryCts = null;
+        }
+
+        if (cts is not null)
+        {
+            try { cts.Cancel(); }
+            catch (ObjectDisposedException) { }
+            cts.Dispose();
+        }
+    }
+
+    private async Task RunTelemetryLoopAsync(CancellationToken cancel)
+    {
+        while (!cancel.IsCancellationRequested && IsOverlayVisibleWanted && _settings.Level >= RtssOverlayLevel.Bar)
+        {
+            try
             {
-                _settings = next with { SavedAppearance = null };
-                _appearanceApplied = false;
-                SaveSettings();
-                _ = Task.Run(() => RestoreAppearanceAsync(backup));
+                var (cpuWatts, gpuWatts, cpuClockMhz) = _energy.Sample();
+
+                int? cpuTemp = null;
+                try
+                {
+                    var reply = await _helper.SendAsync(new GetReadings(), cancel).ConfigureAwait(false);
+                    if (reply.Ok) cpuTemp = reply.Readings?.CpuTemperature;
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch
+                {
+                    // Helper offline: omit temperature cleanly.
+                }
+
+                if (cancel.IsCancellationRequested || !IsOverlayVisibleWanted) break;
+
+                lock (_gate)
+                {
+                    _lastCpuTemp = cpuTemp;
+                    _lastCpuWatts = cpuWatts;
+                    _lastGpuWatts = gpuWatts;
+                    _lastCpuClockMhz = cpuClockMhz;
+                }
+
+                var level = _settings.Level;
+                if (level == RtssOverlayLevel.Off) break;
+
+                var ok = _aida.TryPublish(
+                    new AidaSensorSnapshot((int)level, cpuTemp, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz),
+                    _install?.Folder);
+                CheckConflictChanged();
+
+                await Task.Delay(ok ? TelemetryInterval : ConflictRetryInterval, cancel).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception error)
+            {
+                Log.Write($"overlay telemetry tick failed: {error.Message}");
+                try { await Task.Delay(ConflictRetryInterval, cancel).ConfigureAwait(false); }
+                catch (OperationCanceledException) { break; }
+            }
+        }
+    }
+
+    private void ScheduleDebouncedPluginSync()
+    {
+        CancellationToken token;
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _themeDebounceCts?.Cancel();
+            _themeDebounceCts?.Dispose();
+            _themeDebounceCts = new CancellationTokenSource();
+            token = _themeDebounceCts.Token;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(ThemeDebounceInterval, token).ConfigureAwait(false);
+                if (!token.IsCancellationRequested)
+                    await SyncOverlayPluginAsync().ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { }
+        }, token);
+    }
+
+    private void CancelThemeDebounce()
+    {
+        CancellationTokenSource? cts;
+        lock (_gate)
+        {
+            cts = _themeDebounceCts;
+            _themeDebounceCts = null;
+        }
+
+        if (cts is not null)
+        {
+            try { cts.Cancel(); }
+            catch (ObjectDisposedException) { }
+            cts.Dispose();
+        }
+    }
+
+    private void CheckConflictChanged()
+    {
+        var current = _aida.Conflict;
+        var changed = false;
+        lock (_gate)
+        {
+            if (_lastReportedConflict != current)
+            {
+                _lastReportedConflict = current;
+                changed = true;
+            }
+        }
+
+        if (changed) ConflictChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Points OverlayEditor at the combined layout for the current theme through the helper (or restores the
+    /// user's original setup when Tsume's overlay is turned off) and restarts RTSS only when that changed anything.
+    /// Runs one at a time, always with the latest settings.
+    /// </summary>
+    private async Task SyncOverlayPluginAsync()
+    {
+        if (_disposed) return;
+        await _sync.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_install is null) return;
+
+            await RestoreLegacyAppearanceAsync().ConfigureAwait(false);
+
+            var layout = IsOverlayPluginWanted ? "tsume" : null;
+            var theme = layout is null ? null : _settings.Theme.ToString().ToLowerInvariant();
+            var reply = await _helper.SendAsync(new SetRtssOverlay(layout, theme)).ConfigureAwait(false);
+            if (!reply.Ok)
+            {
+                Log.Write($"helper rtss.overlay.set failed ({reply.Error ?? "offline"})");
                 return;
             }
 
-            SaveSettings();
-            return;
-        }
+            if (reply.RtssOverlayChanged == true && IsRunning)
+                await RestartRtssAsync().ConfigureAwait(false);
 
-        if (next.Level == RtssOverlayLevel.Off)
-        {
-            StopLoop();
-            RtssSharedMemory.ClearSlot();
-            _telemetry.Reset();
-            SaveSettings();
-            return;
-        }
-
-        var appearanceChanged = !_appearanceApplied
-            || previous.Corner != next.Corner
-            || previous.Scale != next.Scale
-            || !previous.UseTsumeOverlay;
-
-        if (appearanceChanged) _appearanceApplied = false;
-
-        SaveSettings();
-        StartLoop();
-
-        // Apply profile + push a fresh OSD frame immediately without waiting for the next 1 s tick.
-        _ = Task.Run(async () =>
-        {
-            if (appearanceChanged && IsRunning)
+            if (IsOverlayVisibleWanted && IsRunning)
             {
-                await ApplySteamAppearanceAsync().ConfigureAwait(false);
+                EnsureHooks();
                 _hooks.SetOsdVisible(true);
             }
-
-            await PushOneFrameAsync(CancellationToken.None).ConfigureAwait(false);
-        });
-    }
-
-    private bool ShouldRenderOverlay => _settings.UseTsumeOverlay && _settings.Level != RtssOverlayLevel.Off;
-
-    private void EnsureHooks()
-    {
-        if (_install is null) RefreshInstallation();
-        else if (_install.HooksDll is { } hooks) _hooks.EnsureLoaded(hooks);
-    }
-
-    private async Task ApplySteamAppearanceAsync()
-    {
-        EnsureHooks();
-        var current = _settings;
-        if (!current.UseTsumeOverlay || current.Level == RtssOverlayLevel.Off) return;
-
-        if (current.SavedAppearance is null && _hooks.ReadAppearance(_install?.Folder) is { } backup)
-        {
-            _settings = _settings with { SavedAppearance = backup };
-            SaveSettings();
         }
-
-        var (x, y) = RtssHooks.CoordinatesFor(current.Corner);
-        var scale = Math.Clamp(current.Scale, RtssSettings.MinScale, RtssSettings.MaxScale);
-
-        var request = new SetRtssProfile(
-            PositionX: x,
-            PositionY: y,
-            ZoomRatio: scale,
-            EnableFill: 1,
-            FillColor: RtssHooks.SteamFillColor);
-
-        if (await WriteGlobalProfileAsync(request).ConfigureAwait(false))
+        catch (Exception error)
         {
-            _appearanceApplied = true;
-            _hooks.NotifyProfilesUpdated();
+            Log.Write($"overlay sync failed: {error.Message}");
+        }
+        finally
+        {
+            _sync.Release();
         }
     }
 
-    private async Task RestoreAppearanceAsync(RtssAppearanceBackup backup)
+    private async Task RestartRtssAsync()
     {
-        EnsureHooks();
+        if (_install is not { } install) return;
+
+        Log.Write("restarting RTSS to load the new overlay theme");
+        if (!await StopRtssAsync().ConfigureAwait(false)) return;
+        if (!await LaunchRtssAsync(install).ConfigureAwait(false)) return;
+
+        for (var attempt = 0; attempt < 30 && !RtssSharedMemory.IsAvailable(); attempt++)
+            await Task.Delay(250).ConfigureAwait(false);
+
+        Restarted?.Invoke();
+    }
+
+    /// <summary>
+    /// Older Tsume versions restyled RTSS's Global OSD (position, zoom, fill) for their Steam-style overlay and kept a
+    /// backup of the user's values. The Essential layouts position themselves, so put those values back once.
+    /// </summary>
+    private async Task RestoreLegacyAppearanceAsync()
+    {
+        if (_settings.SavedAppearance is not { } backup) return;
+
         var request = new SetRtssProfile(
             PositionX: backup.PositionX,
             PositionY: backup.PositionY,
@@ -394,11 +613,18 @@ public sealed class RtssOverlayService : IDisposable
             EnableFill: backup.EnableFill,
             FillColor: backup.FillColor);
 
-        if (await WriteGlobalProfileAsync(request).ConfigureAwait(false))
-        {
-            _hooks.NotifyProfilesUpdated();
-            Log.Write("restored user's original RTSS Global profile appearance");
-        }
+        if (!await WriteGlobalProfileAsync(request).ConfigureAwait(false)) return;
+
+        _hooks.NotifyProfilesUpdated();
+        _settings = _settings with { SavedAppearance = null };
+        SaveSettings();
+        Log.Write("restored the user's original RTSS Global profile appearance");
+    }
+
+    private void EnsureHooks()
+    {
+        if (_install is null) RefreshInstallation();
+        else if (_install.HooksDll is { } hooks) _hooks.EnsureLoaded(hooks);
     }
 
     private async Task<bool> WriteGlobalProfileAsync(SetRtssProfile request)
@@ -425,136 +651,16 @@ public sealed class RtssOverlayService : IDisposable
         }
     }
 
-    private void StartLoop()
-    {
-        lock (_gate)
-        {
-            if (_disposed || _loopCts is not null) return;
-            _loopCts = new CancellationTokenSource();
-            var token = _loopCts.Token;
-            _ = Task.Run(() => RunLoopAsync(token), token);
-        }
-    }
-
-    private void StopLoop()
-    {
-        CancellationTokenSource? cts;
-        lock (_gate)
-        {
-            cts = _loopCts;
-            _loopCts = null;
-        }
-
-        if (cts is not null)
-        {
-            try { cts.Cancel(); }
-            catch (ObjectDisposedException) { }
-            cts.Dispose();
-        }
-    }
-
-    private async Task RunLoopAsync(CancellationToken cancel)
-    {
-        while (!cancel.IsCancellationRequested && ShouldRenderOverlay)
-        {
-            try
-            {
-                if (!IsRunning || !RtssSharedMemory.IsAvailable())
-                {
-                    _appearanceApplied = false;
-                    await Task.Delay(WaitingInterval, cancel).ConfigureAwait(false);
-                    continue;
-                }
-
-                if (!_appearanceApplied)
-                {
-                    await ApplySteamAppearanceAsync().ConfigureAwait(false);
-                    _hooks.SetOsdVisible(true);
-                }
-
-                await PushOneFrameAsync(cancel).ConfigureAwait(false);
-                await Task.Delay(ActiveInterval, cancel).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch (Exception error)
-            {
-                Log.Write($"overlay loop tick failed: {error.Message}");
-                try { await Task.Delay(WaitingInterval, cancel).ConfigureAwait(false); }
-                catch (OperationCanceledException) { break; }
-            }
-        }
-    }
-
-    private async Task PushOneFrameAsync(CancellationToken cancel)
-    {
-        var settings = _settings;
-        if (!settings.UseTsumeOverlay || settings.Level == RtssOverlayLevel.Off) return;
-        if (!RtssSharedMemory.IsAvailable()) return;
-
-        TelemetryFrame frame;
-        if (settings.Level == RtssOverlayLevel.Fps)
-        {
-            frame = new TelemetryFrame();
-        }
-        else
-        {
-            var app = RtssSharedMemory.ReadActiveApp();
-            var includeGpu = settings.Level >= RtssOverlayLevel.Bar;
-            var (cpu, gpu, vram, ramUsed, ramTotal, bat) = _telemetry.Sample(includeGpu);
-
-            int? cpuTemp = null;
-            int? fanRpm = null;
-            try
-            {
-                var readings = await _helper.SendAsync(new GetReadings(), cancel).ConfigureAwait(false);
-                cpuTemp = readings.Readings?.CpuTemperature;
-                fanRpm = readings.Readings?.FanRpm;
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            catch
-            {
-                // Helper offline: omit temp/fan cleanly.
-            }
-
-            var (modeLabel, sustained, boost) = _readPowerInfo();
-
-            frame = new TelemetryFrame
-            {
-                CpuPercent = cpu,
-                CpuTempC = cpuTemp,
-                FanRpm = fanRpm,
-                GpuPercent = gpu,
-                VramUsedGb = vram,
-                RamUsedGb = ramUsed,
-                RamTotalGb = ramTotal,
-                Battery = bat,
-                PowerModeLabel = modeLabel,
-                SustainedWatts = sustained,
-                BoostWatts = boost,
-                LiveFps = app.Fps,
-                LiveFrameTimeMs = app.FrameTimeMs,
-            };
-        }
-
-        var embedGraph = settings.Level == RtssOverlayLevel.Full;
-        var text = SteamOverlayFormatter.Format(settings.Level, frame, hasGraph: embedGraph);
-        RtssSharedMemory.UpdateSlot(text, embedNativeFrametimeGraph: embedGraph);
-    }
-
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
 
-        StopLoop();
-        RtssSharedMemory.ClearSlot();
-        _telemetry.Dispose();
+        CancelThemeDebounce();
+        StopTelemetryLoop();
+        _energy.Dispose();
+        _aida.Dispose();
+        // _sync is left to the GC: a sync still in flight releases it after this returns.
         _hooks.Dispose();
     }
 }

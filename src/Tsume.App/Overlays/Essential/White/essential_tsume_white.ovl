@@ -1,0 +1,1190 @@
+[Master]
+Implementation=2
+FontFace=Inter
+FontHeight=-20
+FontWeight=700
+ZoomRatio=1
+[Settings]
+Name=Tsume Essential (White)
+EnvVars=
+RefreshPeriod=250
+LockUserSettings=1
+EmbeddedImage=essential_tsume_white_atlas.png
+PingAddr=127.0.0.1
+[General]
+Sources=24
+Tables=0
+Layers=93
+[Source0]
+Name=Tsume level 1 visible
+Units=
+Format=%.0f
+Formula=x == 1
+Provider=AIDA
+ID=TSUME_OVERLAY_LEVEL
+[Source1]
+Name=Tsume level 2 visible
+Units=
+Format=%.0f
+Formula=x == 2
+Provider=AIDA
+ID=TSUME_OVERLAY_LEVEL
+[Source2]
+Name=Tsume level 3 visible
+Units=
+Format=%.0f
+Formula=x == 3
+Provider=AIDA
+ID=TSUME_OVERLAY_LEVEL
+[Source3]
+Name=Tsume level 4 visible
+Units=
+Format=%.0f
+Formula=x == 4
+Provider=AIDA
+ID=TSUME_OVERLAY_LEVEL
+[Source4]
+Name=HAL CPU temperature
+Units=°C
+Format=
+Formula=
+Provider=HAL
+ID=CPU temperature
+[Source5]
+Name=HAL CPU power
+Units=W
+Format=
+Formula=
+Provider=HAL
+ID=CPU power
+[Source6]
+Name=HAL CPU clock
+Units=GHz
+Format=
+Formula=
+Provider=HAL
+ID=CPU clock
+[Source7]
+Name=HAL GPU1 temperature
+Units=°C
+Format=
+Formula=
+Provider=HAL
+ID=GPU1 temperature
+[Source8]
+Name=HAL GPU1 power
+Units=W
+Format=
+Formula=
+Provider=HAL
+ID=GPU1 power
+[Source9]
+Name=CPU temperature
+Units=°C
+Format=
+Formula=(validate("HAL CPU temperature") ? "HAL CPU temperature" : x)
+Provider=AIDA
+ID=TSUME_CPU_TEMP
+[Source10]
+Name=CPU power
+Units=W
+Format=
+Formula=(validate("HAL CPU power") ? "HAL CPU power" : x)
+Provider=AIDA
+ID=TSUME_CPU_POWER
+[Source11]
+Name=CPU clock
+Units=GHz
+Format=%.2f
+Formula=(validate("HAL CPU clock") ? "HAL CPU clock" : x) / 1000
+Provider=AIDA
+ID=TSUME_CPU_CLOCK
+[Source12]
+Name=GPU1 temperature
+Units=°C
+Format=
+Formula=(validate("HAL GPU1 temperature") ? "HAL GPU1 temperature" : x)
+Provider=AIDA
+ID=TSUME_GPU_TEMP
+[Source13]
+Name=GPU1 power
+Units=W
+Format=
+Formula=(validate("HAL GPU1 power") ? "HAL GPU1 power" : x)
+Provider=AIDA
+ID=TSUME_GPU_POWER
+[Source14]
+Name=CPU usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU usage
+[Source15]
+Name=GPU1 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=GPU1 usage
+[Source16]
+Name=GPU clock
+Units=GHz
+Format=%.2f
+Formula=x / 1000
+Provider=HAL
+ID=GPU1 clock
+[Source17]
+Name=RAM usage
+Units=GB
+Format=%.1f
+Formula=x / 1024
+Provider=HAL
+ID=RAM usage
+[Source18]
+Name=GPU1 memory usage
+Units=GB
+Format=%.1f
+Formula=x / 1024
+Provider=HAL
+ID=GPU1 memory usage
+[Source19]
+Name=GPU fan
+Units=RPM
+Format=%.0f
+Formula=
+Provider=HAL
+ID=GPU1 fan tachometer
+[Source20]
+Name=GPU core voltage
+Units=V
+Format=%.2f
+Formula=x / 1000
+Provider=HAL
+ID=GPU1 voltage
+[Source21]
+Name=GPU mem temp
+Units=°C
+Format=%.0f
+Formula=
+Provider=HAL
+ID=GPU1 memory temperature
+[Source22]
+Name=Framerate 1% Low
+Units=FPS
+Format=%.0f
+Formula=1000 / percentile("Frametime", 99)
+Provider=HAL
+ID=Stub
+[Source23]
+Name=Framerate 0.1% Low
+Units=FPS
+Format=%.0f
+Formula=1000 / percentile("Frametime", 99.9)
+Provider=HAL
+ID=Stub
+[Layer0]
+Name=Panel left
+VisibilitySource=Tsume level 1 visible
+Text=<I=0,0,0,0,36,72>
+PositionX=834
+PositionY=24
+ExtentX=36
+ExtentY=72
+ExtentOrigin=0
+[Layer1]
+Name=Panel middle
+VisibilitySource=Tsume level 1 visible
+Text=<I=0,0,150,0,180,72>
+PositionX=870
+PositionY=24
+ExtentX=180
+ExtentY=72
+ExtentOrigin=0
+[Layer2]
+Name=Panel right
+VisibilitySource=Tsume level 1 visible
+Text=<I=0,0,444,0,36,72>
+PositionX=1050
+PositionY=24
+ExtentX=36
+ExtentY=72
+ExtentOrigin=0
+[Layer3]
+Name=FPS label
+VisibilitySource=Tsume level 1 visible
+Text=FPS
+PositionX=871
+PositionY=38
+ExtentX=105
+ExtentY=11
+ExtentOrigin=4
+Size=62
+TextColor=3A3A3C
+[Layer4]
+Name=FPS
+VisibilitySource=Tsume level 1 visible
+Text=%Framerate%
+PositionX=871
+PositionY=52
+ExtentX=105
+ExtentY=28
+ExtentOrigin=4
+Size=142
+TextColor=0A0A0C
+[Layer5]
+Name=1% low label
+VisibilitySource=Tsume level 1 visible
+Text=1% LOW
+PositionX=945
+PositionY=38
+ExtentX=105
+ExtentY=11
+ExtentOrigin=4
+Size=62
+TextColor=3A3A3C
+[Layer6]
+Name=1% low
+VisibilitySource=Tsume level 1 visible
+Text=%Framerate 1% Low%
+PositionX=945
+PositionY=52
+ExtentX=105
+ExtentY=28
+ExtentOrigin=4
+Size=142
+TextColor=0A0A0C
+RefreshPeriod=1000
+[Layer7]
+Name=Panel
+VisibilitySource=Tsume level 2 visible
+Text=<I=0,0,0,0,480,72>
+PositionX=720
+PositionY=24
+ExtentX=480
+ExtentY=72
+ExtentOrigin=0
+[Layer8]
+Name=CPU ring
+VisibilitySource=Tsume level 2 visible
+Text=<AI=CPU usage,0,0,0,102,0,74,62,62,51,16,0>
+PositionX=731
+PositionY=29
+ExtentX=62
+ExtentY=62
+ExtentOrigin=0
+[Layer9]
+Name=CPU usage
+VisibilitySource=Tsume level 2 visible
+Text=%CPU usage%
+PositionX=731
+PositionY=50
+ExtentX=62
+ExtentY=20
+ExtentOrigin=4
+Size=86
+TextColor=0A0A0C
+[Layer10]
+Name=CPU label
+VisibilitySource=Tsume level 2 visible
+Text=CPU
+PositionX=796
+PositionY=34
+ExtentX=64
+ExtentY=14
+ExtentOrigin=4
+Size=66
+TextColor=007AFF
+[Layer11]
+Name=CPU temperature
+VisibilitySource=Tsume level 2 visible
+Text=%CPU temperature%°
+PositionX=800
+PositionY=45
+ExtentX=64
+ExtentY=28
+ExtentOrigin=4
+Size=112
+TextColor=0A0A0C,,75,C93400,75,85,D70015,85,(CPU temperature,1)
+[Layer12]
+Name=CPU power
+VisibilitySource=Tsume level 2 visible
+Text=%CPU power% W
+PositionX=796
+PositionY=70
+ExtentX=64
+ExtentY=16
+ExtentOrigin=4
+Size=64
+TextColor=0A0A0C
+[Layer13]
+Name=FPS label
+VisibilitySource=Tsume level 2 visible
+Text=FPS
+PositionX=871
+PositionY=38
+ExtentX=105
+ExtentY=11
+ExtentOrigin=4
+Size=62
+TextColor=3A3A3C
+[Layer14]
+Name=FPS
+VisibilitySource=Tsume level 2 visible
+Text=%Framerate%
+PositionX=871
+PositionY=52
+ExtentX=105
+ExtentY=28
+ExtentOrigin=4
+Size=142
+TextColor=0A0A0C
+[Layer15]
+Name=1% low label
+VisibilitySource=Tsume level 2 visible
+Text=1% LOW
+PositionX=945
+PositionY=38
+ExtentX=105
+ExtentY=11
+ExtentOrigin=4
+Size=62
+TextColor=3A3A3C
+[Layer16]
+Name=1% low
+VisibilitySource=Tsume level 2 visible
+Text=%Framerate 1% Low%
+PositionX=945
+PositionY=52
+ExtentX=105
+ExtentY=28
+ExtentOrigin=4
+Size=142
+TextColor=0A0A0C
+RefreshPeriod=1000
+[Layer17]
+Name=GPU ring
+VisibilitySource=Tsume level 2 visible
+Text=<AI=GPU1 usage,0,0,0,102,0,324,62,62,51,16,0>
+PositionX=1127
+PositionY=29
+ExtentX=62
+ExtentY=62
+ExtentOrigin=0
+[Layer18]
+Name=GPU usage
+VisibilitySource=Tsume level 2 visible
+Text=%GPU1 usage%
+PositionX=1127
+PositionY=50
+ExtentX=62
+ExtentY=20
+ExtentOrigin=4
+Size=86
+TextColor=0A0A0C
+[Layer19]
+Name=GPU label
+VisibilitySource=Tsume level 2 visible
+Text=GPU
+PositionX=1060
+PositionY=34
+ExtentX=64
+ExtentY=14
+ExtentOrigin=4
+Size=66
+TextColor=AF52DE
+[Layer20]
+Name=GPU temperature
+VisibilitySource=Tsume level 2 visible
+Text=%GPU1 temperature%°
+PositionX=1064
+PositionY=45
+ExtentX=64
+ExtentY=28
+ExtentOrigin=4
+Size=112
+TextColor=0A0A0C,,75,C93400,75,85,D70015,85,(GPU1 temperature,1)
+[Layer21]
+Name=GPU power
+VisibilitySource=Tsume level 2 visible
+Text=%GPU1 power% W
+PositionX=1060
+PositionY=70
+ExtentX=64
+ExtentY=16
+ExtentOrigin=4
+Size=64
+TextColor=0A0A0C
+[Layer22]
+Name=Panel
+VisibilitySource=Tsume level 3 visible
+Text=<I=0,0,0,572,750,93>
+PositionX=585
+PositionY=24
+ExtentX=750
+ExtentY=93
+ExtentOrigin=0
+[Layer23]
+Name=CPU ring
+VisibilitySource=Tsume level 3 visible
+Text=<AI=CPU usage,0,0,0,102,0,667,67,67,51,15,0>
+PositionX=595
+PositionY=38
+ExtentX=67
+ExtentY=67
+ExtentOrigin=0
+[Layer24]
+Name=CPU usage
+VisibilitySource=Tsume level 3 visible
+Text=%CPU usage%
+PositionX=595
+PositionY=61
+ExtentX=67
+ExtentY=20
+ExtentOrigin=4
+Size=86
+TextColor=0A0A0C
+[Layer25]
+Name=CPU label
+VisibilitySource=Tsume level 3 visible
+Text=CPU
+PositionX=666
+PositionY=40
+ExtentX=60
+ExtentY=13
+ExtentOrigin=4
+Size=66
+TextColor=007AFF
+[Layer26]
+Name=CPU temperature
+VisibilitySource=Tsume level 3 visible
+Text=%CPU temperature%°
+PositionX=669
+PositionY=57
+ExtentX=60
+ExtentY=30
+ExtentOrigin=4
+Size=142
+TextColor=0A0A0C,,75,C93400,75,85,D70015,85,(CPU temperature,1)
+[Layer27]
+Name=CPU Power label
+VisibilitySource=Tsume level 3 visible
+Text=Power
+PositionX=735
+PositionY=42
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer28]
+Name=CPU Power
+VisibilitySource=Tsume level 3 visible
+Text=%CPU power% W
+PositionX=735
+PositionY=41
+ExtentX=106
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer29]
+Name=CPU Clock label
+VisibilitySource=Tsume level 3 visible
+Text=Clock
+PositionX=735
+PositionY=62
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer30]
+Name=CPU Clock
+VisibilitySource=Tsume level 3 visible
+Text=%CPU clock% GHz
+PositionX=735
+PositionY=62
+ExtentX=106
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer31]
+Name=CPU RAM label
+VisibilitySource=Tsume level 3 visible
+Text=RAM
+PositionX=735
+PositionY=82
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer32]
+Name=CPU RAM
+VisibilitySource=Tsume level 3 visible
+Text=%RAM usage% GB
+PositionX=735
+PositionY=82
+ExtentX=106
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer33]
+Name=GPU ring
+VisibilitySource=Tsume level 3 visible
+Text=<AI=GPU1 usage,0,0,0,102,0,937,67,67,51,15,0>
+PositionX=864
+PositionY=38
+ExtentX=67
+ExtentY=67
+ExtentOrigin=0
+[Layer34]
+Name=GPU usage
+VisibilitySource=Tsume level 3 visible
+Text=%GPU1 usage%
+PositionX=864
+PositionY=61
+ExtentX=67
+ExtentY=20
+ExtentOrigin=4
+Size=86
+TextColor=0A0A0C
+[Layer35]
+Name=GPU label
+VisibilitySource=Tsume level 3 visible
+Text=GPU
+PositionX=935
+PositionY=40
+ExtentX=60
+ExtentY=13
+ExtentOrigin=4
+Size=66
+TextColor=AF52DE
+[Layer36]
+Name=GPU vram temp
+VisibilitySource=Tsume level 3 visible
+Text=VRAM %GPU mem temp%°
+PositionX=935
+PositionY=90
+ExtentX=60
+ExtentY=13
+ExtentOrigin=4
+Size=60
+TextColor=3A3A3C
+[Layer37]
+Name=GPU temperature
+VisibilitySource=Tsume level 3 visible
+Text=%GPU1 temperature%°
+PositionX=938
+PositionY=57
+ExtentX=60
+ExtentY=30
+ExtentOrigin=4
+Size=142
+TextColor=0A0A0C,,75,C93400,75,85,D70015,85,(GPU1 temperature,1)
+[Layer38]
+Name=GPU Power label
+VisibilitySource=Tsume level 3 visible
+Text=Power
+PositionX=1004
+PositionY=42
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer39]
+Name=GPU Power
+VisibilitySource=Tsume level 3 visible
+Text=%GPU1 power% W
+PositionX=1004
+PositionY=41
+ExtentX=106
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer40]
+Name=GPU Clock label
+VisibilitySource=Tsume level 3 visible
+Text=Clock
+PositionX=1004
+PositionY=62
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer41]
+Name=GPU Clock
+VisibilitySource=Tsume level 3 visible
+Text=%GPU clock% GHz
+PositionX=1004
+PositionY=62
+ExtentX=106
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer42]
+Name=GPU VRAM label
+VisibilitySource=Tsume level 3 visible
+Text=VRAM
+PositionX=1004
+PositionY=82
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer43]
+Name=GPU VRAM
+VisibilitySource=Tsume level 3 visible
+Text=%GPU1 memory usage% GB
+PositionX=1004
+PositionY=82
+ExtentX=106
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer44]
+Name=FPS label
+VisibilitySource=Tsume level 3 visible
+Text=FPS
+PositionX=1128
+PositionY=40
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=66
+TextColor=248A3D
+[Layer45]
+Name=FPS
+VisibilitySource=Tsume level 3 visible
+Text=%Framerate%
+PositionX=1127
+PositionY=56
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=158
+TextColor=0A0A0C
+[Layer46]
+Name=1% label
+VisibilitySource=Tsume level 3 visible
+Text=1%
+PositionX=1217
+PositionY=42
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer47]
+Name=1%
+VisibilitySource=Tsume level 3 visible
+Text=%Framerate 1% Low%
+PositionX=1242
+PositionY=41
+ExtentX=75
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+RefreshPeriod=1000
+[Layer48]
+Name=0.1% label
+VisibilitySource=Tsume level 3 visible
+Text=0.1%
+PositionX=1217
+PositionY=62
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer49]
+Name=0.1%
+VisibilitySource=Tsume level 3 visible
+Text=%Framerate 0.1% Low%
+PositionX=1242
+PositionY=62
+ExtentX=75
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+RefreshPeriod=1000
+[Layer50]
+Name=FT label
+VisibilitySource=Tsume level 3 visible
+Text=FT
+PositionX=1217
+PositionY=82
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer51]
+Name=FT
+VisibilitySource=Tsume level 3 visible
+Text=<FT> ms
+PositionX=1242
+PositionY=82
+ExtentX=75
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer52]
+Name=Frametime graph
+VisibilitySource=Tsume level 3 visible
+Text=<G=Frametime,0,0,1,0,40,0>
+PositionX=1128
+PositionY=96
+ExtentX=189
+ExtentY=12
+ExtentOrigin=0
+TextColor=248A3D
+[Layer53]
+Name=Panel
+VisibilitySource=Tsume level 4 visible
+Text=<I=0,0,0,1205,225,544>
+PositionX=1671
+PositionY=160
+ExtentX=225
+ExtentY=544
+ExtentOrigin=0
+[Layer54]
+Name=FPS label
+VisibilitySource=Tsume level 4 visible
+Text=FPS
+PositionX=1687
+PositionY=175
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=60
+TextColor=248A3D
+[Layer55]
+Name=FPS
+VisibilitySource=Tsume level 4 visible
+Text=%Framerate%
+PositionX=1687
+PositionY=188
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=172
+TextColor=0A0A0C
+[Layer56]
+Name=1% low label
+VisibilitySource=Tsume level 4 visible
+Text=1% low
+PositionX=1687
+PositionY=234
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer57]
+Name=1% low
+VisibilitySource=Tsume level 4 visible
+Text=%Framerate 1% Low%
+PositionX=1789
+PositionY=233
+ExtentX=90
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+RefreshPeriod=1000
+[Layer58]
+Name=0.1% low label
+VisibilitySource=Tsume level 4 visible
+Text=0.1% low
+PositionX=1687
+PositionY=253
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer59]
+Name=0.1% low
+VisibilitySource=Tsume level 4 visible
+Text=%Framerate 0.1% Low%
+PositionX=1789
+PositionY=252
+ExtentX=90
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+RefreshPeriod=1000
+[Layer60]
+Name=Frametime label
+VisibilitySource=Tsume level 4 visible
+Text=Frametime
+PositionX=1687
+PositionY=272
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer61]
+Name=Frametime
+VisibilitySource=Tsume level 4 visible
+Text=<FT> ms
+PositionX=1789
+PositionY=272
+ExtentX=90
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer62]
+Name=Frametime graph
+VisibilitySource=Tsume level 4 visible
+Text=<G=Frametime,0,0,1,0,40,0>
+PositionX=1687
+PositionY=295
+ExtentX=192
+ExtentY=20
+ExtentOrigin=0
+TextColor=248A3D
+[Layer63]
+Name=CPU label
+VisibilitySource=Tsume level 4 visible
+Text=CPU
+PositionX=1687
+PositionY=336
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=60
+TextColor=007AFF
+[Layer64]
+Name=CPU Temp label
+VisibilitySource=Tsume level 4 visible
+Text=Temp
+PositionX=1687
+PositionY=355
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer65]
+Name=CPU Temp
+VisibilitySource=Tsume level 4 visible
+Text=%CPU temperature%°
+PositionX=1781
+PositionY=354
+ExtentX=98
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C,,75,C93400,75,85,D70015,85,(CPU temperature,1)
+[Layer66]
+Name=CPU Load label
+VisibilitySource=Tsume level 4 visible
+Text=Load
+PositionX=1687
+PositionY=374
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer67]
+Name=CPU Load
+VisibilitySource=Tsume level 4 visible
+Text=%CPU usage%%
+PositionX=1781
+PositionY=373
+ExtentX=98
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer68]
+Name=CPU Power label
+VisibilitySource=Tsume level 4 visible
+Text=Power
+PositionX=1687
+PositionY=392
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer69]
+Name=CPU Power
+VisibilitySource=Tsume level 4 visible
+Text=%CPU power% W
+PositionX=1781
+PositionY=392
+ExtentX=98
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer70]
+Name=CPU Clock label
+VisibilitySource=Tsume level 4 visible
+Text=Clock
+PositionX=1687
+PositionY=411
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer71]
+Name=CPU Clock
+VisibilitySource=Tsume level 4 visible
+Text=%CPU clock% GHz
+PositionX=1781
+PositionY=410
+ExtentX=98
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer72]
+Name=CPU RAM label
+VisibilitySource=Tsume level 4 visible
+Text=RAM
+PositionX=1687
+PositionY=430
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer73]
+Name=CPU RAM
+VisibilitySource=Tsume level 4 visible
+Text=%RAM usage% GB
+PositionX=1781
+PositionY=429
+ExtentX=98
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer74]
+Name=CPU usage graph
+VisibilitySource=Tsume level 4 visible
+Text=<G=CPU usage,0,0,1,0,100,0>
+PositionX=1687
+PositionY=452
+ExtentX=192
+ExtentY=16
+ExtentOrigin=0
+TextColor=007AFF
+[Layer75]
+Name=GPU label
+VisibilitySource=Tsume level 4 visible
+Text=GPU
+PositionX=1687
+PositionY=488
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=60
+TextColor=AF52DE
+[Layer76]
+Name=GPU Temp label
+VisibilitySource=Tsume level 4 visible
+Text=Temp
+PositionX=1687
+PositionY=507
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer77]
+Name=GPU Temp
+VisibilitySource=Tsume level 4 visible
+Text=%GPU1 temperature%°
+PositionX=1781
+PositionY=506
+ExtentX=98
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C,,75,C93400,75,85,D70015,85,(GPU1 temperature,1)
+[Layer78]
+Name=GPU Load label
+VisibilitySource=Tsume level 4 visible
+Text=Load
+PositionX=1687
+PositionY=526
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer79]
+Name=GPU Load
+VisibilitySource=Tsume level 4 visible
+Text=%GPU1 usage%%
+PositionX=1781
+PositionY=525
+ExtentX=98
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer80]
+Name=GPU Power label
+VisibilitySource=Tsume level 4 visible
+Text=Power
+PositionX=1687
+PositionY=545
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer81]
+Name=GPU Power
+VisibilitySource=Tsume level 4 visible
+Text=%GPU1 power% W
+PositionX=1781
+PositionY=544
+ExtentX=98
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer82]
+Name=GPU Clock label
+VisibilitySource=Tsume level 4 visible
+Text=Clock
+PositionX=1687
+PositionY=564
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer83]
+Name=GPU Clock
+VisibilitySource=Tsume level 4 visible
+Text=%GPU clock% GHz
+PositionX=1781
+PositionY=563
+ExtentX=98
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer84]
+Name=GPU Voltage label
+VisibilitySource=Tsume level 4 visible
+Text=Voltage
+PositionX=1687
+PositionY=582
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer85]
+Name=GPU Voltage
+VisibilitySource=Tsume level 4 visible
+Text=%GPU core voltage% V
+PositionX=1781
+PositionY=582
+ExtentX=98
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer86]
+Name=GPU Fan label
+VisibilitySource=Tsume level 4 visible
+Text=Fan
+PositionX=1687
+PositionY=601
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer87]
+Name=GPU Fan
+VisibilitySource=Tsume level 4 visible
+Text=%GPU fan% rpm
+PositionX=1781
+PositionY=600
+ExtentX=98
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer88]
+Name=GPU VRAM label
+VisibilitySource=Tsume level 4 visible
+Text=VRAM
+PositionX=1687
+PositionY=620
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer89]
+Name=GPU VRAM
+VisibilitySource=Tsume level 4 visible
+Text=%GPU1 memory usage% GB
+PositionX=1781
+PositionY=619
+ExtentX=98
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer90]
+Name=GPU VRAM temp label
+VisibilitySource=Tsume level 4 visible
+Text=VRAM temp
+PositionX=1687
+PositionY=639
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=64
+TextColor=3A3A3C
+[Layer91]
+Name=GPU VRAM temp value
+VisibilitySource=Tsume level 4 visible
+Text=%GPU mem temp%°
+PositionX=1781
+PositionY=638
+ExtentX=98
+ExtentY=18
+ExtentOrigin=2
+Size=71
+TextColor=0A0A0C
+[Layer92]
+Name=GPU usage graph
+VisibilitySource=Tsume level 4 visible
+Text=<G=GPU1 usage,0,0,1,0,100,0>
+PositionX=1687
+PositionY=661
+ExtentX=192
+ExtentY=16
+ExtentOrigin=0
+TextColor=AF52DE

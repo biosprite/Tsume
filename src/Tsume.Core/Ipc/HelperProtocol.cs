@@ -31,6 +31,8 @@ public static class HelperPipe
 [JsonDerivedType(typeof(StopRtss),          "rtss.stop")]
 [JsonDerivedType(typeof(GetRtssStartup),    "rtss.startup.get")]
 [JsonDerivedType(typeof(SetRtssStartup),    "rtss.startup.set")]
+[JsonDerivedType(typeof(SetRtssOverlay),    "rtss.overlay.set")]
+[JsonDerivedType(typeof(StartRtss),         "rtss.start")]
 [JsonDerivedType(typeof(GetHardwareInventory), "discovery.inventory")]
 [JsonDerivedType(typeof(GetHardwareState),     "discovery.state")]
 [JsonDerivedType(typeof(RunFirmwareCheck),     "firmware.check")]
@@ -87,11 +89,25 @@ public sealed record SetRtssExclusions(IReadOnlyList<string> Executables) : Help
 /// <summary>Stops the running RTSS process (and its companion executables inside RTSS's install folder).</summary>
 public sealed record StopRtss : HelperRequest;
 
+/// <summary>
+/// Starts RTSS (which demands elevation) in the caller's own session with the signed-in administrator's full token,
+/// so no UAC prompt appears. The helper starts RTSS.exe from RTSS's own install record, never a path from the caller.
+/// </summary>
+public sealed record StartRtss : HelperRequest;
+
 /// <summary>Checks whether RTSS is configured to start automatically with Windows.</summary>
 public sealed record GetRtssStartup : HelperRequest;
 
 /// <summary>Enables or disables RTSS starting automatically with Windows (via Task Scheduler and RTSS config).</summary>
 public sealed record SetRtssStartup(bool Enabled) : HelperRequest;
+
+/// <summary>
+/// Points RTSS's OverlayEditor plugin at Tsume's combined Essential layout for the requested theme and enables the
+/// plugin, or, with a null <paramref name="Layout"/>, puts back the plugin state and layout the user had before Tsume
+/// changed them. Layout and theme are names (<c>tsume</c>; <c>dark</c>, <c>smoke</c>, <c>white</c>, <c>float</c>):
+/// the helper resolves the file beside itself and never takes a path from the caller.
+/// </summary>
+public sealed record SetRtssOverlay(string? Layout, string? Theme) : HelperRequest;
 
 /// <summary>
 /// Strictly read-only full hardware discovery scan (SMBIOS, vendor WMI/MOF, OEM-safe firmware reads,
@@ -146,6 +162,9 @@ public sealed record HelperReply
 
     /// <summary>Sent with answers to <see cref="GetRtssStartup"/> and <see cref="SetRtssStartup"/>.</summary>
     public bool? RtssStartsWithWindows { get; init; }
+
+    /// <summary>Sent with the answer to <see cref="SetRtssOverlay"/>: true when RTSS must restart to load the change.</summary>
+    public bool? RtssOverlayChanged { get; init; }
 
     /// <summary>JSON payload for read-only discovery requests (<see cref="GetHardwareInventory"/> and <see cref="GetHardwareState"/>).</summary>
     public string? PayloadJson { get; init; }

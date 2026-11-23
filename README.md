@@ -49,11 +49,15 @@ yet, the panel runs but leaves the firmware alone.
   game you choose the upscaler (XeSS, FSR 4 or FSR 3.1), frame generation and
   a frame-rate counter. Single-player games only: in an online game it can get
   an account banned, and it is not offered where an anti-cheat is found.
-- **RTSS overlay (experimental):** optional Steam-style performance overlay
-  (FPS, compact horizontal bar, detailed stats, or full stats with a live
-  frametime graph) and global frame-rate cap driven through RivaTuner
-  Statistics Server. Can be switched off to leave your own RTSS overlay alone.
-  Nothing is bundled — links to Guru3D's official RTSS 7.3.7 download.
+- **RTSS overlay (experimental):** optional performance overlay using
+  [realHfde's Essential overlays](https://github.com/realHfde/Huffdee-RTSS-Overlays-and-Rainmeter-Skins)
+  (MIT): an FPS pill, Sleek, Sleek Compact or the full Performance panel, in
+  Dark, Smoke, White or Float. RTSS's own OverlayEditor plugin draws a combined
+  per-theme layout, so MSI Afterburner isn't needed, level changes (and Off)
+  apply live in-game without restarting RTSS, and the overlay disappears when
+  Tsume exits. Also sets a global frame-rate cap through RivaTuner Statistics
+  Server. Can be switched off to give your own RTSS overlay back. RTSS itself
+  isn't bundled; Tsume links to Guru3D's official RTSS 7.3.7 download.
 - **Themes:** eight colour schemes, or your own accent, background and text
   colours.
 - **Controller, touch and mouse:** the whole panel works with any of the
@@ -157,3 +161,9 @@ Copyright (C) 2026 Tsume contributors.
 Tsume is free software: you can redistribute it and/or modify it under the terms
 of the GNU General Public License, version 3, as published by the Free Software
 Foundation. It comes with no warranty. See [LICENSE](LICENSE).
+
+The RTSS overlay layouts and images in `src/Tsume.App/Overlays/Essential` are the
+Essential overlays by realHfde (Faisal), from
+[Huffdee RTSS Overlays and Rainmeter Skins](https://github.com/realHfde/Huffdee-RTSS-Overlays-and-Rainmeter-Skins),
+used under the MIT License. See that folder's `LICENSE` and `README.md` for the
+notice and the changes Tsume made.
