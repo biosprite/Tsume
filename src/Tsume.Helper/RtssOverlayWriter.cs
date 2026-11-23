@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Text;
 using Tsume.Core.Ipc;
 
@@ -92,11 +94,13 @@ internal static class RtssOverlayWriter
 
                 if (layoutPath is null) File.Delete(backupFile);
 
+                var needsRestart = changed || (layoutPath is not null && IsRunningRtssOlderThan(layoutPath));
+
                 Log.Write(layoutPath is null
                     ? $"restored the user's OverlayEditor setup (changed: {changed})"
-                    : $"OverlayEditor layout set to {Path.GetFileName(layoutPath)} (changed: {changed})");
+                    : $"OverlayEditor layout set to {Path.GetFileName(layoutPath)} (changed: {changed}, restart: {needsRestart})");
 
-                return new HelperReply { Ok = true, RtssOverlayChanged = changed };
+                return new HelperReply { Ok = true, RtssOverlayChanged = needsRestart };
             }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
@@ -104,6 +108,35 @@ internal static class RtssOverlayWriter
             Log.Write($"Could not update the OverlayEditor setup: {error.Message}");
             return HelperReply.Failure(error.Message);
         }
+    }
+
+    /// <summary>
+    /// OverlayEditor only reads its <c>.ovl</c> layout at RTSS startup, whereas a running game can reload the
+    /// companion atlas PNG on disk. After a Tsume upgrade, restart RTSS once if it was started before the
+    /// bundled layout file was written so it never mixes an old layout with a new atlas.
+    /// </summary>
+    private static bool IsRunningRtssOlderThan(string layoutPath)
+    {
+        try
+        {
+            var layoutWriteUtc = File.GetLastWriteTimeUtc(layoutPath);
+            if (layoutWriteUtc > DateTime.UtcNow.AddMinutes(5)) return false;
+
+            foreach (var process in Process.GetProcessesByName("RTSS"))
+            {
+                using (process)
+                {
+                    try
+                    {
+                        if (process.StartTime.ToUniversalTime() < layoutWriteUtc) return true;
+                    }
+                    catch (Exception error) when (error is Win32Exception or InvalidOperationException) { }
+                }
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+
+        return false;
     }
 
     /// <summary>The bundled layout file for a known layout and theme name, or null.</summary>
