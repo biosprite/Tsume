@@ -8,7 +8,7 @@
              Focusable="False">
 
   <!-- RTSS: Steam-style performance overlay (optional — can leave the user's own overlay alone),
-       global frame-rate cap, and official Guru3D link when not yet installed. -->
+       global frame-rate cap, and a link to the download page (install, Guru3D, uninstall). -->
 
   <DockPanel DataContext="{Binding Rtss}">
 
@@ -54,24 +54,34 @@
             </StackPanel>
           </Border>
 
+          <!-- Install still in flight (the panel was reopened partway): ring and current stage. -->
+          <Border Style="{StaticResource Card.Info}"
+                  Background="{x:Static theme:Accent.Tint}"
+                  BorderBrush="{x:Static theme:Accent.Wash}"
+                  Padding="16,12"
+                  Visibility="{Binding BusyVisibility}">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <controls:ProgressRing Grid.Column="0" Width="16" Height="16" RingThickness="2"
+                                     Margin="0,0,12,0" VerticalAlignment="Center"
+                                     Foreground="{x:Static theme:Accent.Brush}"
+                                     TrackBrush="{DynamicResource Switch.Groove}"
+                                     IsActive="{Binding IsBusy}" />
+              <TextBlock Grid.Column="1" Style="{StaticResource Text.Body}"
+                         Text="{Binding BusyText}"
+                         TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+
+          <!-- Opens the download page: automatic install, or Guru3D's own page. -->
           <controls:Tile Style="{StaticResource Tile.Link}"
                          Glyph="{x:Static theme:Glyphs.Download}"
-                         Label="{x:Static lang:Strings.RtssDownloadOfficial}"
-                         Detail="{x:Static lang:Strings.RtssDownloadOfficialDetail}"
-                         Command="{Binding OpenDownloadPage}" />
-
-          <controls:Tile Style="{StaticResource Tile.Link}"
-                         Visibility="{Binding DownloadedInstallerVisibility}"
-                         Glyph="{x:Static theme:Glyphs.Startup}"
-                         Label="{x:Static lang:Strings.RtssRunInstaller}"
-                         Detail="{Binding DownloadedInstallerDetail}"
-                         Command="{Binding RunDownloadedInstaller}" />
-
-          <controls:Tile Style="{StaticResource Tile.Link}" Tag=""
-                         Glyph="{x:Static theme:Glyphs.Update}"
-                         Label="{x:Static lang:Strings.RtssCheckAgain}"
-                         Detail="{x:Static lang:Strings.RtssCheckAgainDetail}"
-                         Command="{Binding CheckAgain}" />
+                         Label="{Binding DownloadPageLabel}"
+                         Detail="{Binding DownloadPageDetail}"
+                         Command="{Binding Download.Open}" />
 
         </StackPanel>
 
@@ -196,9 +206,9 @@
 
           <controls:Tile Style="{StaticResource Tile.Link}"
                          Glyph="{x:Static theme:Glyphs.Download}"
-                         Label="{x:Static lang:Strings.RtssGuru3dLink}"
-                         Detail="{x:Static lang:Strings.RtssGuru3dLinkDetail}"
-                         Command="{Binding OpenDownloadPage}" />
+                         Label="{Binding DownloadPageLabel}"
+                         Detail="{Binding DownloadPageDetail}"
+                         Command="{Binding Download.Open}" />
 
         </StackPanel>
 

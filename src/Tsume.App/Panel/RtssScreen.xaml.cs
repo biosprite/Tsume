@@ -21,7 +21,7 @@ public partial class RtssScreen
         // Switching between not-installed / stopped / running hides and reveals controls.
         DataContextChanged += (_, _) =>
         {
-            if (DataContext is PanelViewModel panel) panel.Rtss.Settled += () => Controls.Screen.KeepFocus(this);
+            if (DataContext is PanelViewModel panel) panel.Rtss.Settled += () => { if (!panel.Rtss.Download.IsOpen) Controls.Screen.KeepFocus(this); };
         };
     }
 }

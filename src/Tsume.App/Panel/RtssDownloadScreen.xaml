@@ -1,0 +1,109 @@
+<UserControl x:Class="Tsume.App.Panel.RtssDownloadScreen"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Tsume.App.Controls"
+             xmlns:theme="clr-namespace:Tsume.App.Theme"
+             xmlns:lang="clr-namespace:Tsume.App.Language"
+             Focusable="False">
+
+  <!-- RTSS download page, opened over the RTSS screen: automatic install through winget,
+       Guru3D's official page for doing it by hand, and uninstalling once RTSS is on this PC. -->
+
+  <DockPanel DataContext="{Binding Rtss}">
+
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,20">
+      <controls:Tile DockPanel.Dock="Left" Style="{StaticResource Tile.Icon}"
+                     Glyph="{x:Static theme:Glyphs.Back}"
+                     AutomationProperties.Name="{x:Static lang:Strings.Back}"
+                     Command="{Binding Download.Close}" />
+
+      <TextBlock Style="{StaticResource Text.Title}" Text="{x:Static lang:Strings.RtssDownloadTitle}"
+                 Margin="16,0,0,0" VerticalAlignment="Center" />
+    </DockPanel>
+
+    <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+               Text="{Binding Status}" Margin="4,12,0,0" />
+
+    <ScrollViewer x:Name="List" Focusable="False"
+                  VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
+      <StackPanel controls:Screen.TakesFocus="True">
+
+        <!-- Install or uninstall in progress: loading ring with the current stage. -->
+        <Border Style="{StaticResource Card.Info}"
+                Background="{x:Static theme:Accent.Tint}"
+                BorderBrush="{x:Static theme:Accent.Wash}"
+                Padding="16,12"
+                Visibility="{Binding BusyVisibility}">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <controls:ProgressRing Grid.Column="0" Width="16" Height="16" RingThickness="2"
+                                   Margin="0,0,12,0" VerticalAlignment="Center"
+                                   Foreground="{x:Static theme:Accent.Brush}"
+                                   TrackBrush="{DynamicResource Switch.Groove}"
+                                   IsActive="{Binding IsBusy}" />
+            <TextBlock Grid.Column="1" Style="{StaticResource Text.Body}"
+                       Text="{Binding BusyText}"
+                       AutomationProperties.LiveSetting="Polite"
+                       TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <!-- Automatic: one-step install through winget. Hidden once RTSS is installed, and on PCs
+             without Windows Package Manager. -->
+        <StackPanel Visibility="{Binding AutoInstallVisibility}">
+          <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.RtssAutomaticHeading}"
+                     Margin="4,4,0,10" />
+
+          <controls:Tile Style="{StaticResource Tile.Link}" Tag=""
+                         Glyph="{x:Static theme:Glyphs.Download}"
+                         Label="{x:Static lang:Strings.RtssInstallAuto}"
+                         Detail="{Binding AutoInstallDetail}"
+                         Command="{Binding InstallAutomatically}" />
+        </StackPanel>
+
+        <!-- Manual: Guru3D's official page, plus picking up an installer already downloaded from it. -->
+        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.RtssManualHeading}"
+                   Margin="4,14,0,10" />
+
+        <controls:Tile Style="{StaticResource Tile.Link}"
+                       Glyph="{x:Static theme:Glyphs.Link}"
+                       Label="{x:Static lang:Strings.RtssDownloadOfficial}"
+                       Detail="{x:Static lang:Strings.RtssDownloadOfficialDetail}"
+                       Command="{Binding OpenDownloadPage}" />
+
+        <StackPanel Visibility="{Binding NotInstalledVisibility}">
+          <controls:Tile Style="{StaticResource Tile.Link}"
+                         Visibility="{Binding DownloadedInstallerVisibility}"
+                         Glyph="{x:Static theme:Glyphs.Startup}"
+                         Label="{x:Static lang:Strings.RtssRunInstaller}"
+                         Detail="{Binding DownloadedInstallerDetail}"
+                         Command="{Binding RunDownloadedInstaller}" />
+
+          <controls:Tile Style="{StaticResource Tile.Link}" Tag=""
+                         Glyph="{x:Static theme:Glyphs.Update}"
+                         Label="{x:Static lang:Strings.RtssCheckAgain}"
+                         Detail="{x:Static lang:Strings.RtssCheckAgainDetail}"
+                         Command="{Binding CheckAgain}" />
+        </StackPanel>
+
+        <!-- Uninstall: only once RTSS is installed. The first press arms it, the second goes ahead. -->
+        <StackPanel Visibility="{Binding InstalledVisibility}">
+          <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.RtssUninstallHeading}"
+                     Margin="4,14,0,10" />
+
+          <controls:Tile Style="{StaticResource Tile.Link}" Tag=""
+                         Glyph="{x:Static theme:Glyphs.Remove}"
+                         Label="{Binding UninstallLabel}"
+                         Detail="{Binding UninstallDetail}"
+                         Command="{Binding Uninstall}" />
+        </StackPanel>
+
+      </StackPanel>
+    </ScrollViewer>
+
+  </DockPanel>
+
+</UserControl>

@@ -83,6 +83,17 @@ public sealed class RtssOverlayService : IDisposable
         return found;
     }
 
+    /// <summary>
+    /// Lets go of <c>RTSSHooks64.dll</c> so RTSS's uninstaller can delete it. The next
+    /// <see cref="RefreshInstallation"/> loads it again if RTSS is still there.
+    /// </summary>
+    public void ReleaseHooks()
+    {
+        StopLoop();
+        _hooks.Dispose();
+        _appearanceApplied = false;
+    }
+
     public bool IsRunning => RtssInstallation.IsRunning();
 
     public bool? IsOsdVisible()

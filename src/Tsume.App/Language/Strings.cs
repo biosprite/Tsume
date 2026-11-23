@@ -444,6 +444,41 @@ public static class Strings
     public static string RtssStillNotFound => Find();
     public static string RtssOpeningDownload => Find();
     public static string RtssInstallerFailed => Find();
+    public static string RtssInstallAuto => Find();
+    public static string RtssInstallAutoDetail => Find();
+    public static string RtssInstallAutoBusy => Find();
+    public static string RtssInstallStagePreparing => Find();
+    public static string RtssInstallStageDownloading => Find();
+    public static string RtssInstallStageInstalling => Find();
+    public static string RtssInstallStageFinishing => Find();
+    public static string RtssInstallAlreadyRunning => Find();
+    public static string RtssInstallOffline => Find();
+    public static string RtssInstallNoWinget => Find();
+    public static string RtssInstallTimedOut => Find();
+    public static string RtssInstallFailed(int exitCode) => Fill(Find(), $"0x{exitCode:X8}");
+    public static string RtssInstallNotFoundAfter => Find();
+    public static string RtssInstallDone(string version) => string.IsNullOrWhiteSpace(version) ? Find("RtssInstallDonePlain") : Fill(Find(), version);
+    public static string RtssAlreadyInstalled => Find();
+
+    public static string RtssDownloadTitle => Find();
+    public static string RtssDownloadPage => Find();
+    public static string RtssDownloadPageDetail => Find();
+    public static string RtssDownloadPageInstalled => Find();
+    public static string RtssDownloadPageInstalledDetail => Find();
+    public static string RtssAutomaticHeading => Find();
+    public static string RtssManualHeading => Find();
+    public static string RtssUninstallHeading => Find();
+    public static string RtssUninstall => Find();
+    public static string RtssUninstallDetail(string version) => string.IsNullOrWhiteSpace(version) ? Find("RtssUninstallDetailPlain") : Fill(Find(), version);
+    public static string RtssUninstallConfirm => Find();
+    public static string RtssUninstallConfirmDetail => Find();
+    public static string RtssUninstallBusy => Find();
+    public static string RtssUninstalling => Find();
+    public static string RtssUninstallDone => Find();
+    public static string RtssUninstallFailed => Find();
+    public static string RtssUninstallCancelled => Find();
+    public static string RtssUninstallStillRunning => Find();
+    public static string RtssUninstallNotFound => Find();
 
     public static string RtssOverlayHeading => Find();
     public static string RtssUseTsumeOverlay => Find();
@@ -503,8 +538,6 @@ public static class Strings
     public static string RtssNotRunningNote => Find();
     public static string RtssSavedNote => Find();
     public static string RtssRunningSavedNote(string version) => string.IsNullOrWhiteSpace(version) ? Find("RtssSavedNote") : Fill(Find(), version);
-    public static string RtssGuru3dLink => Find();
-    public static string RtssGuru3dLinkDetail => Find();
 
     public static string ControlsHeading => Find();
     public static string ControlsAndLayout => Find();

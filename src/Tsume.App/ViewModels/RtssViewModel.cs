@@ -51,8 +51,28 @@ public sealed class RtssViewModel : LayerViewModel
             }
         });
 
+        InstallAutomatically = new Command(async () => await InstallAutomaticallyAsync());
+        Uninstall = new Command(async () => await UninstallAsync());
+
+        Download = new RtssDownloadViewModel(
+            opened: () =>
+            {
+                ConfirmingUninstall = false;
+                if (IsBusy) return;
+                RefreshState();
+                Status = DefaultStatus();
+            },
+            closed: () => ConfirmingUninstall = false);
+
         RunDownloadedInstaller = new Command(async () =>
         {
+            // Two installers running at once fight over the same files.
+            if (IsBusy || RtssWingetInstaller.IsSetupRunning())
+            {
+                Status = Strings.RtssInstallAlreadyRunning;
+                return;
+            }
+
             if (_downloadedInstaller is not { } package) return;
             await _dismiss();
             if (!await RtssInstallation.RunDownloadedInstallerAsync(package))
@@ -61,6 +81,7 @@ public sealed class RtssViewModel : LayerViewModel
 
         CheckAgain = new Command(() =>
         {
+            if (IsBusy) return;   // an install or uninstall reports its own result when it finishes
             RefreshState();
             if (IsInstalled) _ = RefreshStartWithWindowsAsync();
             Status = IsInstalled ? DefaultStatus() : Strings.RtssStillNotFound;
@@ -100,7 +121,12 @@ public sealed class RtssViewModel : LayerViewModel
     public event Action? Settled;
 
     public ICommand OpenDownloadPage { get; }
+    public ICommand InstallAutomatically { get; }
+    public ICommand Uninstall { get; }
     public ICommand RunDownloadedInstaller { get; }
+
+    /// <summary>The download page that opens over this screen.</summary>
+    public RtssDownloadViewModel Download { get; }
     public ICommand CheckAgain { get; }
     public ICommand ToggleUseTsumeOverlay { get; }
     public ICommand ToggleOsdVisible { get; }
@@ -142,16 +168,125 @@ public sealed class RtssViewModel : LayerViewModel
         private set
         {
             if (!Set(ref field, value)) return;
-            Notify(nameof(InstalledVisibility));
-            Notify(nameof(NotInstalledVisibility));
+            NotifyPresentation();
             Notify(nameof(IsNotRunning));
             Notify(nameof(RtssAppDetail));
             NotifyTile();
         }
     }
 
-    public Visibility InstalledVisibility => IsInstalled ? Visibility.Visible : Visibility.Collapsed;
-    public Visibility NotInstalledVisibility => IsInstalled ? Visibility.Collapsed : Visibility.Visible;
+    // What the screens present is held steady while an install or uninstall is in flight, even though
+    // RTSS.exe appears or vanishes on disk partway through. That way nobody starts a half-installed
+    // RTSS, and the tile that was pressed stays put until the work has fully finished.
+    private bool PresentsInstalled => IsUninstalling || (IsInstalled && !IsInstalling);
+
+    public Visibility InstalledVisibility => PresentsInstalled ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility NotInstalledVisibility => PresentsInstalled ? Visibility.Collapsed : Visibility.Visible;
+
+    /// <summary>True while Tsume's own winget install of RTSS is running.</summary>
+    public bool IsInstalling
+    {
+        get;
+        private set
+        {
+            if (Set(ref field, value)) NotifyPresentation();
+        }
+    }
+
+    /// <summary>True while RTSS's uninstaller, started from the download page, is running.</summary>
+    public bool IsUninstalling
+    {
+        get;
+        private set
+        {
+            if (Set(ref field, value)) NotifyPresentation();
+        }
+    }
+
+    /// <summary>True while an install or uninstall is in flight; everything else on the page waits.</summary>
+    public bool IsBusy => IsInstalling || IsUninstalling;
+
+    public Visibility BusyVisibility => IsBusy ? Visibility.Visible : Visibility.Collapsed;
+
+    public string BusyText => IsUninstalling ? Strings.RtssUninstalling : InstallProgressText;
+
+    /// <summary>Set by the first press of Uninstall; the second press goes ahead.</summary>
+    public bool ConfirmingUninstall
+    {
+        get;
+        private set
+        {
+            if (!Set(ref field, value)) return;
+            Notify(nameof(UninstallLabel));
+            Notify(nameof(UninstallDetail));
+        }
+    }
+
+    public string UninstallLabel => ConfirmingUninstall && !IsUninstalling
+        ? Strings.RtssUninstallConfirm
+        : Strings.RtssUninstall;
+
+    public string UninstallDetail =>
+        IsUninstalling        ? Strings.RtssUninstallBusy
+        : ConfirmingUninstall ? Strings.RtssUninstallConfirmDetail
+        : Strings.RtssUninstallDetail(InstalledVersion);
+
+    public string DownloadPageLabel => PresentsInstalled ? Strings.RtssDownloadPageInstalled : Strings.RtssDownloadPage;
+
+    public string DownloadPageDetail => PresentsInstalled
+        ? Strings.RtssDownloadPageInstalledDetail
+        : Strings.RtssDownloadPageDetail;
+
+    private void NotifyPresentation()
+    {
+        Notify(nameof(InstalledVisibility));
+        Notify(nameof(NotInstalledVisibility));
+        Notify(nameof(AutoInstallVisibility));
+        Notify(nameof(AutoInstallDetail));
+        Notify(nameof(DownloadedInstallerVisibility));
+        Notify(nameof(IsBusy));
+        Notify(nameof(BusyVisibility));
+        Notify(nameof(BusyText));
+        Notify(nameof(UninstallLabel));
+        Notify(nameof(UninstallDetail));
+        Notify(nameof(DownloadPageLabel));
+        Notify(nameof(DownloadPageDetail));
+    }
+
+    /// <summary>How far the automatic install has got; only ever moves forward.</summary>
+    public RtssInstallStage InstallStage
+    {
+        get;
+        private set
+        {
+            if (!Set(ref field, value)) return;
+            Notify(nameof(InstallProgressText));
+            Notify(nameof(BusyText));
+        }
+    }
+
+    public string InstallProgressText => InstallStage switch
+    {
+        RtssInstallStage.Downloading => Strings.RtssInstallStageDownloading,
+        RtssInstallStage.Installing  => Strings.RtssInstallStageInstalling,
+        RtssInstallStage.Finishing   => Strings.RtssInstallStageFinishing,
+        _                            => Strings.RtssInstallStagePreparing,
+    };
+
+    /// <summary>False on PCs without Windows Package Manager, where only the Guru3D link is offered.</summary>
+    public bool CanInstallAutomatically
+    {
+        get;
+        private set
+        {
+            if (Set(ref field, value)) Notify(nameof(AutoInstallVisibility));
+        }
+    }
+
+    public Visibility AutoInstallVisibility =>
+        !PresentsInstalled && CanInstallAutomatically ? Visibility.Visible : Visibility.Collapsed;
+
+    public string AutoInstallDetail => IsInstalling ? Strings.RtssInstallAutoBusy : Strings.RtssInstallAutoDetail;
 
     public bool IsRunning
     {
@@ -196,7 +331,7 @@ public sealed class RtssViewModel : LayerViewModel
     }
 
     public Visibility DownloadedInstallerVisibility =>
-        !IsInstalled && HasDownloadedInstaller ? Visibility.Visible : Visibility.Collapsed;
+        !PresentsInstalled && HasDownloadedInstaller ? Visibility.Visible : Visibility.Collapsed;
 
     public string DownloadedInstallerDetail =>
         _downloadedInstaller is { } path ? Strings.RtssRunInstallerDetail(Path.GetFileName(path)) : "";
@@ -206,7 +341,9 @@ public sealed class RtssViewModel : LayerViewModel
         get;
         private set
         {
-            if (Set(ref field, value)) Notify(nameof(RtssAppDetail));
+            if (!Set(ref field, value)) return;
+            Notify(nameof(RtssAppDetail));
+            Notify(nameof(UninstallDetail));
         }
     } = "";
 
@@ -376,6 +513,9 @@ public sealed class RtssViewModel : LayerViewModel
     /// <summary>Fast refresh for the main-screen tile whenever the panel opens.</summary>
     public void RefreshTile()
     {
+        // Looking for RTSS loads its hooks DLL, which would stop the uninstaller deleting it.
+        if (IsUninstalling) return;
+
         _ = Task.Run(() =>
         {
             var install = _service.RefreshInstallation();
@@ -390,7 +530,7 @@ public sealed class RtssViewModel : LayerViewModel
     /// <summary>Polled while the RTSS screen is open so external RTSS start/exit updates the screen live.</summary>
     public void RefreshRunningState()
     {
-        if (!IsInstalled || _launching || _closing) return;
+        if (!IsInstalled || IsBusy || _launching || _closing) return;
 
         var running = _service.IsRunning;
         if (running == IsRunning) return;
@@ -402,6 +542,14 @@ public sealed class RtssViewModel : LayerViewModel
 
     protected override void OnOpened()
     {
+        if (IsBusy)
+        {
+            // Reopened mid-install or mid-uninstall: the progress card carries the status, and
+            // re-scanning now would load the hooks DLL the uninstaller is trying to delete.
+            Status = "";
+            return;
+        }
+
         RefreshState();
         Status = DefaultStatus();
         if (IsInstalled)
@@ -419,6 +567,7 @@ public sealed class RtssViewModel : LayerViewModel
         var osd = running ? _service.IsOsdVisible() : null;
         var limit = running ? _service.GetFrameRateLimit() : null;
         var installer = install is null ? RtssInstallation.FindDownloadedInstaller() : null;
+        CanInstallAutomatically = RtssWingetInstaller.FindWinget() is not null;
 
         ApplySnapshot(install, running, osd, limit, installer, scanInstaller: true);
     }
@@ -501,9 +650,153 @@ public sealed class RtssViewModel : LayerViewModel
         }
     }
 
+    private async Task InstallAutomaticallyAsync()
+    {
+        if (IsBusy || RtssWingetInstaller.IsBusy)
+        {
+            Status = Strings.RtssInstallAlreadyRunning;
+            return;
+        }
+
+        // RTSS may have been installed since this screen was drawn (by hand, or by another tool).
+        // Never run the installer over a working copy: it would restart RTSS under a running game.
+        RefreshState();
+        if (IsInstalled)
+        {
+            Status = Strings.RtssAlreadyInstalled;
+            Settled?.Invoke();
+            return;
+        }
+
+        InstallStage = RtssInstallStage.Preparing;
+        IsInstalling = true;
+        Status = "";
+
+        // Created on the UI thread, so stage reports arrive back on it.
+        var progress = new Progress<RtssInstallStage>(stage =>
+        {
+            if (IsInstalling && stage > InstallStage) InstallStage = stage;
+        });
+
+        RtssInstallResult result;
+        try
+        {
+            result = await RtssWingetInstaller.InstallAsync(progress);
+            if (result.Outcome is RtssInstallOutcome.Finished) InstallStage = RtssInstallStage.Finishing;
+
+            // Trust what is on disk over winget's exit code. The installer can return a moment before
+            // its files and registry entries are visible, so look a few times before giving up.
+            if (result.Outcome is RtssInstallOutcome.Finished)
+            {
+                for (var attempt = 0; attempt < 6 && _service.RefreshInstallation() is null; attempt++)
+                    await Task.Delay(500);
+            }
+        }
+        finally
+        {
+            IsInstalling = false;
+        }
+
+        RefreshState();
+
+        if (IsInstalled)
+        {
+            _ = RefreshStartWithWindowsAsync();
+            Status = result.Outcome is RtssInstallOutcome.Finished
+                ? Strings.RtssInstallDone(InstalledVersion)
+                : Strings.RtssAlreadyInstalled;
+        }
+        else
+        {
+            Status = result.Outcome switch
+            {
+                RtssInstallOutcome.WingetMissing     => Strings.RtssInstallNoWinget,
+                RtssInstallOutcome.Offline           => Strings.RtssInstallOffline,
+                RtssInstallOutcome.AlreadyInstalling => Strings.RtssInstallAlreadyRunning,
+                RtssInstallOutcome.TimedOut          => Strings.RtssInstallTimedOut,
+                RtssInstallOutcome.CouldNotStart     => Strings.RtssInstallNoWinget,
+                _ when result.ExitCode == 0          => Strings.RtssInstallNotFoundAfter,
+                _                                    => Strings.RtssInstallFailed(result.ExitCode),
+            };
+        }
+
+        Settled?.Invoke();
+    }
+
+    private async Task UninstallAsync()
+    {
+        if (IsBusy) return;
+
+        // First press only arms it; removing RTSS takes a second, deliberate press.
+        if (!ConfirmingUninstall)
+        {
+            ConfirmingUninstall = true;
+            Status = "";
+            return;
+        }
+
+        ConfirmingUninstall = false;
+
+        var install = _service.RefreshInstallation();
+        if (install is null)
+        {
+            RefreshState();
+            Status = Strings.RtssUninstallDone;
+            Settled?.Invoke();
+            return;
+        }
+
+        if (RtssInstallation.FindUninstaller(install) is not { } uninstaller)
+        {
+            Status = Strings.RtssUninstallNotFound;
+            return;
+        }
+
+        IsUninstalling = true;
+        Status = "";
+
+        string result;
+        try
+        {
+            result = await RunUninstallAsync(uninstaller);
+        }
+        finally
+        {
+            IsUninstalling = false;
+        }
+
+        RefreshState();
+        if (IsInstalled) _ = RefreshStartWithWindowsAsync();
+        Status = result;
+        Settled?.Invoke();
+    }
+
+    /// <summary>Stops RTSS, lets go of its files, runs its uninstaller and waits for it to be gone.</summary>
+    private async Task<string> RunUninstallAsync(string uninstaller)
+    {
+        // A sign-in task pointing at a deleted RTSS.exe would fail quietly at every startup.
+        if (StartsWithWindows) await _service.SetStartWithWindowsAsync(false);
+
+        // The uninstaller cannot remove files that RTSS, or Tsume's own overlay, still has open.
+        if (_service.IsRunning && !await _service.StopRtssAsync()) return Strings.RtssUninstallStillRunning;
+        _service.ReleaseHooks();
+
+        if (!await Task.Run(() => RtssInstallation.LaunchUninstaller(uninstaller)))
+            return Strings.RtssUninstallCancelled;
+
+        // The uninstaller hands over to a copy of itself, so watch the files instead of the process.
+        for (var attempt = 0; attempt < 120; attempt++)
+        {
+            await Task.Delay(1000);
+            if (await Task.Run(RtssInstallation.Find) is null) return Strings.RtssUninstallDone;
+        }
+
+        return Strings.RtssUninstallFailed;
+    }
+
     private async Task StartRtssAsync()
     {
-        if (_launching) return;
+        if (_launching || IsBusy) return;
         var install = _service.Install ?? _service.RefreshInstallation();
         if (install is null) return;
 

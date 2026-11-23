@@ -623,7 +623,7 @@
 
   <data name="Rtss" xml:space="preserve"><value>RTSS</value></data>
   <data name="RtssNotInstalledTitle" xml:space="preserve"><value>RivaTuner Statistics Server is not installed</value></data>
-  <data name="RtssNotInstalledExplained" xml:space="preserve"><value>Tsume links to RTSS instead of bundling it to save space. Download RTSS 7.3.7 from Guru3D, install it, then come back here.</value></data>
+  <data name="RtssNotInstalledExplained" xml:space="preserve"><value>Tsume links to RTSS instead of bundling it to save space. Install it automatically, or download RTSS 7.3.7 from Guru3D and install it yourself.</value></data>
   <data name="RtssDownloadOfficial" xml:space="preserve"><value>Download RTSS 7.3.7</value></data>
   <data name="RtssDownloadOfficialDetail" xml:space="preserve"><value>Opens Guru3D's official download page</value></data>
   <data name="RtssRunInstaller" xml:space="preserve"><value>Run downloaded installer</value></data>
@@ -636,6 +636,52 @@
   <data name="RtssStillNotFound" xml:space="preserve"><value>RTSS was not found yet. Finish the installer, then check again.</value></data>
   <data name="RtssOpeningDownload" xml:space="preserve"><value>Opened Guru3D's official RTSS 7.3.7 page.</value></data>
   <data name="RtssInstallerFailed" xml:space="preserve"><value>Could not start the downloaded RTSS installer.</value></data>
+  <data name="RtssInstallAuto" xml:space="preserve"><value>Install RTSS automatically</value></data>
+  <data name="RtssInstallAutoDetail" xml:space="preserve"><value>Gets the official installer through Windows Package Manager</value></data>
+  <data name="RtssInstallAutoBusy" xml:space="preserve"><value>Downloading and installing… this can take a few minutes</value></data>
+  <data name="RtssInstallStagePreparing" xml:space="preserve"><value>Contacting Windows Package Manager…</value></data>
+  <data name="RtssInstallStageDownloading" xml:space="preserve"><value>Downloading the official RTSS installer… Accept the Windows permission prompt when it appears (it may be waiting on the taskbar).</value></data>
+  <data name="RtssInstallStageInstalling" xml:space="preserve"><value>Installing RTSS…</value></data>
+  <data name="RtssInstallStageFinishing" xml:space="preserve"><value>Finishing up…</value></data>
+  <data name="RtssInstallAlreadyRunning" xml:space="preserve"><value>RTSS is already being installed. Wait for it to finish, then check again.</value></data>
+  <data name="RtssInstallOffline" xml:space="preserve"><value>No internet connection. Connect, then try again.</value></data>
+  <data name="RtssInstallNoWinget" xml:space="preserve"><value>Windows Package Manager is not available on this PC. Use Guru3D's download page instead.</value></data>
+  <data name="RtssInstallTimedOut" xml:space="preserve"><value>The RTSS install took too long and was stopped. Try again, or use Guru3D's download page.</value></data>
+  <data name="RtssInstallFailed" xml:space="preserve">
+    <value>RTSS was not installed (error {0}). Accept the Windows permission prompt and try again, or use Guru3D's download page.</value>
+    <comment>{0} = winget exit code in hexadecimal, e.g. 0x8A150008</comment>
+  </data>
+  <data name="RtssInstallNotFoundAfter" xml:space="preserve"><value>The installer finished but RTSS was not found. Choose Check again in a moment.</value></data>
+  <data name="RtssInstallDone" xml:space="preserve">
+    <value>RTSS {0} installed. Start it to show the overlay.</value>
+    <comment>{0} = RTSS version</comment>
+  </data>
+  <data name="RtssInstallDonePlain" xml:space="preserve"><value>RTSS installed. Start it to show the overlay.</value></data>
+  <data name="RtssAlreadyInstalled" xml:space="preserve"><value>RTSS is already installed.</value></data>
+
+  <data name="RtssDownloadTitle" xml:space="preserve"><value>RTSS download</value></data>
+  <data name="RtssDownloadPage" xml:space="preserve"><value>Download RTSS</value></data>
+  <data name="RtssDownloadPageDetail" xml:space="preserve"><value>Install it automatically or get it from Guru3D</value></data>
+  <data name="RtssDownloadPageInstalled" xml:space="preserve"><value>Download or uninstall</value></data>
+  <data name="RtssDownloadPageInstalledDetail" xml:space="preserve"><value>Guru3D's download page, or remove RTSS from this PC</value></data>
+  <data name="RtssAutomaticHeading" xml:space="preserve"><value>AUTOMATIC INSTALL</value></data>
+  <data name="RtssManualHeading" xml:space="preserve"><value>MANUAL DOWNLOAD</value></data>
+  <data name="RtssUninstallHeading" xml:space="preserve"><value>UNINSTALL</value></data>
+  <data name="RtssUninstall" xml:space="preserve"><value>Uninstall RTSS</value></data>
+  <data name="RtssUninstallDetail" xml:space="preserve">
+    <value>Stops RTSS {0} and removes it from this PC</value>
+    <comment>{0} = RTSS version</comment>
+  </data>
+  <data name="RtssUninstallDetailPlain" xml:space="preserve"><value>Stops RTSS and removes it from this PC</value></data>
+  <data name="RtssUninstallConfirm" xml:space="preserve"><value>Press again to uninstall</value></data>
+  <data name="RtssUninstallConfirmDetail" xml:space="preserve"><value>RTSS will be closed and removed. Go back to cancel.</value></data>
+  <data name="RtssUninstallBusy" xml:space="preserve"><value>Removing…</value></data>
+  <data name="RtssUninstalling" xml:space="preserve"><value>Removing RTSS… Accept the Windows permission prompt when it appears (it may be waiting on the taskbar).</value></data>
+  <data name="RtssUninstallDone" xml:space="preserve"><value>RTSS was removed from this PC.</value></data>
+  <data name="RtssUninstallFailed" xml:space="preserve"><value>RTSS is still installed. Close any game using it, then try again or remove it from Windows Settings › Apps.</value></data>
+  <data name="RtssUninstallCancelled" xml:space="preserve"><value>RTSS was not removed. Accept the Windows permission prompt to uninstall it.</value></data>
+  <data name="RtssUninstallStillRunning" xml:space="preserve"><value>Could not end RTSS, so it was not removed. Close it from the system tray and try again.</value></data>
+  <data name="RtssUninstallNotFound" xml:space="preserve"><value>RTSS's uninstaller was not found. Remove it from Windows Settings › Apps instead.</value></data>
 
   <data name="RtssOverlayHeading" xml:space="preserve"><value>OVERLAY</value></data>
   <data name="RtssUseTsumeOverlay" xml:space="preserve"><value>Steam-style overlay</value></data>
@@ -714,8 +760,6 @@
     <value>RTSS {0} running · Changes apply immediately.</value>
     <comment>{0} = installed RTSS version, e.g. 7.3.7</comment>
   </data>
-  <data name="RtssGuru3dLink" xml:space="preserve"><value>Guru3D download page</value></data>
-  <data name="RtssGuru3dLinkDetail" xml:space="preserve"><value>Official RTSS 7.3.7 download and updates</value></data>
 
   <!-- Controls & layout screen -->
 

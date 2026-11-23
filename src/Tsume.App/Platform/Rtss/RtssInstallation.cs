@@ -88,6 +88,81 @@ public static class RtssInstallation
     }
 
     /// <summary>
+    /// Finds RTSS's own uninstaller: the one Windows lists under Apps, or failing that the
+    /// <c>Uninstall.exe</c> sitting in the install folder.
+    /// </summary>
+    public static string? FindUninstaller(RtssInstallInfo install)
+    {
+        string[] uninstallRoots =
+        [
+            @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+            @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+        ];
+
+        foreach (var root in uninstallRoots)
+        {
+            try
+            {
+                using var parent = Registry.LocalMachine.OpenSubKey(root);
+                if (parent is null) continue;
+
+                foreach (var name in parent.GetSubKeyNames())
+                {
+                    using var entry = parent.OpenSubKey(name);
+                    var display = entry?.GetValue("DisplayName") as string;
+                    if (display is null || !display.Contains("RivaTuner", StringComparison.OrdinalIgnoreCase)) continue;
+
+                    if (ExecutableIn(entry?.GetValue("UninstallString") as string) is { } exe && File.Exists(exe))
+                        return exe;
+                }
+            }
+            catch (Exception error) when (error is System.Security.SecurityException or UnauthorizedAccessException or IOException) { }
+        }
+
+        var beside = Path.Combine(install.Folder, "Uninstall.exe");
+        return File.Exists(beside) ? beside : null;
+    }
+
+    /// <summary>
+    /// Starts RTSS's uninstaller silently. Windows asks for permission first; declining it returns false.
+    /// The uninstaller hands over to a copy of itself and returns at once, so callers watch for
+    /// <c>RTSS.exe</c> disappearing rather than waiting on the process.
+    /// </summary>
+    public static bool LaunchUninstaller(string uninstaller)
+    {
+        try
+        {
+            using var _ = Process.Start(new ProcessStartInfo(uninstaller)
+            {
+                Arguments = "/S",
+                WorkingDirectory = Path.GetTempPath(),   // never the folder being removed
+                UseShellExecute = true,
+            });
+            return true;
+        }
+        catch (Exception error) when (error is Win32Exception or InvalidOperationException or IOException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Pulls the program path out of an uninstall command line such as <c>"C:\…\Uninstall.exe" /x</c>.</summary>
+    private static string? ExecutableIn(string? commandLine)
+    {
+        if (string.IsNullOrWhiteSpace(commandLine)) return null;
+        var text = commandLine.Trim();
+
+        if (text.StartsWith('"'))
+        {
+            var close = text.IndexOf('"', 1);
+            return close > 1 ? text[1..close] : null;
+        }
+
+        var end = text.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+        return end > 0 ? text[..(end + 4)] : null;
+    }
+
+    /// <summary>
     /// Unhides and brings RTSS's configuration window to the foreground when RTSS is already running
     /// minimized to the system tray. Falls back to launching <c>RTSS.exe</c> if no window is found.
     /// </summary>
