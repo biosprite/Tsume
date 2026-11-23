@@ -50,6 +50,9 @@ public sealed partial class RtssOverlayDragWindow : Window
     private Point _downScreenDip;
     private int _startPhysX;
     private int _startPhysY;
+    private string? _lastBadgeText;
+    private double _cachedBadgeW;
+    private double _cachedBadgeH;
 
     public RtssOverlayDragWindow(RtssOverlayService service)
     {
@@ -98,6 +101,18 @@ public sealed partial class RtssOverlayDragWindow : Window
         RtssOverlayLevel level, int x, int y, int width, int height, int screenW, int screenH)
     {
         if (_interactive || _dragging) return;
+
+        if (IsVisible && !_expanded
+            && _level == level
+            && _currentPhysX == x
+            && _currentPhysY == y
+            && _overlayPhysW == width
+            && _overlayPhysH == height
+            && _screenPhysW == screenW
+            && _screenPhysH == screenH)
+        {
+            return;
+        }
 
         _level = level;
         _overlayPhysW = width;
@@ -395,13 +410,21 @@ public sealed partial class RtssOverlayDragWindow : Window
 
     private void UpdateBadge(int physX, int physY, RtssOverlayAlignment alignment)
     {
-        BadgeText.Text = alignment == RtssOverlayAlignment.Custom
+        var text = alignment == RtssOverlayAlignment.Custom
             ? $"{Strings.RtssAlignCustom} · {physX}, {physY}"
             : RtssViewModel.FormatAlignment(alignment);
 
-        PositionBadge.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var badgeW = PositionBadge.DesiredSize.Width;
-        var badgeH = PositionBadge.DesiredSize.Height;
+        if (!string.Equals(_lastBadgeText, text, StringComparison.Ordinal))
+        {
+            _lastBadgeText = text;
+            BadgeText.Text = text;
+            PositionBadge.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            _cachedBadgeW = PositionBadge.DesiredSize.Width;
+            _cachedBadgeH = PositionBadge.DesiredSize.Height;
+        }
+
+        var badgeW = _cachedBadgeW;
+        var badgeH = _cachedBadgeH;
 
         var boxX = physX / _dpiX;
         var boxY = physY / _dpiY;

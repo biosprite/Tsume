@@ -62,6 +62,50 @@ public static class RtssSharedMemory
     }
 
     /// <summary>
+    /// Fast, allocation-free check for whether <paramref name="processId"/> is currently hooked by RTSS as a 3D app.
+    /// </summary>
+    public static bool IsProcessHooked(uint processId)
+    {
+        if (processId == 0) return false;
+        try
+        {
+            using var mmf = MemoryMappedFile.OpenExisting(MapName, MemoryMappedFileRights.Read);
+            using var view = mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+
+            if (view.ReadUInt32(OffSignature) != RtssSignature) return false;
+            var version = view.ReadUInt32(OffVersion);
+            if (version < 0x00020000) return false;
+
+            var appEntrySize = view.ReadUInt32(OffAppEntrySize);
+            var appArrOffset = view.ReadUInt32(OffAppArrOffset);
+            var appArrSize = view.ReadUInt32(OffAppArrSize);
+            var capacity = view.Capacity;
+
+            if (appEntrySize >= 284 && appArrOffset > 0 && appArrSize > 0)
+            {
+                var limit = Math.Min(appArrSize, 256u);
+                for (uint i = 0; i < limit; i++)
+                {
+                    var offset = appArrOffset + (long)i * appEntrySize;
+                    if (offset + AppFlagsOffset + 4 > capacity) break;
+
+                    if (view.ReadUInt32(offset + AppPidOffset) != processId) continue;
+
+                    var flags = view.ReadUInt32(offset + AppFlagsOffset);
+                    var hasApi = version >= VersionApiFlags ? (flags & AppFlagApiUsageMask) != 0 : flags != 0;
+                    if (hasApi) return true;
+                }
+            }
+
+            return false;
+        }
+        catch (Exception error) when (error is FileNotFoundException or UnauthorizedAccessException or IOException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Returns the process IDs of 3D applications currently hooked by RTSS, or null if RTSS shared memory
     /// is unavailable.
     /// </summary>
