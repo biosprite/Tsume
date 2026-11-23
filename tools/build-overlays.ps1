@@ -14,7 +14,7 @@
     Single-chip handheld PCs (APU/SoC) share one die between CPU and GPU, so every
     telemetry layout displays one unified temperature reading instead of duplicating
     CPU/GPU temperatures (and omits discrete GDDR VRAM temperature):
-      - Level 1 (FPS):    FPS + 1% low pill
+      - Level 1 (FPS):    Compact FPS square
       - Level 2 (Bar):    Symmetrical CPU (ring + W) | FPS, 1% LOW, TEMP | GPU (W + ring)
       - Level 3 (Detail): CPU (ring + stats) | GPU (ring + stats) | FPS + Temp + lows + graph
       - Level 4 (Full):   Side panel with FPS + TEMP header, then CPU and GPU sections
@@ -104,6 +104,7 @@ $ringRefresh = 16
 $baseRefresh = 250
 
 # Reworked panel chrome dimensions.
+$fpsPanelW     = 72;  $fpsPanelH     = 72
 $sleekPanelW   = 520; $sleekPanelH   = 72;  $sleekDividers   = @(144, 376)
 $compactPanelW = 686; $compactPanelH = 93;  $compactDividers = @(232, 464)
 $perfPanelW    = 225; $perfPanelH    = 504; $perfDividers    = @(168, 304)
@@ -135,6 +136,75 @@ function Read-IniSections([string]$path) {
     }
 
     return $sections
+}
+
+function Draw-FpsSquarePanel(
+    [System.Drawing.Graphics]$target,
+    [System.Drawing.Bitmap]$sourceAtlas,
+    [int]$srcH,
+    [int]$cleanColX,
+    [int]$destX,
+    [int]$destY,
+    [int]$width,
+    [int]$height,
+    [float]$radius) {
+
+    # Skip drawing for transparent themes (e.g. Float).
+    if ($sourceAtlas.GetPixel($cleanColX, [int]($srcH / 2)).A -eq 0) { return }
+
+    $tile = New-Object System.Drawing.Bitmap($width, $height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+    try {
+        $d = $radius * 2.0
+        $path.AddArc(0.5, 0.5, $d, $d, 180, 90)
+        $path.AddArc(($width - $d - 0.5), 0.5, $d, $d, 270, 90)
+        $path.AddArc(($width - $d - 0.5), ($height - $d - 0.5), $d, $d, 0, 90)
+        $path.AddArc(0.5, ($height - $d - 0.5), $d, $d, 90, 90)
+        $path.CloseFigure()
+
+        # Sample the theme's clean vertical fill gradient into a 1px strip, then fill the clipped square.
+        $fillBmp = New-Object System.Drawing.Bitmap($width, $height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+        try {
+            $fg = [System.Drawing.Graphics]::FromImage($fillBmp)
+            try {
+                $fg.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy
+                $fg.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBilinear
+                $fg.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::Half
+                $fg.DrawImage($sourceAtlas,
+                    (New-Object System.Drawing.Rectangle(0, 0, $width, $height)),
+                    (New-Object System.Drawing.Rectangle($cleanColX, 2, 1, ($srcH - 4))),
+                    [System.Drawing.GraphicsUnit]::Pixel)
+            }
+            finally { $fg.Dispose() }
+
+            $brush = New-Object System.Drawing.TextureBrush($fillBmp)
+            $borderColor = $sourceAtlas.GetPixel($cleanColX, 1)
+            $pen = New-Object System.Drawing.Pen($borderColor, 1.0)
+            try {
+                $tg = [System.Drawing.Graphics]::FromImage($tile)
+                try {
+                    $tg.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+                    $tg.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+                    $tg.FillPath($brush, $path)
+                    if ($borderColor.A -gt 0) {
+                        $tg.DrawPath($pen, $path)
+                    }
+                }
+                finally { $tg.Dispose() }
+            }
+            finally {
+                $pen.Dispose()
+                $brush.Dispose()
+            }
+        }
+        finally { $fillBmp.Dispose() }
+
+        $target.DrawImageUnscaled($tile, $destX, $destY)
+    }
+    finally {
+        $path.Dispose()
+        $tile.Dispose()
+    }
 }
 
 function Draw-HorizontalPanel(
@@ -494,8 +564,9 @@ foreach ($theme in $themes) {
         $sleekRingSz   = 62
         $compactRingSz = 67
 
-        $sleekPanelX   = 0;                 $sleekPanelY   = 0
-        $compactPanelX = $sleekPanelW + 4;  $compactPanelY = 0
+        $sleekPanelX   = 0;                                  $sleekPanelY   = 0
+        $compactPanelX = $sleekPanelW + 4;                   $compactPanelY = 0
+        $fpsPanelX     = $compactPanelX + $compactPanelW + 4; $fpsPanelY     = 0
 
         $sleekCpuRingY   = $compactPanelH + 3
         $sleekGpuRingY   = $sleekCpuRingY   + ($ringRows * $sleekRingSz)   + 2
@@ -517,6 +588,7 @@ foreach ($theme in $themes) {
                 # Synthesize resized panel chrome directly from each theme's upstream atlas.
                 Draw-HorizontalPanel $g $imgSleek   480 $sleekPanelH   36 100 142 3 $sleekPanelX   $sleekPanelY   $sleekPanelW   $sleekDividers
                 Draw-HorizontalPanel $g $imgCompact 750 $compactPanelH 24 100 267 3 $compactPanelX $compactPanelY $compactPanelW $compactDividers
+                Draw-FpsSquarePanel  $g $imgCompact $compactPanelH 100 $fpsPanelX $fpsPanelY $fpsPanelW $fpsPanelH 8.0
                 Draw-VerticalPerfPanel $g $imgPerf $perfPanelX $perfPanelY $perfPanelH $perfDividers
 
                 # Render 145-frame rings on top of the exact original Frame-0 track sprite.
@@ -610,15 +682,11 @@ foreach ($theme in $themes) {
     # 3. Build layers for all four levels.
     $mergedLayers = [System.Collections.Generic.List[string[]]]::new()
 
-    # ── Level 1: FPS pill (reuses Bar panel caps + clean center fill) ─────────────────────────────
+    # ── Level 1: Compact FPS square (72x72, centered at x=960) ────────────────────────────────────
     $vis1 = 'Tsume level 1 visible'
-    Add-SpriteLayer $mergedLayers $vis1 'Panel left'   834 24 ($sleekPanelX + 0)                    $sleekPanelY 36  72 $totalWidth $totalHeight
-    Add-SpriteLayer $mergedLayers $vis1 'Panel middle' 870 24 ($sleekPanelX + 160)                  $sleekPanelY 180 72 $totalWidth $totalHeight
-    Add-SpriteLayer $mergedLayers $vis1 'Panel right'  1050 24 ($sleekPanelX + $sleekPanelW - 36)   $sleekPanelY 36  72 $totalWidth $totalHeight
-    Add-TextLayer   $mergedLayers $theme $vis1 'FPS label'    'FPS'                870 32 90 19 4 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis1 'FPS'          '%Framerate%'        870 50 90 36 4 200 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis1 '1% low label' '1% LOW'             960 32 90 19 4 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis1 '1% low'       '%Framerate 1% Low%' 960 50 90 36 4 200 $theme.ValueHex 1000
+    Add-SpriteLayer $mergedLayers $vis1 'Panel' 924 24 $fpsPanelX $fpsPanelY $fpsPanelW $fpsPanelH $totalWidth $totalHeight
+    Add-TextLayer   $mergedLayers $theme $vis1 'FPS label' 'FPS'         924 32 72 19 4 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $theme $vis1 'FPS'       '%Framerate%' 924 50 72 36 4 200 $theme.ValueHex
 
     # ── Level 2: Bar (520x72, centered at x=960) ──────────────────────────────────────────────────
     #    [CPU Ring] CPU / Power  |  FPS  1% LOW  TEMP  |  GPU / Power [GPU Ring]
@@ -679,23 +747,23 @@ foreach ($theme in $themes) {
     Add-GraphLayer  $mergedLayers $vis3 'Frametime graph' '<G=Frametime,0,0,1,0,40,0>'  1095 97 194 12 $theme.FpsHex
 
     # ── Level 4: Full side panel (225x504, top-right at x=1671, y=160) ────────────────────────────
-    #    Header: FPS (left) + TEMP (right), 1% low, 0.1% low, Frametime, graph
+    #    Header: FPS, Temp, 1% low, 0.1% low, Frametime, graph
     #    CPU: Load, Power, Clock, RAM, graph
     #    GPU: Load, Power, Clock, Voltage, Fan, VRAM, graph
     $vis4 = 'Tsume level 4 visible'
     Add-SpriteLayer $mergedLayers $vis4 'Panel' 1671 160 $perfPanelX $perfPanelY $perfPanelW $perfPanelH $totalWidth $totalHeight
 
-    Add-TextLayer   $mergedLayers $theme $vis4 'FPS label'        'FPS'                  1687 173 0  0  0 100 $theme.FpsHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'FPS'              '%Framerate%'          1687 188 0  0  0 200 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'Temp label'       'TEMP'                 1781 173 98 19 2 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'Temperature'      "%CPU temperature%$deg" 1781 188 98 38 2 200 $theme.TempColor
-    Add-TextLayer   $mergedLayers $theme $vis4 '1% low label'     '1% low'               1687 234 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 '1% low'           '%Framerate 1% Low%'   1789 234 90 19 2 100 $theme.ValueHex 1000
-    Add-TextLayer   $mergedLayers $theme $vis4 '0.1% low label'   '0.1% low'             1687 254 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 '0.1% low'         '%Framerate 0.1% Low%' 1789 254 90 19 2 100 $theme.ValueHex 1000
-    Add-TextLayer   $mergedLayers $theme $vis4 'Frametime label'  'Frametime'            1687 274 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'Frametime'        '<FT> ms'              1789 274 90 19 2 100 $theme.ValueHex
-    Add-GraphLayer  $mergedLayers $vis4 'Frametime graph' '<G=Frametime,0,0,1,0,40,10>'  1687 298 192 20 $theme.FpsHex
+    Add-TextLayer   $mergedLayers $theme $vis4 'FPS label'        'FPS'                  1687 171 0  0  0 100 $theme.FpsHex
+    Add-TextLayer   $mergedLayers $theme $vis4 'FPS'              '%Framerate%'          1686 181 0  0  0 200 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $theme $vis4 'Temp label'       'Temp'                 1687 216 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $theme $vis4 'Temperature'      "%CPU temperature%$deg" 1781 216 98 19 2 100 $theme.TempColor
+    Add-TextLayer   $mergedLayers $theme $vis4 '1% low label'     '1% low'               1687 236 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $theme $vis4 '1% low'           '%Framerate 1% Low%'   1789 236 90 19 2 100 $theme.ValueHex 1000
+    Add-TextLayer   $mergedLayers $theme $vis4 '0.1% low label'   '0.1% low'             1687 256 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $theme $vis4 '0.1% low'         '%Framerate 0.1% Low%' 1789 256 90 19 2 100 $theme.ValueHex 1000
+    Add-TextLayer   $mergedLayers $theme $vis4 'Frametime label'  'Frametime'            1687 276 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $theme $vis4 'Frametime'        '<FT> ms'              1789 276 90 19 2 100 $theme.ValueHex
+    Add-GraphLayer  $mergedLayers $vis4 'Frametime graph' '<G=Frametime,0,0,1,0,40,10>'  1687 299 192 19 $theme.FpsHex
 
     Add-TextLayer   $mergedLayers $theme $vis4 'CPU label'        'CPU'                  1687 338 0  0  0 100 $theme.CpuHex
     Add-TextLayer   $mergedLayers $theme $vis4 'CPU Load label'   'Load'                 1687 359 0  0  0 100 $theme.MutedHex

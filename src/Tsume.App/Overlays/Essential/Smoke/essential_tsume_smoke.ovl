@@ -14,7 +14,7 @@ PingAddr=127.0.0.1
 [General]
 Sources=29
 Tables=0
-Layers=88
+Layers=84
 [Source0]
 Name=Tsume level 1 visible
 Units=
@@ -219,82 +219,39 @@ Formula=if(validate("GPU1 usage smooth"), "GPU1 usage smooth" + ("GPU1 usage sta
 Provider=HAL
 ID=Timer
 [Layer0]
-Name=Panel left
+Name=Panel
 VisibilitySource=Tsume level 1 visible
-Text=<I=0,0,0,0,36,72>
-PositionX=834
+Text=<I=0,0,1214,0,72,72>
+PositionX=924
 PositionY=24
-ExtentX=36
+ExtentX=72
 ExtentY=72
 ExtentOrigin=0
 RefreshPeriod=250
 [Layer1]
-Name=Panel middle
-VisibilitySource=Tsume level 1 visible
-Text=<I=0,0,160,0,180,72>
-PositionX=870
-PositionY=24
-ExtentX=180
-ExtentY=72
-ExtentOrigin=0
-RefreshPeriod=250
-[Layer2]
-Name=Panel right
-VisibilitySource=Tsume level 1 visible
-Text=<I=0,0,484,0,36,72>
-PositionX=1050
-PositionY=24
-ExtentX=36
-ExtentY=72
-ExtentOrigin=0
-RefreshPeriod=250
-[Layer3]
 Name=FPS label
 VisibilitySource=Tsume level 1 visible
 Text=FPS
-PositionX=870
+PositionX=924
 PositionY=32
-ExtentX=90
+ExtentX=72
 ExtentY=19
 ExtentOrigin=4
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer4]
+[Layer2]
 Name=FPS
 VisibilitySource=Tsume level 1 visible
 Text=%Framerate%
-PositionX=870
+PositionX=924
 PositionY=50
-ExtentX=90
+ExtentX=72
 ExtentY=36
 ExtentOrigin=4
 Size=200
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer5]
-Name=1% low label
-VisibilitySource=Tsume level 1 visible
-Text=1% LOW
-PositionX=960
-PositionY=32
-ExtentX=90
-ExtentY=19
-ExtentOrigin=4
-TextColor=E5E5EA
-RefreshPeriod=250
-[Layer6]
-Name=1% low
-VisibilitySource=Tsume level 1 visible
-Text=%Framerate 1% Low%
-PositionX=960
-PositionY=50
-ExtentX=90
-ExtentY=36
-ExtentOrigin=4
-Size=200
-TextColor=FFFFFF
-RefreshPeriod=1000
-[Layer7]
+[Layer3]
 Name=Panel
 VisibilitySource=Tsume level 2 visible
 Text=<I=0,0,0,0,520,72>
@@ -304,7 +261,7 @@ ExtentX=520
 ExtentY=72
 ExtentOrigin=0
 RefreshPeriod=250
-[Layer8]
+[Layer4]
 Name=CPU ring
 VisibilitySource=Tsume level 2 visible
 Text=<AI=CPU usage smooth,0,0,0,100.6944,0,96,62,62,145,29,0.5>
@@ -314,7 +271,7 @@ ExtentX=62
 ExtentY=62
 ExtentOrigin=0
 RefreshPeriod=16
-[Layer9]
+[Layer5]
 Name=CPU usage
 VisibilitySource=Tsume level 2 visible
 Text=%CPU usage%
@@ -325,7 +282,7 @@ ExtentY=20
 ExtentOrigin=4
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer10]
+[Layer6]
 Name=CPU label
 VisibilitySource=Tsume level 2 visible
 Text=CPU
@@ -336,7 +293,7 @@ ExtentY=19
 ExtentOrigin=4
 TextColor=0A84FF
 RefreshPeriod=250
-[Layer11]
+[Layer7]
 Name=CPU power
 VisibilitySource=Tsume level 2 visible
 Text=%CPU power% W
@@ -347,7 +304,7 @@ ExtentY=19
 ExtentOrigin=4
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer12]
+[Layer8]
 Name=FPS label
 VisibilitySource=Tsume level 2 visible
 Text=FPS
@@ -358,7 +315,7 @@ ExtentY=19
 ExtentOrigin=4
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer13]
+[Layer9]
 Name=FPS
 VisibilitySource=Tsume level 2 visible
 Text=%Framerate%
@@ -370,7 +327,7 @@ ExtentOrigin=4
 Size=200
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer14]
+[Layer10]
 Name=1% low label
 VisibilitySource=Tsume level 2 visible
 Text=1% LOW
@@ -381,7 +338,7 @@ ExtentY=19
 ExtentOrigin=4
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer15]
+[Layer11]
 Name=1% low
 VisibilitySource=Tsume level 2 visible
 Text=%Framerate 1% Low%
@@ -393,7 +350,7 @@ ExtentOrigin=4
 Size=200
 TextColor=FFFFFF
 RefreshPeriod=1000
-[Layer16]
+[Layer12]
 Name=Temp label
 VisibilitySource=Tsume level 2 visible
 Text=TEMP
@@ -404,7 +361,7 @@ ExtentY=19
 ExtentOrigin=4
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer17]
+[Layer13]
 Name=Temperature
 VisibilitySource=Tsume level 2 visible
 Text=%CPU temperature%°
@@ -416,7 +373,7 @@ ExtentOrigin=4
 Size=200
 TextColor=FFFFFF,,1,FF9F0A,1,2,FF453A,2,(Temperature tier,1)
 RefreshPeriod=250
-[Layer18]
+[Layer14]
 Name=GPU label
 VisibilitySource=Tsume level 2 visible
 Text=GPU
@@ -427,7 +384,7 @@ ExtentY=19
 ExtentOrigin=4
 TextColor=BF5AF2
 RefreshPeriod=250
-[Layer19]
+[Layer15]
 Name=GPU power
 VisibilitySource=Tsume level 2 visible
 Text=%GPU1 power% W
@@ -438,7 +395,7 @@ ExtentY=19
 ExtentOrigin=4
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer20]
+[Layer16]
 Name=GPU ring
 VisibilitySource=Tsume level 2 visible
 Text=<AI=GPU1 usage smooth,0,0,0,100.6944,0,408,62,62,145,29,0.5>
@@ -448,7 +405,7 @@ ExtentX=62
 ExtentY=62
 ExtentOrigin=0
 RefreshPeriod=16
-[Layer21]
+[Layer17]
 Name=GPU usage
 VisibilitySource=Tsume level 2 visible
 Text=%GPU1 usage%
@@ -459,7 +416,7 @@ ExtentY=20
 ExtentOrigin=4
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer22]
+[Layer18]
 Name=Panel
 VisibilitySource=Tsume level 3 visible
 Text=<I=0,0,524,0,686,93>
@@ -469,7 +426,7 @@ ExtentX=686
 ExtentY=93
 ExtentOrigin=0
 RefreshPeriod=250
-[Layer23]
+[Layer19]
 Name=CPU ring
 VisibilitySource=Tsume level 3 visible
 Text=<AI=CPU usage smooth,0,0,0,100.6944,0,720,67,67,145,29,0.5>
@@ -479,7 +436,7 @@ ExtentX=67
 ExtentY=67
 ExtentOrigin=0
 RefreshPeriod=16
-[Layer24]
+[Layer20]
 Name=CPU usage
 VisibilitySource=Tsume level 3 visible
 Text=%CPU usage%
@@ -490,7 +447,7 @@ ExtentY=20
 ExtentOrigin=4
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer25]
+[Layer21]
 Name=CPU label
 VisibilitySource=Tsume level 3 visible
 Text=CPU
@@ -501,7 +458,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=0A84FF
 RefreshPeriod=250
-[Layer26]
+[Layer22]
 Name=CPU Power label
 VisibilitySource=Tsume level 3 visible
 Text=Power
@@ -512,7 +469,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer27]
+[Layer23]
 Name=CPU Power
 VisibilitySource=Tsume level 3 visible
 Text=%CPU power% W
@@ -523,7 +480,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer28]
+[Layer24]
 Name=CPU Clock label
 VisibilitySource=Tsume level 3 visible
 Text=Clock
@@ -534,7 +491,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer29]
+[Layer25]
 Name=CPU Clock
 VisibilitySource=Tsume level 3 visible
 Text=%CPU clock% GHz
@@ -545,7 +502,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer30]
+[Layer26]
 Name=CPU RAM label
 VisibilitySource=Tsume level 3 visible
 Text=RAM
@@ -556,7 +513,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer31]
+[Layer27]
 Name=CPU RAM
 VisibilitySource=Tsume level 3 visible
 Text=%RAM usage% GB
@@ -567,7 +524,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer32]
+[Layer28]
 Name=GPU ring
 VisibilitySource=Tsume level 3 visible
 Text=<AI=GPU1 usage smooth,0,0,0,100.6944,0,1057,67,67,145,29,0.5>
@@ -577,7 +534,7 @@ ExtentX=67
 ExtentY=67
 ExtentOrigin=0
 RefreshPeriod=16
-[Layer33]
+[Layer29]
 Name=GPU usage
 VisibilitySource=Tsume level 3 visible
 Text=%GPU1 usage%
@@ -588,7 +545,7 @@ ExtentY=20
 ExtentOrigin=4
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer34]
+[Layer30]
 Name=GPU label
 VisibilitySource=Tsume level 3 visible
 Text=GPU
@@ -599,7 +556,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=BF5AF2
 RefreshPeriod=250
-[Layer35]
+[Layer31]
 Name=GPU Power label
 VisibilitySource=Tsume level 3 visible
 Text=Power
@@ -610,7 +567,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer36]
+[Layer32]
 Name=GPU Power
 VisibilitySource=Tsume level 3 visible
 Text=%GPU1 power% W
@@ -621,7 +578,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer37]
+[Layer33]
 Name=GPU Clock label
 VisibilitySource=Tsume level 3 visible
 Text=Clock
@@ -632,7 +589,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer38]
+[Layer34]
 Name=GPU Clock
 VisibilitySource=Tsume level 3 visible
 Text=%GPU clock% GHz
@@ -643,7 +600,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer39]
+[Layer35]
 Name=GPU VRAM label
 VisibilitySource=Tsume level 3 visible
 Text=VRAM
@@ -654,7 +611,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer40]
+[Layer36]
 Name=GPU VRAM
 VisibilitySource=Tsume level 3 visible
 Text=%GPU1 memory usage% GB
@@ -665,7 +622,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer41]
+[Layer37]
 Name=FPS label
 VisibilitySource=Tsume level 3 visible
 Text=FPS
@@ -676,7 +633,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=30D158
 RefreshPeriod=250
-[Layer42]
+[Layer38]
 Name=FPS
 VisibilitySource=Tsume level 3 visible
 Text=%Framerate%
@@ -688,7 +645,7 @@ ExtentOrigin=0
 Size=200
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer43]
+[Layer39]
 Name=Temp label
 VisibilitySource=Tsume level 3 visible
 Text=Temp
@@ -699,7 +656,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer44]
+[Layer40]
 Name=Temperature
 VisibilitySource=Tsume level 3 visible
 Text=%CPU temperature%°
@@ -710,7 +667,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=FFFFFF,,1,FF9F0A,1,2,FF453A,2,(Temperature tier,1)
 RefreshPeriod=250
-[Layer45]
+[Layer41]
 Name=1% label
 VisibilitySource=Tsume level 3 visible
 Text=1%
@@ -721,7 +678,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer46]
+[Layer42]
 Name=1%
 VisibilitySource=Tsume level 3 visible
 Text=%Framerate 1% Low%
@@ -732,7 +689,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=1000
-[Layer47]
+[Layer43]
 Name=0.1% label
 VisibilitySource=Tsume level 3 visible
 Text=0.1%
@@ -743,7 +700,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer48]
+[Layer44]
 Name=0.1%
 VisibilitySource=Tsume level 3 visible
 Text=%Framerate 0.1% Low%
@@ -754,7 +711,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=1000
-[Layer49]
+[Layer45]
 Name=FT label
 VisibilitySource=Tsume level 3 visible
 Text=FT
@@ -765,7 +722,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer50]
+[Layer46]
 Name=FT
 VisibilitySource=Tsume level 3 visible
 Text=<FT> ms
@@ -776,7 +733,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer51]
+[Layer47]
 Name=Frametime graph
 VisibilitySource=Tsume level 3 visible
 Text=<G=Frametime,0,0,1,0,40,0>
@@ -787,7 +744,7 @@ ExtentY=12
 ExtentOrigin=0
 TextColor=30D158
 RefreshPeriod=250
-[Layer52]
+[Layer48]
 Name=Panel
 VisibilitySource=Tsume level 4 visible
 Text=<I=0,0,0,1396,225,504>
@@ -797,130 +754,129 @@ ExtentX=225
 ExtentY=504
 ExtentOrigin=0
 RefreshPeriod=250
-[Layer53]
+[Layer49]
 Name=FPS label
 VisibilitySource=Tsume level 4 visible
 Text=FPS
 PositionX=1687
-PositionY=173
+PositionY=171
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
 TextColor=30D158
 RefreshPeriod=250
-[Layer54]
+[Layer50]
 Name=FPS
 VisibilitySource=Tsume level 4 visible
 Text=%Framerate%
-PositionX=1687
-PositionY=188
+PositionX=1686
+PositionY=181
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
 Size=200
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer55]
+[Layer51]
 Name=Temp label
 VisibilitySource=Tsume level 4 visible
-Text=TEMP
-PositionX=1781
-PositionY=173
-ExtentX=98
-ExtentY=19
-ExtentOrigin=2
+Text=Temp
+PositionX=1687
+PositionY=216
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer56]
+[Layer52]
 Name=Temperature
 VisibilitySource=Tsume level 4 visible
 Text=%CPU temperature%°
 PositionX=1781
-PositionY=188
+PositionY=216
 ExtentX=98
-ExtentY=38
+ExtentY=19
 ExtentOrigin=2
-Size=200
 TextColor=FFFFFF,,1,FF9F0A,1,2,FF453A,2,(Temperature tier,1)
 RefreshPeriod=250
-[Layer57]
+[Layer53]
 Name=1% low label
 VisibilitySource=Tsume level 4 visible
 Text=1% low
 PositionX=1687
-PositionY=234
+PositionY=236
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+TextColor=E5E5EA
+RefreshPeriod=250
+[Layer54]
+Name=1% low
+VisibilitySource=Tsume level 4 visible
+Text=%Framerate 1% Low%
+PositionX=1789
+PositionY=236
+ExtentX=90
+ExtentY=19
+ExtentOrigin=2
+TextColor=FFFFFF
+RefreshPeriod=1000
+[Layer55]
+Name=0.1% low label
+VisibilitySource=Tsume level 4 visible
+Text=0.1% low
+PositionX=1687
+PositionY=256
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+TextColor=E5E5EA
+RefreshPeriod=250
+[Layer56]
+Name=0.1% low
+VisibilitySource=Tsume level 4 visible
+Text=%Framerate 0.1% Low%
+PositionX=1789
+PositionY=256
+ExtentX=90
+ExtentY=19
+ExtentOrigin=2
+TextColor=FFFFFF
+RefreshPeriod=1000
+[Layer57]
+Name=Frametime label
+VisibilitySource=Tsume level 4 visible
+Text=Frametime
+PositionX=1687
+PositionY=276
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
 [Layer58]
-Name=1% low
-VisibilitySource=Tsume level 4 visible
-Text=%Framerate 1% Low%
-PositionX=1789
-PositionY=234
-ExtentX=90
-ExtentY=19
-ExtentOrigin=2
-TextColor=FFFFFF
-RefreshPeriod=1000
-[Layer59]
-Name=0.1% low label
-VisibilitySource=Tsume level 4 visible
-Text=0.1% low
-PositionX=1687
-PositionY=254
-ExtentX=0
-ExtentY=0
-ExtentOrigin=0
-TextColor=E5E5EA
-RefreshPeriod=250
-[Layer60]
-Name=0.1% low
-VisibilitySource=Tsume level 4 visible
-Text=%Framerate 0.1% Low%
-PositionX=1789
-PositionY=254
-ExtentX=90
-ExtentY=19
-ExtentOrigin=2
-TextColor=FFFFFF
-RefreshPeriod=1000
-[Layer61]
-Name=Frametime label
-VisibilitySource=Tsume level 4 visible
-Text=Frametime
-PositionX=1687
-PositionY=274
-ExtentX=0
-ExtentY=0
-ExtentOrigin=0
-TextColor=E5E5EA
-RefreshPeriod=250
-[Layer62]
 Name=Frametime
 VisibilitySource=Tsume level 4 visible
 Text=<FT> ms
 PositionX=1789
-PositionY=274
+PositionY=276
 ExtentX=90
 ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer63]
+[Layer59]
 Name=Frametime graph
 VisibilitySource=Tsume level 4 visible
 Text=<G=Frametime,0,0,1,0,40,10>
 PositionX=1687
-PositionY=298
+PositionY=299
 ExtentX=192
-ExtentY=20
+ExtentY=19
 ExtentOrigin=0
 TextColor=30D158
 RefreshPeriod=250
-[Layer64]
+[Layer60]
 Name=CPU label
 VisibilitySource=Tsume level 4 visible
 Text=CPU
@@ -931,7 +887,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=0A84FF
 RefreshPeriod=250
-[Layer65]
+[Layer61]
 Name=CPU Load label
 VisibilitySource=Tsume level 4 visible
 Text=Load
@@ -942,7 +898,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer66]
+[Layer62]
 Name=CPU Load
 VisibilitySource=Tsume level 4 visible
 Text=%CPU usage%%
@@ -953,7 +909,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer67]
+[Layer63]
 Name=CPU Power label
 VisibilitySource=Tsume level 4 visible
 Text=Power
@@ -964,7 +920,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer68]
+[Layer64]
 Name=CPU Power
 VisibilitySource=Tsume level 4 visible
 Text=%CPU power% W
@@ -975,7 +931,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer69]
+[Layer65]
 Name=CPU Clock label
 VisibilitySource=Tsume level 4 visible
 Text=Clock
@@ -986,7 +942,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer70]
+[Layer66]
 Name=CPU Clock
 VisibilitySource=Tsume level 4 visible
 Text=%CPU clock% GHz
@@ -997,7 +953,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer71]
+[Layer67]
 Name=CPU RAM label
 VisibilitySource=Tsume level 4 visible
 Text=RAM
@@ -1008,7 +964,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer72]
+[Layer68]
 Name=CPU RAM
 VisibilitySource=Tsume level 4 visible
 Text=%RAM usage% GB
@@ -1019,7 +975,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer73]
+[Layer69]
 Name=CPU usage graph
 VisibilitySource=Tsume level 4 visible
 Text=<G=CPU usage,0,0,1,0,100,10>
@@ -1030,7 +986,7 @@ ExtentY=16
 ExtentOrigin=0
 TextColor=0A84FF
 RefreshPeriod=250
-[Layer74]
+[Layer70]
 Name=GPU label
 VisibilitySource=Tsume level 4 visible
 Text=GPU
@@ -1041,7 +997,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=BF5AF2
 RefreshPeriod=250
-[Layer75]
+[Layer71]
 Name=GPU Load label
 VisibilitySource=Tsume level 4 visible
 Text=Load
@@ -1052,7 +1008,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer76]
+[Layer72]
 Name=GPU Load
 VisibilitySource=Tsume level 4 visible
 Text=%GPU1 usage%%
@@ -1063,7 +1019,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer77]
+[Layer73]
 Name=GPU Power label
 VisibilitySource=Tsume level 4 visible
 Text=Power
@@ -1074,7 +1030,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer78]
+[Layer74]
 Name=GPU Power
 VisibilitySource=Tsume level 4 visible
 Text=%GPU1 power% W
@@ -1085,7 +1041,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer79]
+[Layer75]
 Name=GPU Clock label
 VisibilitySource=Tsume level 4 visible
 Text=Clock
@@ -1096,7 +1052,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer80]
+[Layer76]
 Name=GPU Clock
 VisibilitySource=Tsume level 4 visible
 Text=%GPU clock% GHz
@@ -1107,7 +1063,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer81]
+[Layer77]
 Name=GPU Voltage label
 VisibilitySource=Tsume level 4 visible
 Text=Voltage
@@ -1118,7 +1074,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer82]
+[Layer78]
 Name=GPU Voltage
 VisibilitySource=Tsume level 4 visible
 Text=%GPU core voltage% V
@@ -1129,7 +1085,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer83]
+[Layer79]
 Name=GPU Fan label
 VisibilitySource=Tsume level 4 visible
 Text=Fan
@@ -1140,7 +1096,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer84]
+[Layer80]
 Name=GPU Fan
 VisibilitySource=Tsume level 4 visible
 Text=%GPU fan% rpm
@@ -1151,7 +1107,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer85]
+[Layer81]
 Name=GPU VRAM label
 VisibilitySource=Tsume level 4 visible
 Text=VRAM
@@ -1162,7 +1118,7 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=E5E5EA
 RefreshPeriod=250
-[Layer86]
+[Layer82]
 Name=GPU VRAM
 VisibilitySource=Tsume level 4 visible
 Text=%GPU1 memory usage% GB
@@ -1173,7 +1129,7 @@ ExtentY=19
 ExtentOrigin=2
 TextColor=FFFFFF
 RefreshPeriod=250
-[Layer87]
+[Layer83]
 Name=GPU usage graph
 VisibilitySource=Tsume level 4 visible
 Text=<G=GPU1 usage,0,0,1,0,100,10>
