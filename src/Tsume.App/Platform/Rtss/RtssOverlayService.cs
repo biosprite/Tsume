@@ -20,6 +20,7 @@ namespace Tsume.App.Platform.Rtss;
 public sealed class RtssOverlayService : IDisposable
 {
     private static readonly TimeSpan TelemetryInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan IdleTelemetryInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan ConflictRetryInterval = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan ThemeDebounceInterval = TimeSpan.FromMilliseconds(450);
     private static readonly Journal Log = new("rtss");
@@ -555,6 +556,24 @@ public sealed class RtssOverlayService : IDisposable
                         if (claimed) break;
 
                         await Task.Delay(ConflictRetryInterval, cancel).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    // When RTSS is stopped or no 3D app is hooked, release PDH handles and skip helper IPC until a game starts.
+                    if (!RtssSharedMemory.HasHookedApps())
+                    {
+                        _energy.Reset();
+                        if (!_aida.IsOwned)
+                        {
+                            var (idleSw, idleSh) = GetScreenPixels();
+                            var (idlePosX, idlePosY) = ResolveActivePosition(level, idleSw, idleSh);
+                            _aida.TryPublish(
+                                new AidaSensorSnapshot((int)level, PosX: idlePosX, PosY: idlePosY),
+                                _install?.Folder);
+                            CheckConflictChanged();
+                        }
+
+                        await Task.Delay(IdleTelemetryInterval, cancel).ConfigureAwait(false);
                         continue;
                     }
 
