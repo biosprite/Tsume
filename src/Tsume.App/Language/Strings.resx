@@ -725,7 +725,7 @@
 
   <data name="RtssLevelOffDetail" xml:space="preserve"><value>Tsume's overlay is hidden.</value></data>
   <data name="RtssLevelFpsDetail" xml:space="preserve"><value>A small pill with the frame rate and 1% low.</value></data>
-  <data name="RtssLevelBarDetail" xml:space="preserve"><value>Essential Sleek: CPU and GPU usage rings, temperatures, power, FPS and 1% low.</value></data>
+  <data name="RtssLevelBarDetail" xml:space="preserve"><value>Essential Sleek: CPU and GPU usage rings, temperature, power, FPS and 1% low.</value></data>
   <data name="RtssLevelDetailedDetail" xml:space="preserve"><value>Essential Sleek Compact: adds clocks, RAM, VRAM, 0.1% low, frametime and a frametime graph.</value></data>
   <data name="RtssLevelFullDetail" xml:space="preserve"><value>Essential Performance: a full side panel with CPU, GPU and frametime graphs.</value></data>
 

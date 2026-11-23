@@ -380,7 +380,7 @@ public sealed class RtssOverlayService : IDisposable
             cpuClockMhz = _lastCpuClockMhz;
         }
 
-        _aida.TryPublish(new AidaSensorSnapshot((int)level, cpuTemp, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz), _install?.Folder);
+        _aida.TryPublish(new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz), _install?.Folder);
         CheckConflictChanged();
 
         if (ensureOsdVisible && IsRunning)
@@ -465,7 +465,7 @@ public sealed class RtssOverlayService : IDisposable
                 if (level == RtssOverlayLevel.Off) break;
 
                 var ok = _aida.TryPublish(
-                    new AidaSensorSnapshot((int)level, cpuTemp, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz),
+                    new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz),
                     _install?.Folder);
                 CheckConflictChanged();
 

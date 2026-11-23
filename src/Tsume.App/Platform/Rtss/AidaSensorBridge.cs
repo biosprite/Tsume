@@ -20,7 +20,6 @@ public enum AidaConflictKind
 public readonly record struct AidaSensorSnapshot(
     int OverlayLevel,
     int? CpuTempC = null,
-    int? GpuTempC = null,
     double? CpuPowerWatts = null,
     double? GpuPowerWatts = null,
     double? CpuClockMhz = null);
@@ -186,12 +185,6 @@ public sealed class AidaSensorBridge : IDisposable
         {
             AppendSensor(sb, "temp", "TSUME_CPU_TEMP", "CPU Temp",
                 cpuTemp.ToString(CultureInfo.InvariantCulture));
-        }
-
-        if (s.GpuTempC is { } gpuTemp)
-        {
-            AppendSensor(sb, "temp", "TSUME_GPU_TEMP", "GPU Temp",
-                gpuTemp.ToString(CultureInfo.InvariantCulture));
         }
 
         if (s.CpuPowerWatts is { } cpuW)
