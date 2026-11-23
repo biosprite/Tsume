@@ -66,6 +66,20 @@ internal static partial class User32
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetForegroundWindow(nint window);
 
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool IsIconic(nint window);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool IsWindowVisible(nint window);
+
+    public delegate bool EnumChildProc(nint window, nint lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EnumChildWindows(nint parent, EnumChildProc callback, nint lParam);
+
     public const uint GW_HWNDPREV = 3;
 
     /// <summary>With <see cref="GW_HWNDPREV"/>: the next window up the stacking order, or zero at the top.</summary>
@@ -74,6 +88,15 @@ internal static partial class User32
 
     [LibraryImport("user32.dll", EntryPoint = "FindWindowW", StringMarshalling = StringMarshalling.Utf16)]
     public static partial nint FindWindow(string? className, string? title);
+
+    /// <summary>Fired when the foreground window changes.</summary>
+    public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+
+    /// <summary>Fired when a window is about to be minimized.</summary>
+    public const uint EVENT_SYSTEM_MINIMIZESTART = 0x0016;
+
+    /// <summary>Fired when a minimized window is about to be restored.</summary>
+    public const uint EVENT_SYSTEM_MINIMIZEEND = 0x0017;
 
     /// <summary>Fired on the desktop window whenever top-level windows change places in the stacking order.</summary>
     public const uint EVENT_OBJECT_REORDER = 0x8004;

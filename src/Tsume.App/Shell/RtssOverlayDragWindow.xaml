@@ -25,7 +25,7 @@
     <Canvas x:Name="DragCanvas" ClipToBounds="False">
 
       <!-- 9 subtle snap anchor indicators (populated in code-behind for the active overlay size). -->
-      <Canvas x:Name="SnapDotsLayer" IsHitTestVisible="True" Opacity="0" />
+      <Canvas x:Name="SnapDotsLayer" IsHitTestVisible="True" Opacity="0" Visibility="Collapsed" />
 
       <!-- Hit-testable overlay frame: invisible (#01000000) in standby mode, crisp glass+accent while dragging. -->
       <Border x:Name="OverlayBox"
@@ -39,7 +39,7 @@
           <TranslateTransform x:Name="BoxTranslate" X="0" Y="0" />
         </Border.RenderTransform>
 
-        <Grid x:Name="BoxChrome" Opacity="0" IsHitTestVisible="False">
+        <Grid x:Name="BoxChrome" Opacity="0" Visibility="Collapsed" IsHitTestVisible="False">
           <Border CornerRadius="8" Background="{x:Static theme:Accent.Tint}" />
 
           <!-- Subtle center move icon when interactive or dragging. -->
@@ -63,6 +63,7 @@
               CornerRadius="12"
               Padding="10,4"
               Opacity="0"
+              Visibility="Collapsed"
               IsHitTestVisible="False">
         <Border.RenderTransform>
           <TranslateTransform x:Name="BadgeTranslate" X="0" Y="0" />

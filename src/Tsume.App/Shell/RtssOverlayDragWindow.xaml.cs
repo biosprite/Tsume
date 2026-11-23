@@ -86,8 +86,14 @@ public sealed partial class RtssOverlayDragWindow : Window
     /// <summary>True while in explicit "Drag on screen" mode or mid-touch-drag.</summary>
     public bool IsActivelyPositioning => _interactive || _dragging;
 
+    /// <summary>True while in explicit full-screen "Drag on screen" mode.</summary>
+    public bool IsInteractive => _interactive;
+
     /// <summary>Raised when interactive "Drag on screen" mode exits.</summary>
     public event Action? InteractiveClosed;
+
+    /// <summary>Raised when a standby touch/mouse drag finishes.</summary>
+    public event Action? DragEnded;
 
     /// <summary>Updates the invisible standby hit-target to match the active FPS overlay's current bounds.</summary>
     public void SyncStandby(
@@ -129,14 +135,12 @@ public sealed partial class RtssOverlayDragWindow : Window
         UpdateSnapDotsLayout();
         PositionOverlayBox(_currentPhysX, _currentPhysY, snapped: null);
 
-        Scrim.Visibility = Visibility.Visible;
-        ActionBar.Visibility = Visibility.Visible;
-        FadeElement(Scrim, 1.0, 140);
-        FadeElement(ActionBar, 1.0, 140);
-        FadeElement(SnapDotsLayer, 1.0, 140);
+        FadeInElement(Scrim, 1.0, 140);
+        FadeInElement(ActionBar, 1.0, 140);
+        FadeInElement(SnapDotsLayer, 1.0, 140);
         ShowDragChrome(visible: true);
         UpdateBadge(_currentPhysX, _currentPhysY, _service.Settings.GetPlacement(_level).Alignment);
-        FadeElement(PositionBadge, 1.0, 140);
+        FadeInElement(PositionBadge, 1.0, 140);
 
         RaiseTopmostNoActivate();
     }
@@ -148,13 +152,11 @@ public sealed partial class RtssOverlayDragWindow : Window
         _interactive = false;
         EndDrag(commit: true);
 
-        Scrim.Visibility = Visibility.Collapsed;
-        Scrim.Opacity = 0;
-        ActionBar.Visibility = Visibility.Collapsed;
-        ActionBar.Opacity = 0;
-        SnapDotsLayer.Opacity = 0;
-        PositionBadge.Opacity = 0;
-        ShowDragChrome(visible: false);
+        HideElementImmediate(Scrim);
+        HideElementImmediate(ActionBar);
+        HideElementImmediate(SnapDotsLayer);
+        HideElementImmediate(PositionBadge);
+        ShowDragChrome(visible: false, immediate: true);
 
         InteractiveClosed?.Invoke();
     }
@@ -163,11 +165,11 @@ public sealed partial class RtssOverlayDragWindow : Window
     {
         _interactive = false;
         EndDrag(commit: false);
-        Scrim.Visibility = Visibility.Collapsed;
-        ActionBar.Visibility = Visibility.Collapsed;
-        SnapDotsLayer.Opacity = 0;
-        PositionBadge.Opacity = 0;
-        ShowDragChrome(visible: false);
+        HideElementImmediate(Scrim);
+        HideElementImmediate(ActionBar);
+        HideElementImmediate(SnapDotsLayer);
+        HideElementImmediate(PositionBadge);
+        ShowDragChrome(visible: false, immediate: true);
         if (IsVisible) Hide();
     }
 
@@ -270,8 +272,8 @@ public sealed partial class RtssOverlayDragWindow : Window
                 ExpandToFullScreen();
                 UpdateSnapDotsLayout();
                 ShowDragChrome(visible: true);
-                FadeElement(SnapDotsLayer, 0.9, 120);
-                FadeElement(PositionBadge, 1.0, 120);
+                FadeInElement(SnapDotsLayer, 0.9, 120);
+                FadeInElement(PositionBadge, 1.0, 120);
             }
         }
 
@@ -344,10 +346,11 @@ public sealed partial class RtssOverlayDragWindow : Window
 
         if (!_interactive)
         {
-            SnapDotsLayer.Opacity = 0;
-            PositionBadge.Opacity = 0;
-            ShowDragChrome(visible: false);
+            HideElementImmediate(SnapDotsLayer);
+            HideElementImmediate(PositionBadge);
+            ShowDragChrome(visible: false, immediate: true);
             ApplyStandbyWindowBounds();
+            DragEnded?.Invoke();
         }
     }
 
@@ -427,10 +430,15 @@ public sealed partial class RtssOverlayDragWindow : Window
         BadgeTranslate.Y = by;
     }
 
-    private void ShowDragChrome(bool visible)
+    private void ShowDragChrome(bool visible, bool immediate = false)
     {
         OverlayBox.BorderBrush = visible ? Accent.Brush : Brushes.Transparent;
-        FadeElement(BoxChrome, visible ? 1.0 : 0.0, 110);
+        if (visible)
+            FadeInElement(BoxChrome, 1.0, 110);
+        else if (immediate)
+            HideElementImmediate(BoxChrome);
+        else
+            FadeOutAndCollapse(BoxChrome, 110);
     }
 
     private void BuildSnapDots()
@@ -520,11 +528,35 @@ public sealed partial class RtssOverlayDragWindow : Window
             SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
-    private static void FadeElement(UIElement element, double targetOpacity, int durationMs)
+    private static void FadeInElement(UIElement element, double targetOpacity, int durationMs)
     {
+        element.Visibility = Visibility.Visible;
         element.BeginAnimation(OpacityProperty, new DoubleAnimation(targetOpacity, TimeSpan.FromMilliseconds(durationMs))
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
         });
+    }
+
+    private static void FadeOutAndCollapse(UIElement element, int durationMs)
+    {
+        var animation = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(durationMs))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        };
+        animation.Completed += (_, _) =>
+        {
+            element.BeginAnimation(OpacityProperty, null);
+            element.Opacity = 0;
+            element.Visibility = Visibility.Collapsed;
+        };
+        element.BeginAnimation(OpacityProperty, animation);
+    }
+
+    private static void HideElementImmediate(UIElement element)
+    {
+        // Clear any HoldEnd animation clock first; in WPF, an active animation overrides local Opacity assignments.
+        element.BeginAnimation(OpacityProperty, null);
+        element.Opacity = 0;
+        element.Visibility = Visibility.Collapsed;
     }
 }
