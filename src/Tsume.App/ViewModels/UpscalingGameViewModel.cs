@@ -228,8 +228,7 @@ public sealed class UpscalingGameViewModel : LayerViewModel
     /// <summary>Where OptiScaler goes, or went.</summary>
     public string FolderLine => _manifest?.Target ?? Facts?.Target ?? _listed?.Game.Folder ?? "";
 
-    /// <summary>Only shown once OptiScaler is installed in this game.</summary>
-    public Visibility FolderLineShown => _state != InstallState.None && FolderLine.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility FolderLineShown => FolderLine.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>True when the game's target or root folder exists on disk.</summary>
     public bool CanOpenFolder => _existingFolder is not null;

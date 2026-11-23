@@ -83,7 +83,6 @@
                              Width="36" Height="36"
                              HorizontalAlignment="Left" VerticalAlignment="Center"
                              Glyph="{x:Static theme:Glyphs.Folder}"
-                             ToolTip="{x:Static lang:Strings.OpenGameFolder}"
                              AutomationProperties.Name="{x:Static lang:Strings.OpenGameFolder}"
                              IsEnabled="{Binding CanOpenFolder}"
                              Command="{Binding OpenFolder}" />
