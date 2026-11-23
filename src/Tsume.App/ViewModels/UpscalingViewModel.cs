@@ -29,9 +29,13 @@ public sealed class UpscalingViewModel : LayerViewModel
     private const string OptiPatcherCompatibilityUrl = "https://github.com/optiscaler/OptiPatcher/blob/main/GameSupport.md";
     private static readonly Journal Log = new("optiscaler");
 
+    private readonly Lock _listLoadLock = new();
+    private (GameList List, GameList.Serialized Snapshot)? _loadedFromDisk;
     private GameList? _list;
-    private string? _savedJson;
+    private GameList.Serialized? _savedSnapshot;
     private int _rowsVersion;
+    private CancellationTokenSource? _rowsCancel;
+    private Task _rowsTask = Task.CompletedTask;
     private Task? _preparing;
     private bool _rescanRequested;
     private bool _manualScan;
@@ -108,44 +112,80 @@ public sealed class UpscalingViewModel : LayerViewModel
     public GameList List => _list ??= LoadList();
 
     /// <summary>
-    /// Reads the list and makes its rows in the background, once, so the first opening of the screen
-    /// does not wait on the file, the first use of the JSON serializer, or the first row reads.
+    /// Reads the list and makes its initial rows in the background, once, so the first opening of the screen
+    /// does not wait on the file, the first use of the JSON serializer, or local store/manifest reads.
+    /// Does not touch game folders, so sleeping drives are not woken until the screen actually opens.
     /// </summary>
-    /// <returns>The same task on every call; done once the rows are made.</returns>
+    /// <returns>The same task on every call; done once the initial rows are made.</returns>
     public Task PrepareAsync() => _preparing ??= LoadAheadAsync();
 
     private async Task LoadAheadAsync()
     {
-        if (_list is not null) return;
-
-        var (list, json) = await Task.Run(() =>
+        try
         {
-            var loaded = GameList.Load(Paths);
-            return (loaded, loaded.ToJson());
-        });
+            if (_list is not null)
+            {
+                await _rowsTask;
+                return;
+            }
 
-        if (_list is not null) return;   // the screen opened meanwhile and loaded it on the spot
+            var (list, snapshot) = await Task.Run(LoadListFromDisk);
 
-        _list = list;
-        _savedJson = json;
-        ShowGames();
+            if (_list is not null)
+            {
+                // The screen opened meanwhile and took the list on the spot.
+                await _rowsTask;
+                return;
+            }
+
+            _list = list;
+            _savedSnapshot = snapshot;
+
+            var refresh = ShowGamesAsync(verifyGameFolders: false);
+            await refresh;
+
+            // If the screen opened while preload rows were being read and superseded them, wait for its rows too.
+            if (!ReferenceEquals(_rowsTask, refresh)) await _rowsTask;
+        }
+        catch (Exception error)
+        {
+            Log.Write($"games list could not be preloaded: {error.Message}");
+            if (_list is null) _preparing = null;
+        }
     }
 
     private GameList LoadList()
     {
-        var list = GameList.Load(Paths);
-        _savedJson = list.ToJson();
+        var (list, snapshot) = LoadListFromDisk();
+        _savedSnapshot = snapshot;
         return list;
+    }
+
+    /// <summary>
+    /// Loads games.json at most once across the preload thread and the UI thread so the two never read or back up
+    /// the file concurrently, nor race a subsequent save. Whichever asks second gets the same list.
+    /// </summary>
+    private (GameList List, GameList.Serialized Snapshot) LoadListFromDisk()
+    {
+        lock (_listLoadLock)
+        {
+            if (_loadedFromDisk is { } loaded) return loaded;
+
+            var list = GameList.Load(Paths);
+            var result = (list, list.Serialize());
+            _loadedFromDisk = result;
+            return result;
+        }
     }
 
     /// <summary>Writes the list to disk unless it is unchanged since it was last read or written.</summary>
     /// <returns>True if the list had changed.</returns>
     public bool SaveList()
     {
-        var json = List.ToJson();
-        if (json == _savedJson) return false;
+        var snapshot = List.Serialize();
+        if (snapshot == _savedSnapshot) return false;
 
-        if (GameList.Save(Paths, json)) _savedJson = json;
+        if (GameList.Save(Paths, snapshot)) _savedSnapshot = snapshot;
         return true;
     }
 
@@ -445,6 +485,18 @@ public sealed class UpscalingViewModel : LayerViewModel
                 // Checked inside the loop, so a request made during the wait is not lost.
                 var remaining = TimeSpan.FromMilliseconds(300) - started.Elapsed;
                 if (_manualScan && !_rescanRequested && remaining > TimeSpan.Zero) await Task.Delay(remaining);
+
+                // The rows were refreshed as the screen opened; read them again only if the scan changed the list,
+                // the user asked for the rescan, or an earlier refresh left the visible rows empty.
+                // Awaited before ScanStatus reports the count so newly found rows are already on screen.
+                if (!_rescanRequested && IsOpen
+                    && (listChanged || _manualScan || (_rowsTask.IsCompleted && Games.Count == 0 && List.Games.Count > 0)))
+                {
+                    listChanged = false;
+                    var refresh = ShowGamesAsync(verifyGameFolders: true);
+                    await refresh;
+                    if (!ReferenceEquals(_rowsTask, refresh)) await _rowsTask;
+                }
             }
             while (_rescanRequested);
         }
@@ -454,12 +506,9 @@ public sealed class UpscalingViewModel : LayerViewModel
             _manualScan = false;
             IsLooking = false;
 
-            // The rows were refreshed as the screen opened; read them again only if the scan changed the list,
-            // or the user asked for the rescan.
-            if (IsOpen && (listChanged || wasManual)) ShowGames();
-            else ShowEmptyNote();
+            ShowEmptyNote();
 
-            ScanStatus = wasManual && IsOpen ? Strings.ScanFoundGames(List.Games.Count) : "";
+            ScanStatus = wasManual && IsOpen ? Strings.ScanFoundGames(Games.Count) : "";
         }
     }
 
@@ -506,104 +555,217 @@ public sealed class UpscalingViewModel : LayerViewModel
 
     /// <summary>
     /// Syncs the rows with the list, reusing existing rows. Rows for games taken off the list go at once; the
-    /// manifests, store records and game folders are read in the background, and the rows (new ones included)
-    /// are brought up to date when that is done, so a slow or sleeping drive does not hold up the screen.
+    /// local store records and then each game's manifest/folder are read in the background, and the rows (new ones
+    /// included) are brought up to date when that is done, so a slow or sleeping drive does not hold up the screen.
     /// </summary>
-    public void ShowGames()
+    public void ShowGames() => _ = ShowGamesAsync(verifyGameFolders: true);
+
+    private Task ShowGamesAsync(bool verifyGameFolders)
     {
         FoldersLine = List.Folders.Count > 0 ? Strings.FolderCount(List.Folders.Count) : "";
 
         if (DropUnlistedRows()) ListChanged?.Invoke();
         ShowEmptyNote();
 
-        _ = RefreshRowsAsync(++_rowsVersion, [.. List.Games]);
+        var cancel = new CancellationTokenSource();
+        var previous = Interlocked.Exchange(ref _rowsCancel, cancel);
+        try { previous?.Cancel(); } catch (ObjectDisposedException) { }
+
+        return _rowsTask = RefreshRowsAsync(++_rowsVersion, [.. List.Games], verifyGameFolders, cancel);
     }
+
+    /// <summary>Store records and install count read from Tsume's own local data folder.</summary>
+    private sealed record LocalState(StoredBuild? Build, XmxUpscaler? Xmx, StoredOptiPatcher? Patcher, int? InstalledCount);
 
     /// <summary>What was read from disk for one game.</summary>
     private sealed record RowRead(ListedGame Listed, InstallManifest? Manifest, InstallState State, bool IsCurrent, bool OptiPatcherOn);
 
-    /// <summary>What was read from disk for the whole screen.</summary>
-    private sealed record RowsRead(StoredBuild? Build, StoredOptiPatcher? Patcher, IReadOnlyList<RowRead> Rows, int InstalledCount);
-
-    private async Task RefreshRowsAsync(int version, IReadOnlyList<ListedGame> games)
+    private async Task RefreshRowsAsync(int version, IReadOnlyList<ListedGame> games, bool verifyGameFolders, CancellationTokenSource cancel)
     {
-        RowsRead read;
+        var token = cancel.Token;
 
         try
         {
-            read = await Task.Run(() => ReadRows(games));
+            var local = await Task.Run(() => ReadLocalState(token), token);
+            if (version != _rowsVersion || token.IsCancellationRequested) return;
+
+            ApplyLocalState(local);
+
+            var rows = await Task.Run(() => ReadGameRows(games, local, verifyGameFolders, token), token);
+            if (version != _rowsVersion || token.IsCancellationRequested) return;
+
+            ApplyRows(rows);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // Superseded by a newer refresh.
+        }
+        catch (Exception error)
+        {
+            Log.Write($"games list could not be read: {error.Message}");
+        }
+        finally
+        {
+            Interlocked.CompareExchange(ref _rowsCancel, null, cancel);
+            cancel.Dispose();
+        }
+    }
+
+    /// <summary>Reads local store metadata and install count. Runs on a background thread.</summary>
+    private LocalState ReadLocalState(CancellationToken cancel)
+    {
+        cancel.ThrowIfCancellationRequested();
+
+        var build = TryRead("current build", Builds.Current);
+        var xmx = TryRead("XMX upscaler", Xmx.Current);
+        var patcher = TryRead("OptiPatcher release", OptiPatcher.Current);
+        var installedCount = TryRead<int?>("installed games count", () => Installer.InstalledGames().Count);
+        return new LocalState(build, xmx, patcher, installedCount);
+    }
+
+    private static T? TryRead<T>(string what, Func<T> read)
+    {
+        try
+        {
+            return read();
         }
         catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            Log.Write($"games list could not be read: {error.Message}");
-            return;
+            Log.Write($"{what} could not be read: {error.Message}");
+            return default;
         }
+    }
 
-        // A later refresh has started: its reads are newer.
-        if (version != _rowsVersion) return;
+    private void ApplyLocalState(LocalState local)
+    {
+        var baseBuildLine = local.Build is null ? Strings.NoBuildOnDisk : Strings.NightlyOf(Night(local.Build.Build.Tag));
+        BuildLine = local.Patcher is null
+            ? baseBuildLine
+            : Strings.BuildLineWithOptiPatcher(baseBuildLine, local.Patcher.Release.Tag);
 
-        ApplyRows(read);
+        if (local.InstalledCount is { } count) InstalledCount = count;
     }
 
     /// <summary>Reads each game's install from disk. Runs on a background thread, and touches no rows.</summary>
-    private RowsRead ReadRows(IReadOnlyList<ListedGame> games)
+    private List<RowRead> ReadGameRows(IReadOnlyList<ListedGame> games, LocalState local, bool verifyGameFolders, CancellationToken cancel)
     {
-        var build = Builds.Current();
-        var xmx = Xmx.Current();
-        var patcher = OptiPatcher.Current();
+        var rows = new List<RowRead>(games.Count);
 
-        var rows = games.Select(listed =>
+        foreach (var listed in games)
         {
-            var manifest = Installer.Find(listed.Game.Id);
-            var state = Installer.Check(manifest);
-            var optiPatcherOn = manifest is not null && state == InstallState.Healthy && Installer.IsOptiPatcherEnabled(manifest);
-            var isCurrent = manifest is null || Installer.IsCurrent(manifest, build, xmx, patcher);
-            return new RowRead(listed, manifest, state, isCurrent, optiPatcherOn);
-        }).ToList();
+            cancel.ThrowIfCancellationRequested();
+            rows.Add(ReadRow(listed, local, verifyGameFolders));
+        }
 
-        return new RowsRead(build, patcher, rows, Installer.InstalledGames().Count);
+        return rows;
     }
 
-    private void ApplyRows(RowsRead read)
+    private RowRead ReadRow(ListedGame listed, LocalState local, bool verifyGameFolders)
     {
-        var baseBuildLine = read.Build is null ? Strings.NoBuildOnDisk : Strings.NightlyOf(Night(read.Build.Build.Tag));
-        BuildLine = read.Patcher is null
-            ? baseBuildLine
-            : Strings.BuildLineWithOptiPatcher(baseBuildLine, read.Patcher.Release.Tag);
+        try
+        {
+            // A hand-edited or damaged manifest can hold nulls where none are expected: such a game is shown as
+            // without OptiScaler rather than stopping the rest of the list.
+            var manifest = Installer.Find(listed.Game.Id);
+            if (manifest is null || manifest.Build is null || manifest.Files is null || manifest.Files.Any(file => file?.Path is null))
+                return new RowRead(listed, null, InstallState.None, IsCurrent: true, OptiPatcherOn: false);
+
+            InstallState state;
+            bool optiPatcherOn;
+            if (verifyGameFolders)
+            {
+                state = Installer.Check(manifest);
+                optiPatcherOn = state == InstallState.Healthy && Installer.IsOptiPatcherEnabled(manifest);
+            }
+            else
+            {
+                // Preload stays inside Tsume's own local data folder so sleeping game drives are not woken.
+                // Opening the screen runs a full verification against each game's folder.
+                state = manifest.Complete ? InstallState.Healthy : InstallState.CutShort;
+                optiPatcherOn = state == InstallState.Healthy && Installer.HasOptiPatcher(manifest);
+            }
+
+            var isCurrent = Installer.IsCurrent(manifest, local.Build, local.Xmx, local.Patcher);
+            return new RowRead(listed, manifest, state, isCurrent, optiPatcherOn);
+        }
+        catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            Log.Write($"could not read install state for {listed.Game.Name}: {error.Message}");
+            return new RowRead(listed, null, InstallState.None, IsCurrent: true, OptiPatcherOn: false);
+        }
+    }
+
+    private void ApplyRows(IReadOnlyList<RowRead> rows)
+    {
+        var readByListed = new Dictionary<ListedGame, RowRead>(rows.Count, ReferenceEqualityComparer.Instance);
+        foreach (var row in rows) readByListed.TryAdd(row.Listed, row);
 
         // The list may have changed while the reads were under way.
         var changed = DropUnlistedRows();
 
-        foreach (var game in read.Rows)
+        var existingByListed = new Dictionary<ListedGame, UpscalingGameRow>(Games.Count, ReferenceEqualityComparer.Instance);
+        foreach (var row in Games) existingByListed.TryAdd(row.Listed, row);
+
+        var seenIds = new HashSet<string>(StringComparer.Ordinal);
+        var targetIndex = 0;
+
+        foreach (var listed in List.Games)
         {
-            var listed = game.Listed;
-            var index = List.Games.IndexOf(listed);
-            if (index < 0) continue;   // taken off the list meanwhile
+            // First entry per ID wins, matching DropUnlistedRows and GameList.Find.
+            if (!seenIds.Add(listed.Game.Id)) continue;
 
-            if (Games.FirstOrDefault(row => row.Listed == listed) is not { } row)
+            var hasRead = readByListed.TryGetValue(listed, out var game);
+
+            if (existingByListed.TryGetValue(listed, out var row))
             {
-                Games.Insert(Math.Min(index, Games.Count), row = new UpscalingGameRow(listed, () => Show(listed)));
-                changed = true;
-            }
+                if (targetIndex < Games.Count && !ReferenceEquals(Games[targetIndex], row))
+                {
+                    var currentIndex = Games.IndexOf(row);
+                    if (currentIndex >= 0 && currentIndex != targetIndex)
+                    {
+                        Games.Move(currentIndex, targetIndex);
+                        changed = true;
+                    }
+                }
 
-            row.Describe(game.Manifest, game.State, game.IsCurrent, game.OptiPatcherOn);
+                if (hasRead) row.Describe(game!.Manifest, game.State, game.IsCurrent, game.OptiPatcherOn);
+                targetIndex++;
+            }
+            else if (hasRead)
+            {
+                row = new UpscalingGameRow(listed, () => Show(listed));
+                row.Describe(game!.Manifest, game.State, game.IsCurrent, game.OptiPatcherOn);
+                Games.Insert(Math.Min(targetIndex, Games.Count), row);
+                existingByListed[listed] = row;
+                changed = true;
+                targetIndex++;
+            }
         }
 
-        InstalledCount = read.InstalledCount;
         ShowEmptyNote();
 
         if (changed) ListChanged?.Invoke();
+    }
+
+    /// <summary>First <see cref="ListedGame"/> for each game ID, matching <see cref="GameList.Find"/>.</summary>
+    private Dictionary<string, ListedGame> CanonicalListedById()
+    {
+        var byId = new Dictionary<string, ListedGame>(List.Games.Count, StringComparer.Ordinal);
+        foreach (var listed in List.Games) byId.TryAdd(listed.Game.Id, listed);
+        return byId;
     }
 
     /// <summary>Removes the rows of games no longer on the list.</summary>
     /// <returns>True if any row was removed.</returns>
     private bool DropUnlistedRows()
     {
+        var byId = CanonicalListedById();
         var changed = false;
 
         for (var i = Games.Count - 1; i >= 0; i--)
         {
-            if (List.Find(Games[i].Listed.Game.Id) == Games[i].Listed) continue;
+            var listed = Games[i].Listed;
+            if (byId.TryGetValue(listed.Game.Id, out var canonical) && ReferenceEquals(canonical, listed)) continue;
 
             Games.RemoveAt(i);
             changed = true;
