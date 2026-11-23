@@ -593,7 +593,8 @@
               </Grid>
 
               <StackPanel Margin="14,0,14,0" VerticalAlignment="Center">
-                <TextBlock Style="{StaticResource Text.Body}" Text="{TemplateBinding Label}" />
+                <controls:MarqueeText x:Name="TitleText" TextStyle="{StaticResource Text.Body}"
+                                      Text="{TemplateBinding Label}" />
                 <ContentPresenter Margin="0,5,0,0" />
               </StackPanel>
             </DockPanel>
@@ -604,9 +605,11 @@
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
               <Setter TargetName="Face" Property="Background" Value="{DynamicResource Surface.Hover}" />
+              <Setter TargetName="TitleText" Property="IsActive" Value="True" />
             </Trigger>
 
             <Trigger Property="IsKeyboardFocused" Value="True">
+              <Setter TargetName="TitleText" Property="IsActive" Value="True" />
               <Trigger.EnterActions><BeginStoryboard Storyboard="{StaticResource Ring.Show}" /></Trigger.EnterActions>
               <Trigger.ExitActions><BeginStoryboard Storyboard="{StaticResource Ring.Hide}" /></Trigger.ExitActions>
             </Trigger>

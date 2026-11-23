@@ -184,17 +184,17 @@
         <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.ToolsHeading}"
                    Margin="4,16,0,10" />
 
-        <controls:Tile Style="{StaticResource Tile.Link}" Tag=""
-                       Glyph="{x:Static theme:Glyphs.GameMenu}"
-                       Label="{x:Static lang:Strings.OpenGameMenu}"
-                       Detail="{x:Static lang:Strings.OpenGameMenuDetail}"
-                       Command="{Binding OpenGameMenu}" />
-
         <controls:Tile Style="{StaticResource Tile.Link}"
                        Glyph="{x:Static theme:Glyphs.Download}"
                        Label="{x:Static lang:Strings.OptiScalerBuild}"
                        Detail="{Binding BuildLine}"
                        Command="{Binding Build.Open}" />
+
+        <controls:Tile Style="{StaticResource Tile.Link}" Tag=""
+                       Glyph="{x:Static theme:Glyphs.GameMenu}"
+                       Label="{x:Static lang:Strings.OpenGameMenu}"
+                       Detail="{x:Static lang:Strings.OpenGameMenuDetail}"
+                       Command="{Binding OpenGameMenu}" />
 
         <controls:Tile Style="{StaticResource Tile.Link}"
                        Glyph="{x:Static theme:Glyphs.Sliders}"
