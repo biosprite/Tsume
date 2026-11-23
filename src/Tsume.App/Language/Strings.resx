@@ -361,22 +361,25 @@
   <data name="ChoiceAuto" xml:space="preserve"><value>Auto</value></data>
   <data name="UpscalerAutoDetail" xml:space="preserve"><value>Let OptiScaler choose</value></data>
   <data name="UpscalerXessDetail" xml:space="preserve"><value>Intel XeSS upscaler</value></data>
-  <data name="UpscalerFsr4Detail" xml:space="preserve"><value>AMD FSR 4</value></data>
+  <data name="UpscalerFsr4Detail" xml:space="preserve"><value>AMD FSR 4 (INT8 on DX12; FSR 3.1 on DX11 &amp; Vulkan)</value></data>
   <data name="UpscalerFsr3Detail" xml:space="preserve"><value>AMD FSR 3.1</value></data>
   <data name="ModelAutoDetail" xml:space="preserve"><value>Let OptiScaler pick the model</value></data>
   <data name="ModelInt8Detail" xml:space="preserve"><value>Full INT8 model for best quality</value></data>
   <data name="ModelLiteDetail" xml:space="preserve"><value>Smaller model, faster and slightly softer</value></data>
   <data name="FrameGenOutputHeading" xml:space="preserve"><value>FRAME GENERATION OUTPUT</value></data>
+  <data name="FrameGenXefgDetail" xml:space="preserve"><value>Intel XeSS Frame Generation (DirectX 12 only)</value></data>
+  <data name="FrameGenFsrDetail" xml:space="preserve"><value>AMD FSR 3.1 Frame Generation (DirectX 12 &amp; Vulkan)</value></data>
   <data name="FrameGenInputHeading" xml:space="preserve"><value>FRAME GENERATION INPUT</value></data>
   <data name="FrameGenMultiplierHeading" xml:space="preserve"><value>MULTIPLIER</value></data>
   <data name="ChoiceOff" xml:space="preserve"><value>Off</value></data>
   <data name="SourceAny" xml:space="preserve"><value>Any game</value></data>
-  <data name="SourceAnyDetail" xml:space="preserve"><value>Uses the upscaler. Works in any game, but HUD elements may shimmer.</value></data>
+  <data name="SourceAnyDetail" xml:space="preserve"><value>Uses the upscaler. Works in any game, keeps Steam Input active, though HUD elements may shimmer.</value></data>
   <data name="SourceDlssgDetail" xml:space="preserve"><value>Uses the game's DLSS Frame Generation. Enable it in-game.</value></data>
   <data name="SourceFsrDetail" xml:space="preserve"><value>Uses the game's FSR Frame Generation. Enable it in-game.</value></data>
+  <data name="SourceXefgDetail" xml:space="preserve"><value>Uses the game's XeSS Frame Generation. Enable it in-game.</value></data>
   <data name="InGameHeading" xml:space="preserve"><value>IN THE GAME</value></data>
   <data name="SpoofNvidia" xml:space="preserve"><value>Pose as an Nvidia card</value></data>
-  <data name="SpoofNvidiaDetail" xml:space="preserve"><value>Lets the game show DLSS options for OptiScaler</value></data>
+  <data name="SpoofNvidiaDetail" xml:space="preserve"><value>Lets DirectX and Vulkan games show DLSS options for OptiScaler</value></data>
   <data name="OptiPatcher" xml:space="preserve"><value>OptiPatcher</value></data>
   <data name="OptiPatcherDetailOn" xml:space="preserve"><value>On, unlocks DLSS without GPU spoofing</value></data>
   <data name="OptiPatcherDetailOff" xml:space="preserve"><value>Off, unlocks DLSS in supported games without GPU spoofing</value></data>
@@ -391,8 +394,11 @@
     <value>Loads as {0}</value>
     <comment>{0} = a file name such as dxgi.dll</comment>
   </data>
-  <data name="LoadsAsAuto" xml:space="preserve"><value>Auto (Tsume chooses)</value></data>
-  <data name="LoadsAsDetail" xml:space="preserve"><value>dxgi.dll works for most DirectX games. Vulkan and Xbox games often need winmm.dll.</value></data>
+  <data name="LoadsAsDetail" xml:space="preserve"><value>dxgi.dll suits most DirectX games. Use winmm.dll for Vulkan or Xbox Game Pass games.</value></data>
+  <data name="LoadsAsOccupied" xml:space="preserve">
+    <value>{0} already exists in this folder and will be backed up. Pick winmm.dll or dbghelp.dll to keep both.</value>
+    <comment>{0} = a file name such as dxgi.dll</comment>
+  </data>
   <data name="LoadsAsLockedInstalled" xml:space="preserve">
     <value>Installed as {0}. Reinstall to change.</value>
     <comment>{0} = a file name such as dxgi.dll</comment>
@@ -401,12 +407,14 @@
     <value>Existing install uses {0}.</value>
     <comment>{0} = a file name such as winmm.dll</comment>
   </data>
-  <data name="ProxyAutoHint" xml:space="preserve"><value>Recommended</value></data>
-  <data name="ProxyDxgiHint" xml:space="preserve"><value>Most DirectX games</value></data>
-  <data name="ProxyWinmmHint" xml:space="preserve"><value>Vulkan &amp; Xbox games</value></data>
-  <data name="ProxyVersionHint" xml:space="preserve"><value>Xbox / fallback</value></data>
-  <data name="ProxyD3d12Hint" xml:space="preserve"><value>DirectX 12 fallback</value></data>
-  <data name="ProxyFallbackHint" xml:space="preserve"><value>Fallback</value></data>
+  <data name="ProxyDxgiHint" xml:space="preserve"><value>DirectX 11 &amp; 12 (most games)</value></data>
+  <data name="ProxyWinmmHint" xml:space="preserve"><value>Vulkan &amp; Xbox Game Pass</value></data>
+  <data name="ProxyVersionHint" xml:space="preserve"><value>Xbox &amp; launcher-wrapped games</value></data>
+  <data name="ProxyDbghelpHint" xml:space="preserve"><value>Alongside ReShade / Special K</value></data>
+  <data name="ProxyD3d12Hint" xml:space="preserve"><value>DirectX 12–only games</value></data>
+  <data name="ProxyWininetHint" xml:space="preserve"><value>WinINet hook (if others conflict)</value></data>
+  <data name="ProxyWinhttpHint" xml:space="preserve"><value>WinHTTP hook (if others conflict)</value></data>
+  <data name="ProxyAsiHint" xml:space="preserve"><value>ASI loader plugin</value></data>
   <data name="XmxLockedBuild" xml:space="preserve"><value>Add the XMX archive in Download Build &amp; Addons to enable.</value></data>
   <data name="XmxLockedUpdate" xml:space="preserve"><value>Press Update above to add XMX.</value></data>
   <data name="MultiplierIntelOnly" xml:space="preserve"><value>3× and 4× require an Intel Arc GPU.</value></data>

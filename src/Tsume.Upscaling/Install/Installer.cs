@@ -14,10 +14,11 @@ namespace Tsume.Upscaling.Install;
 /// Puts OptiScaler into a game's folder and takes it out again. The manifest is saved before any file is written,
 /// displaced files are copied to Originals\ first, and removal deletes only files whose hash is still what Tsume placed.
 /// </summary>
-public sealed class Installer(UpscalingPaths paths)
+public sealed class Installer(UpscalingPaths paths, bool? hasIntelXmxGpu = null)
 {
     private readonly XmxStore _xmx = new(paths);
     private readonly OptiPatcherStore _optiPatcher = new(paths);
+    private readonly bool _supportsXmx = hasIntelXmxGpu ?? GpuVendor.HasIntelXmxGpu();
 
     private const string SettingsFile = "OptiScaler.ini";
     private const string Program = "OptiScaler.dll";
@@ -26,7 +27,10 @@ public sealed class Installer(UpscalingPaths paths)
     private static readonly string[] LeftBehindByOptiScaler = ["OptiScaler.log"];
 
     /// <summary>The build's manual-install scripts, which are not copied into games.</summary>
-    private static readonly string[] NotForGames = ["setup_windows.bat", "setup_linux.sh"];
+    private static readonly string[] NotForGames = ["setup_windows.bat", "setup_linux.sh", "Streamlined_fetcher_windows.bat"];
+
+    /// <summary>Pre-0.9 companion DLLs that conflict with current OptiScaler builds if left beside the game's executable.</summary>
+    private static readonly string[] LegacyConflictFiles = ["nvngx.dll", "nvapi64.dll"];
 
     /// <summary>Free disk space required beyond the files' own size (64 MB).</summary>
     private const long Headroom = 64L << 20;
@@ -129,7 +133,7 @@ public sealed class Installer(UpscalingPaths paths)
     public bool IsCurrent(InstallManifest manifest, StoredBuild? build, XmxUpscaler? xmx, StoredOptiPatcher? patcher) =>
         (build is null || manifest.Build == build.Build.Tag)
         && manifest.Linked is not null   // installed before games shared the store's files: installing again saves the space
-        && (xmx is null || XmxIn(manifest)?.Sha256 == xmx.Sha256)
+        && (!_supportsXmx || xmx is null || XmxIn(manifest)?.Sha256 == xmx.Sha256)
         && IsOptiPatcherCurrent(manifest, patcher);
 
     private static PlacedFile? XmxIn(InstallManifest manifest) =>
@@ -148,7 +152,7 @@ public sealed class Installer(UpscalingPaths paths)
         if (IsRunning(facts.Executable)) throw new UpscalingException(Trouble.GameRunning, game.Name);
 
         var home = paths.InstallFolder(game.Id);
-        var proxy = ProxyNames.Choose(target, settings.Proxy, facts.ExistingProxy);
+        var proxy = ProxyNames.Choose(settings.Proxy, facts.ExistingProxy);
 
         var manifest = new InstallManifest
         {
@@ -165,10 +169,10 @@ public sealed class Installer(UpscalingPaths paths)
         {
             MakeSureWritable(target);
 
-            // XMX is installed whenever Tsume holds it, chosen or not, because OptiScaler only loads it when selected.
+            // XMX is installed on Intel XMX GPUs whenever Tsume holds it, chosen or not, because OptiScaler only loads it when selected.
             // OptiPatcher is placed only when enabled for this game (or overridden in Extras\), so it never loads
             // alongside the user's own ASI plugins or blocks installs when unused.
-            var xmxHeld = _xmx.Current();
+            var xmxHeld = _supportsXmx ? _xmx.Current() : null;
             var xmxFile = xmxHeld is not null ? _xmx.Shared(xmxHeld) : null;
 
             var extrasHasOptiPatcher = ExtrasHaveOptiPatcher;
@@ -186,11 +190,12 @@ public sealed class Installer(UpscalingPaths paths)
             var staged = StageSettings(
                 home,
                 build,
-                settings.Fitting(xmxFile is not null, hasOptiPatcher),
+                settings.Fitting(xmxFile is not null, hasOptiPatcher, hasIntelXmxGpu: _supportsXmx),
                 ueIntelAtomics,
                 hasOptiPatcher,
                 keepOtherAsiPlugins);
             var plan = Plan(build, proxy, staged, xmxHeld, xmxFile, patcher);
+            var retired = ConflictingFilesToRetire(target, proxy, plan);
 
             // Record the store's OptiPatcher tag only when the placed binary actually came from the store (not overridden by Extras\).
             var placedPatcher = plan.FirstOrDefault(step => step.Path.Equals(OptiPatcherLayout.Plugin, StringComparison.OrdinalIgnoreCase));
@@ -204,13 +209,17 @@ public sealed class Installer(UpscalingPaths paths)
 
             MakeSureOfRoom(target, plan.Where(step => !(linking && step.Shared) && step.SameAs is null).Sum(step => step.Length));
 
-            manifest.Files = [.. plan.Select(step => new PlacedFile
-            {
-                Path = step.Path,
-                Sha256 = step.Sha256,
-                Length = step.Length,
-                IsSettings = step.Path.Equals(SettingsFile, StringComparison.OrdinalIgnoreCase),
-            })];
+            manifest.Files =
+            [
+                .. plan.Select(step => new PlacedFile
+                {
+                    Path = step.Path,
+                    Sha256 = step.Sha256,
+                    Length = step.Length,
+                    IsSettings = step.Path.Equals(SettingsFile, StringComparison.OrdinalIgnoreCase),
+                }),
+                .. retired.Select(name => new PlacedFile { Path = name }),
+            ];
             manifest.NewFolders = FoldersToMake(target, plan.Select(step => step.Path));
             manifest.Leavings = [.. LeftBehindByOptiScaler.Where(name => !File.Exists(Path.Combine(target, name)))];
 
@@ -230,6 +239,16 @@ public sealed class Installer(UpscalingPaths paths)
                 if (linking && step.Shared && LinkFromStore(step, build, patcher, destination)) continue;
 
                 Files.Place(step.Source, destination);
+            }
+
+            foreach (var placed in manifest.Files.Skip(plan.Count))
+            {
+                var conflicting = Files.Inside(target, placed.Path);
+                if (!File.Exists(conflicting)) continue;
+
+                MoveAside(conflicting, Files.Inside(Path.Combine(home, "Originals"), placed.Path), placed);
+                Save(manifest);
+                Files.Delete(conflicting);
             }
 
             manifest.Complete = true;
@@ -284,7 +303,7 @@ public sealed class Installer(UpscalingPaths paths)
         foreach (var file in build.Files)
         {
             var name = Path.GetFileName(file.Path);
-            if (NotForGames.Contains(name, StringComparer.OrdinalIgnoreCase) || name.StartsWith("!! README")) continue;
+            if (NotForGames.Contains(name, StringComparer.OrdinalIgnoreCase) || name.StartsWith("!!", StringComparison.Ordinal)) continue;
 
             var source = Files.Inside(build.Folder, file.Path);
 
@@ -543,7 +562,7 @@ public sealed class Installer(UpscalingPaths paths)
             var ini = IniFile.Load(file);
             var ueIntelAtomics = GameInspector.IsUnrealTarget(manifest.Target) && GpuVendor.HasIntelGpu();
 
-            settings.Fitting(HasXmx(manifest), hasOptiPatcher)
+            settings.Fitting(HasXmx(manifest), hasOptiPatcher, hasIntelXmxGpu: _supportsXmx)
                 .WriteTo(ini, ueIntelAtomics, manageAsiPlugins, keepOtherAsiPlugins);
             ini.Save(file);
         }
@@ -705,6 +724,37 @@ public sealed class Installer(UpscalingPaths paths)
         manifest.Files.Remove(placed);
         manifest.OptiPatcher = null;
         Save(manifest);
+    }
+
+    /// <summary>
+    /// Secondary OptiScaler DLLs (including <c>OptiScaler.asi</c>) and pre-0.9 <c>nvngx.dll</c> / <c>nvapi64.dll</c>
+    /// sitting in <paramref name="target"/> that would double-load or conflict with the installed proxy. Moved to
+    /// <c>Originals\</c> on install and put back on removal.
+    /// </summary>
+    private static List<string> ConflictingFilesToRetire(string target, string proxy, IReadOnlyList<Step> plan)
+    {
+        var planned = plan.Select(step => step.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var retired = new List<string>();
+
+        foreach (var candidate in ProxyNames.Recognised)
+        {
+            if (candidate.Equals(proxy, StringComparison.OrdinalIgnoreCase) || planned.Contains(candidate))
+                continue;
+
+            var full = Path.Combine(target, candidate);
+            if (!File.Exists(full)) continue;
+
+            if (candidate.Equals(ProxyNames.AsiName, StringComparison.OrdinalIgnoreCase) || GameInspector.IsOptiScalerBinary(full))
+                retired.Add(candidate);
+        }
+
+        foreach (var legacy in LegacyConflictFiles)
+        {
+            if (planned.Contains(legacy)) continue;
+            if (File.Exists(Path.Combine(target, legacy))) retired.Add(legacy);
+        }
+
+        return retired;
     }
 
     /// <summary>

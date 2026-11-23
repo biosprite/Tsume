@@ -283,7 +283,8 @@ public sealed class UpscalingViewModel : LayerViewModel
         var remembered = List.SettingsFor(listed.Game.Id);
         var current = Installer.ReadSettings(manifest, remembered);
 
-        if (!Installer.HasXmx(manifest) && Xmx.Current() is not null
+        if (GpuVendor.HasIntelXmxGpu()
+            && !Installer.HasXmx(manifest) && Xmx.Current() is not null
             && remembered.Upscaler == UpscalerChoice.Fsr4Xmx
             && current.Upscaler == UpscalerChoice.Fsr4)
         {
@@ -318,10 +319,9 @@ public sealed class UpscalingViewModel : LayerViewModel
         {
             var healthy = Installer.Check(old) == InstallState.Healthy;
 
-            // A healthy install keeps its proxy name and overlay tuning. If the game replaced that file,
-            // do not reuse the replaced name; a repair also starts from a clean OptiScaler.ini.
-            var proxy = healthy ? old.Proxy
-                : settings.Proxy.Equals(old.Proxy, StringComparison.OrdinalIgnoreCase) ? "" : settings.Proxy;
+            // A healthy install keeps its proxy name and overlay tuning; a repair uses the currently selected proxy
+            // and starts from a clean OptiScaler.ini.
+            var proxy = healthy ? old.Proxy : settings.Proxy;
             settings = settings with { Proxy = proxy };
             removed = Installer.Remove(old.GameId, keepSettings: healthy);
         }
@@ -403,16 +403,22 @@ public sealed class UpscalingViewModel : LayerViewModel
     /// <summary>Opens a game's page.</summary>
     public void Show(ListedGame listed) => Game.Show(listed);
 
-    /// <summary>Adds a game by its program and opens its page. The program's folder is taken as the game's folder.</summary>
+    /// <summary>Adds a game by its program and opens its page. Subfolder binaries resolve up to the game's root folder.</summary>
     public void AddByProgram(string program)
     {
-        var folder = System.IO.Path.GetDirectoryName(program)!;
+        var folder = GameInspector.InferRootFolder(program);
         var game = Upscaling.Games.Game.At(folder, NameFrom(program), GameStore.Custom, program);
 
         if (List.Find(game.Id) is not { } listed)
         {
             listed = new ListedGame { Game = game, Facts = GameInspector.Inspect(game) };
             List.Games.Add(listed);
+            SaveList();
+        }
+        else if (!string.Equals(listed.Game.Executable, program, StringComparison.OrdinalIgnoreCase))
+        {
+            listed.Game = game;
+            listed.Facts = GameInspector.Inspect(game);
             SaveList();
         }
 
@@ -617,7 +623,7 @@ public sealed class UpscalingViewModel : LayerViewModel
         cancel.ThrowIfCancellationRequested();
 
         var build = TryRead("current build", Builds.Current);
-        var xmx = TryRead("XMX upscaler", Xmx.Current);
+        var xmx = GpuVendor.HasIntelXmxGpu() ? TryRead("XMX upscaler", Xmx.Current) : null;
         var patcher = TryRead("OptiPatcher release", OptiPatcher.Current);
         var installedCount = TryRead<int?>("installed games count", () => Installer.InstalledGames().Count);
         return new LocalState(build, xmx, patcher, installedCount);

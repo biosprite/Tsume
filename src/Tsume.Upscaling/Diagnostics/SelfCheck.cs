@@ -58,35 +58,63 @@ public static class SelfCheck
         };
         chosen.WriteTo(ini);
 
-        Check(ini.Get("Upscalers", "Dx12Upscaler") == "ffx" && ini.Get("FSR", "UpscalerIndex") == "0"
+        Check(ini.Get("Upscalers", "Dx11Upscaler") == "fsr31" && ini.Get("Upscalers", "Dx12Upscaler") == "ffx"
+              && ini.Get("Upscalers", "VulkanUpscaler") == "ffx" && ini.Get("FSR", "UpscalerIndex") == "0"
               && ini.Get("FSR", "Fsr4GpuSupport") == "2" && ini.Get("FSR", "Fsr4Model") == "1",
-            "FSR 4 with the INT8 network is written as ffx / index 0 / support 2 / model 1");
-        Check(ini.Get("FrameGen", "FGOutput") == "xefg" && ini.Get("XeFG", "InterpolationCount") == "2",
-            "XeFG at 3× is written as xefg / 2 made-up frames");
+            "FSR 4 writes native fsr31/ffx for DX11/Vulkan and ffx / index 0 / support 2 / model 1 for DX12 INT8");
+        Check(ini.Get("FrameGen", "FGOutput") == "xefg" && ini.Get("XeFG", "InterpolationCount") == "2"
+              && ini.Get("Hotfix", "DisableOverlays") == "false",
+            "XeFG at 3× with OptiFG writes xefg / 2 made-up frames and keeps Steam Input active (DisableOverlays=false)");
+        Check(ini.Get("Spoofing", "Dxgi") == "false" && ini.Get("Spoofing", "Vulkan") == "false"
+              && ini.Get("Spoofing", "VulkanExtensionSpoofing") == "false",
+            "turning Nvidia spoofing off disables both DXGI and Vulkan spoofing");
         Check(new UpscalerSettings().CorrectedBy(ini) == chosen, "and reads back as the same settings");
         Check(ini.ToString().Split('\n').Length == blank.Split('\n').Length, "without adding or dropping a line");
 
-        // GPU-based defaults: XeSS on Intel, FSR 4 on AMD, Auto elsewhere.
+        // Plain FSR 4 always forces INT8 on handhelds (never leaves Fsr4GpuSupport on auto to fall back to FSR 3.1).
+        var fsr4AutoModel = new UpscalerSettings { Upscaler = UpscalerChoice.Fsr4, Model = Fsr4Model.Auto };
+        ini = IniFile.Parse(blank);
+        fsr4AutoModel.WriteTo(ini);
+        Check(ini.Get("FSR", "Fsr4GpuSupport") == "2" && ini.Get("FSR", "Fsr4Model") == "1"
+              && ini.Get("Hotfix", "DisableOverlays") == "auto"
+              && ini.Get("Spoofing", "Vulkan") == "true" && ini.Get("Spoofing", "VulkanExtensionSpoofing") == "true",
+            "FSR 4 always writes INT8 support/model, enables Vulkan spoofing when SpoofNvidia is on, and resets DisableOverlays when OptiFG is off");
+
+        // GPU-based defaults: XeSS on Intel, FSR 4 on RDNA 3/3.5+ AMD (Z1E/Z2E), FSR 3 on RDNA 2 AMD (Z2 Go/Z2 A), Auto elsewhere.
         Check(UpscalerSettings.DefaultUpscaler(hasIntelGpu: true, hasAmdGpu: false) == UpscalerChoice.XeSS,
             "Intel devices default to XeSS");
-        Check(UpscalerSettings.DefaultUpscaler(hasIntelGpu: false, hasAmdGpu: true) == UpscalerChoice.Fsr4,
-            "AMD devices default to FSR 4");
+        Check(UpscalerSettings.DefaultUpscaler(hasIntelGpu: false, hasAmdGpu: true, hasAmdRdna3PlusGpu: true) == UpscalerChoice.Fsr4,
+            "RDNA 3/3.5+ AMD devices (Z1E/Z2E/HX 370) default to FSR 4");
+        Check(UpscalerSettings.DefaultUpscaler(hasIntelGpu: false, hasAmdGpu: true, hasAmdRdna3PlusGpu: false) == UpscalerChoice.Fsr3,
+            "RDNA 2 AMD APUs (Z2 Go/Z2 A/680M) default to FSR 3");
         Check(UpscalerSettings.DefaultUpscaler(hasIntelGpu: false, hasAmdGpu: false) == UpscalerChoice.Auto,
             "other devices default to Auto");
 
         var defaults = new UpscalerSettings();
-        var expectedDefault = UpscalerSettings.DefaultUpscaler(GpuVendor.HasIntelGpu(), GpuVendor.HasAmdGpu());
-        Say($"  detected primary GPU: Intel={GpuVendor.HasIntelGpu()}, IntelArc={GpuVendor.HasIntelArcGpu()}, Amd={GpuVendor.HasAmdGpu()}");
-        Check(defaults.Upscaler == expectedDefault, $"on this machine the default upscaler is {expectedDefault}");
+        var expectedDefault = UpscalerSettings.DefaultUpscaler();
+        Say($"  detected primary GPU: Intel={GpuVendor.HasIntelGpu()}, IntelArc={GpuVendor.HasIntelArcGpu()}, IntelXmx={GpuVendor.HasIntelXmxGpu()}, Amd={GpuVendor.HasAmdGpu()}, AmdRdna3Plus={GpuVendor.HasAmdRdna3PlusGpu()}");
+        Check(defaults.Upscaler == expectedDefault && defaults.Proxy == ProxyNames.Default,
+            $"on this machine the default upscaler is {expectedDefault} and default proxy is {ProxyNames.Default}");
 
-        // GPU classification: only Intel Arc unlocks Arc-only features (native DX11 XeSS, XeFG 3×/4×).
-        Check(GpuVendor.Classify(0x8086, "Intel(R) Arc(TM) 140V GPU") == (true, true, false)
-              && GpuVendor.Classify(0x8086, "Intel(R) Arc(TM) B390 GPU") == (true, true, false)
-              && GpuVendor.Classify(0x8086, "Intel(R) UHD Graphics 770") == (true, false, false)
-              && GpuVendor.Classify(0x8086, "Intel(R) Iris(R) Xe Graphics") == (true, false, false)
-              && GpuVendor.Classify(0x1002, "AMD Radeon RX 7800 XT") == (false, false, true)
-              && GpuVendor.Classify(0x10DE, "NVIDIA GeForce RTX 4090") == (false, false, false),
-            "GPU classification distinguishes Intel Arc from older Intel iGPUs, AMD, and Nvidia");
+        // GPU classification: separates Intel XMX (Lunar Lake / Arrow Lake-H / Core G3) from Meteor Lake (Claw A1M),
+        // and AMD RDNA 3/3.5+ (Z1E / Z2E) from RDNA 2 APUs (Z2 Go / Z2 A).
+        Check(GpuVendor.Classify(0x8086, 0x64A0, "Intel(R) Arc(TM) 140V GPU") == new GpuVendor.GpuCapabilities(true, true, true, false, false)
+              && GpuVendor.Classify(0x8086, 0xB081, "Intel(R) Arc(TM) B370 GPU") == new GpuVendor.GpuCapabilities(true, true, true, false, false)
+              && GpuVendor.Classify(0x8086, 0xB080, "Intel(R) Arc(TM) B390 GPU") == new GpuVendor.GpuCapabilities(true, true, true, false, false)
+              && GpuVendor.Classify(0x8086, 0x7D51, "Intel(R) Arc(TM) 140T GPU") == new GpuVendor.GpuCapabilities(true, true, true, false, false)
+              && GpuVendor.Classify(0x8086, 0x7D55, "Intel(R) Arc(TM) Graphics") == new GpuVendor.GpuCapabilities(true, true, false, false, false)
+              && GpuVendor.Classify(0x8086, 0x7D41, "Intel(R) Graphics") == new GpuVendor.GpuCapabilities(true, false, false, false, false)
+              && GpuVendor.Classify(0x8086, 0x7D67, "Intel(R) Graphics") == new GpuVendor.GpuCapabilities(true, false, false, false, false)
+              && GpuVendor.Classify(0x8086, 0x9A49, "Intel(R) Iris(R) Xe Graphics") == new GpuVendor.GpuCapabilities(true, false, false, false, false)
+              && GpuVendor.Classify(0x8086, 0x46A6, "Intel(R) Iris(R) Xe Graphics") == new GpuVendor.GpuCapabilities(true, false, false, false, false)
+              && GpuVendor.Classify(0x8086, 0, "Intel(R) UHD Graphics 770") == new GpuVendor.GpuCapabilities(true, false, false, false, false)
+              && GpuVendor.Classify(0x8086, 0, "Intel(R) Iris(R) Xe Graphics") == new GpuVendor.GpuCapabilities(true, false, false, false, false)
+              && GpuVendor.Classify(0x1002, 0x15BF, "AMD Radeon 780M Graphics") == new GpuVendor.GpuCapabilities(false, false, false, true, true)
+              && GpuVendor.Classify(0x1002, 0x150E, "AMD Radeon(TM) 890M Graphics") == new GpuVendor.GpuCapabilities(false, false, false, true, true)
+              && GpuVendor.Classify(0x1002, 0x1681, "AMD Radeon(TM) Graphics") == new GpuVendor.GpuCapabilities(false, false, false, true, false)
+              && GpuVendor.Classify(0x1002, 0x163F, "AMD Radeon(TM) Graphics") == new GpuVendor.GpuCapabilities(false, false, false, true, false)
+              && GpuVendor.Classify(0x10DE, 0, "NVIDIA GeForce RTX 4090") == new GpuVendor.GpuCapabilities(false, false, false, false, false),
+            "GPU classification separates Intel XMX from Meteor Lake/Iris Xe, and AMD RDNA 3/3.5+ from RDNA 2 APUs");
 
         ini = IniFile.Parse(blank);
         new UpscalerSettings { Upscaler = UpscalerChoice.XeSS }.WriteTo(ini, hasIntelArcGpu: true);
@@ -132,28 +160,51 @@ public static class SelfCheck
         Check(ini.Get(XmxLayout.Section, "Model") == "0" && ini.Get(XmxLayout.Name, "UpscalerIndex") == "3",
             "and Tsume's next write puts Run as back to the game's choice, leaving the version");
 
-        var without = xmxSettings.Fitting(hasXmx: false);
-        Check(without is { Upscaler: UpscalerChoice.Fsr4, Model: Fsr4Model.Int8 } && xmxSettings.Fitting(hasXmx: true) == xmxSettings,
-            "for a game without the XMX upscaler in it, plain FSR 4 stands in");
+        var without = xmxSettings.Fitting(hasXmx: false, hasIntelXmxGpu: true);
+        var withoutXmxGpu = xmxSettings.Fitting(hasXmx: true, hasIntelXmxGpu: false);
+        Check(without is { Upscaler: UpscalerChoice.Fsr4, Model: Fsr4Model.Int8 }
+              && xmxSettings.Fitting(hasXmx: true, hasIntelXmxGpu: true) == xmxSettings
+              && withoutXmxGpu.Upscaler != UpscalerChoice.Fsr4Xmx,
+            "XMX falls back to FSR 4 on XMX GPUs without the archive, and is rejected on non-XMX GPUs");
 
         var fsr4Lite = new UpscalerSettings { Upscaler = UpscalerChoice.Fsr4, Model = Fsr4Model.Lite };
         Check(fsr4Lite.Fitting(hasXmx: true) is { Upscaler: UpscalerChoice.Fsr4, Model: Fsr4Model.Int8 },
-            "plain FSR 4 clamps Lite to INT8 because AMD's DX12 upscaler has no Lite network");
+            "plain FSR 4 pins Lite/Auto to INT8");
 
         var xefgMfg = new UpscalerSettings { FrameGen = FrameGenChoice.XeFG, Multiplier = 4 };
         Check(xefgMfg.Fitting(hasXmx: true, hasIntelArcGpu: true).Multiplier == 4
               && xefgMfg.Fitting(hasXmx: true, hasIntelArcGpu: false).Multiplier == 2,
             "XeFG 3×/4× stays on Intel Arc GPUs and clamps to 2× on non-Arc GPUs");
 
-        // Remembered XMX and OptiPatcher preferences survive edits to unrelated settings while unavailable.
+        // Remembered XMX (on Intel XMX GPUs) and OptiPatcher preferences survive edits to unrelated settings while unavailable.
         var rememberedUnavailable = new UpscalerSettings { Upscaler = UpscalerChoice.Fsr4Xmx, Model = Fsr4Model.Lite, OptiPatcher = true, SpoofNvidia = true };
-        var editedWhileUnavailable = rememberedUnavailable.Fitting(hasXmx: false, hasOptiPatcher: false) with { SpoofNvidia = false };
-        var preserved = editedWhileUnavailable.PreservingUnavailable(rememberedUnavailable, hasXmx: false, hasOptiPatcher: false);
+        var editedWhileUnavailable = rememberedUnavailable.Fitting(hasXmx: false, hasOptiPatcher: false, hasIntelXmxGpu: true) with { SpoofNvidia = false };
+        var preserved = editedWhileUnavailable.PreservingUnavailable(rememberedUnavailable, hasXmx: false, hasOptiPatcher: false, hasIntelXmxGpu: true);
+        var notPreservedNonXmx = editedWhileUnavailable.PreservingUnavailable(rememberedUnavailable, hasXmx: false, hasOptiPatcher: false, hasIntelXmxGpu: false);
         var switchedExplicitly = (editedWhileUnavailable with { Upscaler = UpscalerChoice.XeSS })
-            .PreservingUnavailable(rememberedUnavailable, hasXmx: false, hasOptiPatcher: false);
+            .PreservingUnavailable(rememberedUnavailable, hasXmx: false, hasOptiPatcher: false, hasIntelXmxGpu: true);
         Check(preserved is { Upscaler: UpscalerChoice.Fsr4Xmx, Model: Fsr4Model.Lite, OptiPatcher: true, SpoofNvidia: false }
+              && notPreservedNonXmx.Upscaler == UpscalerChoice.Fsr4
               && switchedExplicitly is { Upscaler: UpscalerChoice.XeSS, OptiPatcher: true },
-            "editing an unrelated setting preserves unavailable XMX/OptiPatcher preferences while explicit upscaler changes win");
+            "editing an unrelated setting preserves unavailable XMX on Intel XMX GPUs (never non-XMX) while explicit upscaler changes win");
+
+        // Overlay preservation: Dx12Upscaler=ffx + UpscalerIndex=auto, custom VulkanUpscaler, XeFG input, and fsrfg30/nvngxfg inputs.
+        ini = IniFile.Parse(blank);
+        ini.Set("Upscalers", "Dx12Upscaler", "ffx");
+        ini.Set("Upscalers", "VulkanUpscaler", "xess");
+        ini.Set("FrameGen", "Enabled", "true");
+        ini.Set("FrameGen", "FGOutput", "fsrfg");
+        ini.Set("FrameGen", "FGInput", "fsrfg30");
+        var readOverlay = new UpscalerSettings().CorrectedBy(ini);
+        Check(readOverlay is { Upscaler: UpscalerChoice.Fsr4, FrameGen: FrameGenChoice.FsrFG, Source: FrameGenSource.FsrFg },
+            "overlay ffx with UpscalerIndex=auto reads as FSR 4, and fsrfg30 reads under FSR-FG");
+        (readOverlay with { SpoofNvidia = false }).WriteTo(ini);
+        Check(ini.Get("Upscalers", "VulkanUpscaler") == "xess" && ini.Get("FrameGen", "FGInput") == "fsrfg30",
+            "editing an unrelated setting in Tsume preserves overlay VulkanUpscaler and fsrfg30 FGInput");
+        var xefgSource = new UpscalerSettings { FrameGen = FrameGenChoice.FsrFG, Source = FrameGenSource.XeFg };
+        xefgSource.WriteTo(ini);
+        Check(ini.Get("FrameGen", "FGInput") == "xefg" && new UpscalerSettings().CorrectedBy(ini).Source == FrameGenSource.XeFg,
+            "XeSS-FG input writes FGInput=xefg and reads back cleanly");
 
         var dlssgFg = new UpscalerSettings { FrameGen = FrameGenChoice.XeFG, Source = FrameGenSource.Dlssg, Multiplier = 2 };
         ini = IniFile.Parse(blank);
@@ -222,6 +273,32 @@ public static class SelfCheck
             Check(string.Equals(GameInspector.Inspect(hintedGame)?.Executable, realExe, StringComparison.OrdinalIgnoreCase),
                 "store manifest hint in root does not override a real game exe beside upscaler DLLs");
 
+            // Non-Shipping Unreal game + subfolder root inference + anti-cheat/upscaler signatures.
+            var uePlainRoot = Path.Combine(bench, "PhoenixRoot");
+            var uePlainBin = Path.Combine(uePlainRoot, "Phoenix", "Binaries", "Win64");
+            var uePlainDlss = Path.Combine(uePlainRoot, "Engine", "Plugins", "Runtime", "Nvidia", "DLSS", "Binaries", "ThirdParty", "Win64");
+            Directory.CreateDirectory(uePlainBin);
+            Directory.CreateDirectory(uePlainDlss);
+            var ueRootStub = Path.Combine(uePlainRoot, "PhoenixRoot.exe");
+            var ueRealExe = Path.Combine(uePlainBin, "Phoenix.exe");
+            File.WriteAllBytes(ueRootStub, new byte[4096]);
+            File.WriteAllBytes(ueRealExe, new byte[32768]);
+            File.WriteAllText(Path.Combine(uePlainDlss, "sl.dlss.dll"), "stand-in for Streamline DLSS");
+            var customUeFromStub = Game.At(uePlainRoot, "PhoenixRoot", GameStore.Custom, ueRootStub);
+            var customUeFacts = GameInspector.Inspect(customUeFromStub);
+            Check(customUeFacts is not null
+                  && string.Equals(customUeFacts.Executable, ueRealExe, StringComparison.OrdinalIgnoreCase)
+                  && GameInspector.IsUnrealTarget(customUeFacts.Target)
+                  && customUeFacts.Upscalers.Contains("DLSS"),
+                "Unreal games without -Shipping resolve to Binaries\\Win64 (enabling UEIntelAtomics) and detect sl.dlss.dll");
+
+            File.WriteAllText(Path.Combine(uePlainRoot, "randgrid.sys"), "stand-in for RICOCHET");
+            var inferredRoot = GameInspector.InferRootFolder(ueRealExe);
+            var inferredFacts = GameInspector.Inspect(Game.At(inferredRoot, "Phoenix", GameStore.Custom, ueRealExe));
+            Check(string.Equals(inferredRoot, uePlainRoot, StringComparison.OrdinalIgnoreCase)
+                  && inferredFacts?.AntiCheat == "RICOCHET Anti-Cheat",
+                "adding a subfolder Binaries\\Win64 exe infers the game root and catches root-level anti-cheat (RICOCHET)");
+
             Say("A. An ordinary game");
             var (a, aFacts) = MakeGame(bench, "Plain", folder => { });
             var before = Snapshot(a.Folder);
@@ -239,8 +316,8 @@ public static class SelfCheck
             var expectedDx12 = defaults.Upscaler switch
             {
                 UpscalerChoice.XeSS => "xess",
-                UpscalerChoice.Fsr4 => "ffx",
-                _                   => "auto",
+                UpscalerChoice.Fsr4 or UpscalerChoice.Fsr3 => "ffx",
+                _ => "auto",
             };
             Check(IniFile.Load(Path.Combine(a.Folder, "OptiScaler.ini")).Get("Upscalers", "Dx12Upscaler") == expectedDx12,
                 "its settings file carries Tsume's settings");
@@ -327,8 +404,11 @@ public static class SelfCheck
             var (b, bFacts) = MakeGame(bench, "Shaded", folder => File.WriteAllText(Path.Combine(folder, "dxgi.dll"), "not OptiScaler"));
             before = Snapshot(b.Folder);
 
-            manifest = installer.Install(b, bFacts, build, new UpscalerSettings());
-            Check(manifest.Proxy == "winmm.dll", "left to choose, Tsume took the next free name: winmm.dll");
+            Check(bFacts.PresentProxies is { } occupied && occupied.SequenceEqual(["dxgi.dll"]),
+                "inspected: reports dxgi.dll as already occupied in the folder");
+
+            manifest = installer.Install(b, bFacts, build, new UpscalerSettings { Proxy = "winmm.dll" });
+            Check(manifest.Proxy == "winmm.dll", "told to use winmm.dll alongside ReShade, it did");
             Check(Snapshot(b.Folder)["dxgi.dll"] == before["dxgi.dll"], "the game's dxgi.dll was not touched");
 
             installer.Remove(b.Id);
@@ -357,10 +437,13 @@ public static class SelfCheck
                 "everything else is as it was found");
             Say("");
 
-            Say("D. A game that already has OptiScaler from another tool");
+            Say("D. A game that already has OptiScaler from another tool (plus pre-0.9 files / OptiScaler.asi)");
             var (d, dFacts) = MakeGame(bench, "Taken", folder =>
             {
                 File.Copy(Path.Combine(build.Folder, "OptiScaler.dll"), Path.Combine(folder, "winmm.dll"));
+                File.WriteAllText(Path.Combine(folder, "OptiScaler.asi"), "old asi copy");
+                File.WriteAllText(Path.Combine(folder, "nvngx.dll"), "legacy pre-0.9 nvngx");
+                File.WriteAllText(Path.Combine(folder, "nvapi64.dll"), "legacy pre-0.9 fakenvapi");
                 File.WriteAllText(Path.Combine(folder, "OptiScaler.ini"), "[Menu]\nShowFps=true\n");
             });
             before = Snapshot(d.Folder);
@@ -369,9 +452,13 @@ public static class SelfCheck
 
             manifest = installer.Install(d, dFacts, build, new UpscalerSettings { Proxy = "dxgi.dll" });
             Check(manifest.Proxy == "winmm.dll", "Tsume took over that name rather than adding a second OptiScaler");
+            Check(!File.Exists(Path.Combine(d.Folder, "OptiScaler.asi"))
+                  && !File.Exists(Path.Combine(d.Folder, "nvngx.dll"))
+                  && !File.Exists(Path.Combine(d.Folder, "nvapi64.dll")),
+                "secondary OptiScaler.asi and conflicting pre-0.9 nvngx.dll / nvapi64.dll were moved out of the way");
 
             installer.Remove(d.Id);
-            Check(Same(before, Snapshot(d.Folder)), "removed: the other tool's files and settings are back as they were");
+            Check(Same(before, Snapshot(d.Folder)), "removed: the other tool's files, legacy DLLs, and settings are back as they were");
             Say("");
 
             Say("E. An install that fails half-way");
@@ -408,11 +495,13 @@ public static class SelfCheck
             else
             {
                 var xmx = new XmxStore(paths);
+                var xmxInstaller = new Installer(paths, hasIntelXmxGpu: true);
+                var nonXmxInstaller = new Installer(paths, hasIntelXmxGpu: false);
                 var (f, fFacts) = MakeGame(bench, "Matrix", folder => { });
                 before = Snapshot(f.Folder);
 
                 // Before Tsume has the upscaler: asking for it must not leave the game without one.
-                manifest = installer.Install(f, fFacts, build, xmxSettings);
+                manifest = xmxInstaller.Install(f, fFacts, build, xmxSettings);
                 Check(!Installer.HasXmx(manifest) && IniFile.Load(Path.Combine(f.Folder, "OptiScaler.ini")).Get("Upscalers", "Dx12Upscaler") == "ffx",
                     "installed before Tsume has it: plain FSR 4 was written instead");
 
@@ -434,10 +523,16 @@ public static class SelfCheck
                 Check(added.Sha256 == real.Sha256 && Files.Hash(xmx.ArchiveFile) == Files.Hash(held.ArchiveFile),
                     "added: the archive is kept as it came, zipped");
                 Check(Directory.GetFiles(paths.Xmx, "*.dll", SearchOption.AllDirectories).Length == 0, "and nothing is unpacked beside it until a game needs it");
-                Check(!installer.IsCurrent(manifest, build), "the game installed earlier now reads as due an update");
+                Check(!xmxInstaller.IsCurrent(manifest, build) && nonXmxInstaller.IsCurrent(manifest, build),
+                    "the game installed earlier reads as due an update on Intel XMX GPUs, and current on non-XMX GPUs");
 
-                installer.Remove(f.Id);
-                manifest = installer.Install(f, fFacts, build, xmxSettings);
+                xmxInstaller.Remove(f.Id);
+
+                var nonXmxManifest = nonXmxInstaller.Install(f, fFacts, build, xmxSettings);
+                Check(!Installer.HasXmx(nonXmxManifest), "non-XMX GPUs skip placing XMX files even when stored");
+                nonXmxInstaller.Remove(f.Id);
+
+                manifest = xmxInstaller.Install(f, fFacts, build, xmxSettings);
                 live = IniFile.Load(Path.Combine(f.Folder, "OptiScaler.ini"));
 
                 var upscaler = Path.Combine(f.Folder, XmxLayout.Upscaler);
@@ -449,16 +544,16 @@ public static class SelfCheck
                 Check(Files.Names(weights) >= 2 && Files.Names(weights) == Files.Names(amd), "as a second name for the same bytes, not a second copy");
                 Check(live.Get("Upscalers", "Dx12Upscaler") == XmxLayout.Name && live.Get(XmxLayout.Name, "UpscalerIndex") == "3",
                     "and the settings file selects it, with 4.1.2 Lite");
-                Check(Installer.HasXmx(manifest) && installer.IsCurrent(manifest, build), "the install reads as up to date");
+                Check(Installer.HasXmx(manifest) && xmxInstaller.IsCurrent(manifest, build), "the install reads as up to date");
                 Check(Installer.ReadSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS }) == xmxSettings,
                     "its settings read back as XMX 4.1.2 Lite");
 
-                installer.WriteSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS });
+                xmxInstaller.WriteSettings(manifest, new UpscalerSettings { Upscaler = UpscalerChoice.XeSS });
                 live = IniFile.Load(Path.Combine(f.Folder, "OptiScaler.ini"));
                 Check(live.Get("Upscalers", "Dx12Upscaler") == "xess" && live.Get(XmxLayout.Name, "UpscalerIndex") == "3",
                     "switching to XeSS changes the upscaler and leaves the XMX version be");
 
-                installer.Remove(f.Id);
+                xmxInstaller.Remove(f.Id);
                 Check(Same(before, Snapshot(f.Folder)), "removed: the folder is as it was found");
             }
 

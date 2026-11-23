@@ -26,16 +26,6 @@
                TextWrapping="Wrap" TextTrimming="None"
                Text="{Binding XmxHint}" Visibility="{Binding XmxHintShown}" Margin="6,4,6,0" />
 
-    <controls:Reveal IsOpen="{Binding ShowsModel}">
-      <StackPanel>
-        <controls:SegmentedControl AutomationProperties.Name="FSR 4" Margin="0,10,0,0"
-                                   Segments="{Binding Models}" SelectedIndex="{Binding ModelIndex}" />
-
-        <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
-                   Text="{Binding ModelDetail}" Margin="6,6,6,0" />
-      </StackPanel>
-    </controls:Reveal>
-
     <controls:Reveal IsOpen="{Binding ShowsXmxModel}">
       <StackPanel>
         <controls:SegmentedControl AutomationProperties.Name="FSR 4 XMX" Margin="0,10,0,0"
@@ -51,6 +41,9 @@
 
     <controls:SegmentedControl AutomationProperties.Name="{x:Static lang:Strings.FrameGenOutputHeading}"
                                Segments="{Binding FrameGens}" SelectedIndex="{Binding FrameGenIndex}" />
+
+    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+               Text="{Binding FrameGenDetail}" Visibility="{Binding FrameGenDetailShown}" Margin="6,6,6,0" />
 
     <controls:Reveal IsOpen="{Binding ShowsSource}">
       <StackPanel>

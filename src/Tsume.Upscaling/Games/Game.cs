@@ -14,6 +14,7 @@ public enum GameStore
     Gog,
     Xbox,
     Ubisoft,
+    Ea,
 }
 
 public sealed record Game
@@ -54,9 +55,11 @@ public sealed record Game
 /// <param name="Upscalers">The upscalers the game ships that OptiScaler can take over: "DLSS", "FSR 3", "XeSS" …</param>
 /// <param name="AntiCheat">The anti-cheat found, if any. OptiScaler is not offered for such a game.</param>
 /// <param name="ExistingProxy">The file name of an OptiScaler already in <paramref name="Target"/>, if there is one.</param>
+/// <param name="PresentProxies">Non-OptiScaler proxy DLL names already present in <paramref name="Target"/> (e.g. ReShade's dxgi.dll).</param>
 public sealed record GameFacts(
     string Target,
     string Executable,
     IReadOnlyList<string> Upscalers,
     string? AntiCheat,
-    string? ExistingProxy);
+    string? ExistingProxy,
+    IReadOnlyList<string>? PresentProxies = null);

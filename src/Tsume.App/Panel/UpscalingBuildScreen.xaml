@@ -272,19 +272,21 @@
         <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
                    Text="{x:Static lang:Strings.OptiPatcherExplained}" Margin="6,8,6,0" />
 
-        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.XmxHeading}"
-                   Margin="4,24,0,10" />
+        <StackPanel Visibility="{Binding XmxShown}">
+          <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.XmxHeading}"
+                     Margin="4,24,0,10" />
 
-        <controls:Tile Style="{StaticResource Tile.Link}" Margin="0"
-                       Tag="{x:Static theme:Glyphs.Add}"
-                       Glyph="{x:Static theme:Glyphs.Chip}"
-                       Label="{Binding XmxLabel}"
-                       Detail="{Binding XmxLine}"
-                       IsEnabled="{Binding CanAct}"
-                       Command="{Binding AddXmx}" />
+          <controls:Tile Style="{StaticResource Tile.Link}" Margin="0"
+                         Tag="{x:Static theme:Glyphs.Add}"
+                         Glyph="{x:Static theme:Glyphs.Chip}"
+                         Label="{Binding XmxLabel}"
+                         Detail="{Binding XmxLine}"
+                         IsEnabled="{Binding CanAct}"
+                         Command="{Binding AddXmx}" />
 
-        <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
-                   Text="{x:Static lang:Strings.XmxExplained}" Margin="6,8,6,0" />
+          <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+                     Text="{x:Static lang:Strings.XmxExplained}" Margin="6,8,6,0" />
+        </StackPanel>
 
         <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.ExtrasHeading}"
                    Margin="4,24,0,10" />

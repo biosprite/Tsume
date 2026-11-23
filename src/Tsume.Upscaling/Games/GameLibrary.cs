@@ -15,7 +15,7 @@ public static partial class GameLibrary
         var games = new Dictionary<string, Game>(StringComparer.OrdinalIgnoreCase);
 
         // Stores go first: a game a store knows keeps the store's name even when a saved folder holds it too.
-        var sources = new Func<IEnumerable<Game>>[] { Steam, Epic, Gog, Ubisoft, Xbox }
+        var sources = new Func<IEnumerable<Game>>[] { Steam, Epic, Gog, Ubisoft, Ea, Xbox }
             .Concat((customFolders ?? []).Select(folder => (Func<IEnumerable<Game>>)(() => FromFolder(folder))));
 
         foreach (var source in sources)
@@ -235,19 +235,105 @@ public static partial class GameLibrary
         }
     }
 
+    private static IEnumerable<Game> Ea()
+    {
+        foreach (var hive in new[] { @"SOFTWARE\WOW6432Node\EA Games", @"SOFTWARE\EA Games" })
+        {
+            using var all = Registry.LocalMachine.OpenSubKey(hive);
+            if (all is null) continue;
+
+            foreach (var id in all.GetSubKeyNames())
+            {
+                using var entry = all.OpenSubKey(id);
+                if (entry?.GetValue("Install Dir") is not string { Length: > 0 } folder) continue;
+
+                folder = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar);
+                var name = entry.GetValue("DisplayName") as string;
+                if (string.IsNullOrWhiteSpace(name)) name = Path.GetFileName(folder);
+
+                yield return Game.At(folder, name, GameStore.Ea);
+            }
+        }
+    }
+
     private static IEnumerable<Game> Xbox()
     {
-        foreach (var drive in DriveInfo.GetDrives().Where(drive => drive is { IsReady: true, DriveType: DriveType.Fixed }))
+        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Include Removable drives so microSD cards on handhelds (<SD>:\XboxGames and custom .GamingRoot folders) are scanned.
+        foreach (var drive in DriveInfo.GetDrives().Where(drive =>
+                     drive is { IsReady: true, DriveType: DriveType.Fixed or DriveType.Removable }))
         {
-            var games = Path.Combine(drive.RootDirectory.FullName, "XboxGames");
+            var driveRoot = drive.RootDirectory.FullName;
+            roots.Add(Path.Combine(driveRoot, "XboxGames"));
+
+            if (TryReadGamingRoot(driveRoot) is { } customRoot)
+                roots.Add(customRoot);
+        }
+
+        try
+        {
+            using var repo = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\GamingServices\PackageRepository\Root");
+            if (repo is not null)
+            {
+                foreach (var subName in repo.GetSubKeyNames())
+                {
+                    using var sub = repo.OpenSubKey(subName);
+                    foreach (var valueName in sub?.GetValueNames() ?? [])
+                    {
+                        if (sub?.GetValue(valueName) is string { Length: > 0 } packageRoot
+                            && Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(packageRoot)) is { Length: > 0 } parent)
+                        {
+                            roots.Add(parent);
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            // Drive roots and .GamingRoot still cover standard Xbox libraries.
+        }
+
+        foreach (var games in roots)
+        {
             if (!Directory.Exists(games)) continue;
 
-            foreach (var folder in Directory.EnumerateDirectories(games))
+            IEnumerable<string> children;
+            try { children = Directory.EnumerateDirectories(games); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { continue; }
+
+            foreach (var folder in children)
             {
                 // The game itself is in Content; a folder without one holds saves or nothing.
                 var content = Path.Combine(folder, "Content");
                 if (Directory.Exists(content)) yield return Game.At(content, Path.GetFileName(folder), GameStore.Xbox);
             }
+        }
+    }
+
+    /// <summary>
+    /// Reads Xbox GamingServices' <c>.GamingRoot</c> pointer at the root of a drive ("RGBX" + version + UTF-16LE relative path).
+    /// </summary>
+    private static string? TryReadGamingRoot(string driveRoot)
+    {
+        try
+        {
+            var marker = Path.Combine(driveRoot, ".GamingRoot");
+            if (!File.Exists(marker)) return null;
+
+            var bytes = File.ReadAllBytes(marker);
+            if (bytes.Length <= 8 || bytes[0] != (byte)'R' || bytes[1] != (byte)'G' || bytes[2] != (byte)'B' || bytes[3] != (byte)'X')
+                return null;
+
+            var relative = System.Text.Encoding.Unicode.GetString(bytes, 8, bytes.Length - 8).Trim('\0', ' ', '\r', '\n');
+            if (string.IsNullOrWhiteSpace(relative)) return null;
+
+            return Files.Inside(driveRoot, relative);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException)
+        {
+            return null;
         }
     }
 }

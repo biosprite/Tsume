@@ -136,7 +136,8 @@ public sealed class UpscalingGameViewModel : LayerViewModel
         _patcher = _hub.OptiPatcher.Current();
 
         var isHealthy = _manifest is not null && _state == InstallState.Healthy;
-        var storeHasXmx = _hub.Xmx.Current() is not null;
+        var supportsXmx = Tsume.Upscaling.GpuVendor.HasIntelXmxGpu();
+        var storeHasXmx = supportsXmx && _hub.Xmx.Current() is not null;
         var canUseOptiPatcher = _patcher is not null || _hub.Installer.ExtrasHaveOptiPatcher;
 
         // An installed game's settings come from its own file: OptiScaler's
@@ -146,11 +147,11 @@ public sealed class UpscalingGameViewModel : LayerViewModel
             ? Installer.ReadSettings(_manifest!, remembered)
             : remembered;
 
-        // XMX is selectable if already in the game, or would go in with an install.
+        // XMX is selectable on Intel XMX GPUs if already in the game, or would go in with an install.
         // OptiPatcher can be toggled directly on an installed game whenever Tsume holds it (or the game already has it).
-        _hasXmx = isHealthy
+        _hasXmx = supportsXmx && (isHealthy
             ? Installer.HasXmx(_manifest!)
-            : storeHasXmx;
+            : storeHasXmx);
         _hasOptiPatcher = isHealthy
             ? Installer.HasOptiPatcher(_manifest!) || canUseOptiPatcher
             : canUseOptiPatcher;
@@ -161,7 +162,8 @@ public sealed class UpscalingGameViewModel : LayerViewModel
 
         _existingFolder = ExistingFolder();
         Tuning.Load(settings, _hasXmx, _hasOptiPatcher, isInstalled: isHealthy, lockedProxy,
-            xmxAvailableToAdd: isHealthy && storeHasXmx);
+            xmxAvailableToAdd: isHealthy && storeHasXmx,
+            occupiedProxies: Facts?.PresentProxies);
         Notify("");
     }
 
@@ -238,7 +240,8 @@ public sealed class UpscalingGameViewModel : LayerViewModel
         _state == InstallState.None && Facts is { AntiCheat: null, ExistingProxy: { } proxy } ? Strings.SomeoneElsesOptiScaler(proxy)
         : _state == InstallState.Healthy && IsOlderBuild ? Strings.NewerBuildReady(UpscalingViewModel.Night(_build!.Build.Tag))
         : _state == InstallState.Healthy && IsOptiPatcherOutdated ? Strings.OptiPatcherUpdateReady(_patcher!.Release.Tag)
-        : _state == InstallState.Healthy && !IsCurrent ? Strings.XmxReady
+        : _state == InstallState.Healthy && !IsCurrent && Tsume.Upscaling.GpuVendor.HasIntelXmxGpu() && !Installer.HasXmx(_manifest!) ? Strings.XmxReady
+        : _state == InstallState.Healthy && !IsCurrent && _build is not null ? Strings.NewerBuildReady(UpscalingViewModel.Night(_build.Build.Tag))
         : "";
 
     public Visibility NoticeShown => Notice.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -372,7 +375,7 @@ public sealed class UpscalingGameViewModel : LayerViewModel
         var remembered = Tuning.Settings.PreservingUnavailable(previous, _hasXmx, _hasOptiPatcher);
 
         // Keep the user's proxy preference untouched while cleanly installed (the proxy dropdown is locked).
-        if (isHealthy) remembered = remembered with { Proxy = listed.Settings?.Proxy ?? "" };
+        if (isHealthy && listed.Settings is not null) remembered = remembered with { Proxy = listed.Settings.Proxy };
 
         if (!isHealthy)
         {
@@ -393,25 +396,27 @@ public sealed class UpscalingGameViewModel : LayerViewModel
             Status = Strings.SettingsSaved;
             Notify("");
 
+            var storeHasXmx = Tsume.Upscaling.GpuVendor.HasIntelXmxGpu() && _hub.Xmx.Current() is not null;
+
             if (!_hasOptiPatcher && Tuning.HasOptiPatcher)
             {
                 Tuning.Load(Installer.ReadSettings(_manifest!, remembered), hasXmx: _hasXmx, hasOptiPatcher: false,
                     isInstalled: true, lockedProxy: _manifest!.Proxy,
-                    xmxAvailableToAdd: _hub.Xmx.Current() is not null);
+                    xmxAvailableToAdd: storeHasXmx, occupiedProxies: Facts?.PresentProxies);
             }
             else if (Tuning.Settings.Upscaler == UpscalerChoice.Fsr4Xmx && !_hasXmx)
             {
                 // XMX is not in this game yet: show what was actually written instead.
                 Tuning.Load(Installer.ReadSettings(_manifest!, Tuning.Settings), hasXmx: false, hasOptiPatcher: _hasOptiPatcher,
                     isInstalled: true, lockedProxy: _manifest!.Proxy,
-                    xmxAvailableToAdd: _hub.Xmx.Current() is not null);
+                    xmxAvailableToAdd: storeHasXmx, occupiedProxies: Facts?.PresentProxies);
                 Status = Strings.XmxNotInGame;
             }
             else if (Tuning.Settings.OptiPatcher && !Installer.HasOptiPatcher(_manifest!))
             {
                 Tuning.Load(Installer.ReadSettings(_manifest!, Tuning.Settings), hasXmx: _hasXmx, hasOptiPatcher: false,
                     isInstalled: true, lockedProxy: _manifest!.Proxy,
-                    xmxAvailableToAdd: _hub.Xmx.Current() is not null);
+                    xmxAvailableToAdd: storeHasXmx, occupiedProxies: Facts?.PresentProxies);
                 Status = Strings.OptiPatcherNotInGame;
             }
         }

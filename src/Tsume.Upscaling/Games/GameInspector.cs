@@ -19,19 +19,26 @@ public static class GameInspector
     private static readonly Dictionary<string, string> UpscalerFiles = new(StringComparer.OrdinalIgnoreCase)
     {
         ["nvngx_dlss.dll"] = "DLSS",
+        ["sl.dlss.dll"] = "DLSS",
         ["nvngx_dlssg.dll"] = "DLSS-FG",
         ["sl.dlss_g.dll"] = "DLSS-FG",
         ["libxess.dll"] = "XeSS",
         ["libxess_dx11.dll"] = "XeSS",
         ["libxess_fg.dll"] = "XeSS-FG",
         ["ffx_fsr2_api_x64.dll"] = "FSR 2",
+        ["ffx_fsr2_api_dx11_x64.dll"] = "FSR 2",
         ["ffx_fsr2_api_dx12_x64.dll"] = "FSR 2",
         ["ffx_fsr2_api_vk_x64.dll"] = "FSR 2",
+        ["ffx_fsr3_x64.dll"] = "FSR 3",
         ["ffx_fsr3upscaler_x64.dll"] = "FSR 3",
         ["amd_fidelityfx_dx12.dll"] = "FSR 3",
         ["amd_fidelityfx_vk.dll"] = "FSR 3",
         ["amd_fidelityfx_loader_dx12.dll"] = "FSR 3",
+        ["amd_fidelityfx_loader_vk.dll"] = "FSR 3",
         ["amd_fidelityfx_upscaler_dx12.dll"] = "FSR 3",
+        ["amd_fidelityfx_upscaler_vk.dll"] = "FSR 3",
+        ["amd_fidelityfx_framegeneration_dx12.dll"] = "FSR-FG",
+        ["amd_fidelityfx_framegeneration_vk.dll"] = "FSR-FG",
     };
 
     /// <summary>Folder or file name → the anti-cheat it belongs to.</summary>
@@ -49,6 +56,10 @@ public static class GameInspector
         ["GameGuard"] = "nProtect GameGuard",
         ["XIGNCODE"] = "XIGNCODE",
         ["EAAntiCheat.GameServiceLauncher.exe"] = "EA AntiCheat",
+        ["EAAntiCheat.GameServiceLauncher.dll"] = "EA AntiCheat",
+        ["EAAntiCheat.Installer.exe"] = "EA AntiCheat",
+        ["randgrid.sys"] = "RICOCHET Anti-Cheat",
+        ["vgk.sys"] = "Riot Vanguard",
     };
 
     /// <summary>Folders not worth opening: installers for other things, and OptiScaler's own.</summary>
@@ -103,42 +114,130 @@ public static class GameInspector
         if (ChooseProgram(game, programs, upscalerFolders) is not { } program) return null;
 
         var target = Path.GetDirectoryName(program)!;
-        return new GameFacts(target, program, [.. upscalers], antiCheat, ExistingProxy(target));
+        var existing = ExistingProxy(target);
+        return new GameFacts(target, program, [.. upscalers], antiCheat, existing, PresentProxies(target, existing));
     }
 
     /// <summary>
-    /// The proxy file name OptiScaler already sits under in this folder, or null. It is recognised by its
-    /// OriginalFilename version field, whatever the file is called — the same test its own setup uses.
+    /// Infers the game's root folder when a user picks an executable inside a binary subfolder
+    /// (such as <c>&lt;Root&gt;\&lt;Project&gt;\Binaries\Win64\*.exe</c> or <c>&lt;Root&gt;\bin\x64\*.exe</c>),
+    /// so root-level anti-cheat folders and <c>Engine\Plugins</c> upscaler DLLs are still scanned.
+    /// </summary>
+    public static string InferRootFolder(string program)
+    {
+        var folder = Path.GetDirectoryName(Path.GetFullPath(program))!;
+        var clean = Path.TrimEndingDirectorySeparator(folder);
+
+        // Unreal Engine: <Root>\<Project>\Binaries\Win64 (3 levels deep) or <Root>\Binaries\Win64 (2 levels deep).
+        if (IsUnrealTarget(clean))
+        {
+            var twoUp = Directory.GetParent(clean)?.Parent?.FullName;
+            var threeUp = twoUp is null ? null : Directory.GetParent(twoUp)?.FullName;
+
+            if (IsPlausibleGameRoot(threeUp) && HasRootMarkers(threeUp!))
+                return threeUp!;
+
+            if (IsPlausibleGameRoot(twoUp) && HasRootMarkers(twoUp!))
+                return twoUp!;
+        }
+
+        // Common multi-level binary layouts: <Root>\bin\x64, <Root>\bin\x64_dx12, <Root>\bin\win64.
+        var leaf = Path.GetFileName(clean);
+        var parentDir = Directory.GetParent(clean);
+        if (parentDir is not null
+            && parentDir.Name.Equals("bin", StringComparison.OrdinalIgnoreCase)
+            && (leaf.StartsWith("x64", StringComparison.OrdinalIgnoreCase)
+                || leaf.Equals("win64", StringComparison.OrdinalIgnoreCase)))
+        {
+            var twoUp = parentDir.Parent?.FullName;
+            if (IsPlausibleGameRoot(twoUp)) return twoUp!;
+        }
+
+        if (leaf.Equals("bin64", StringComparison.OrdinalIgnoreCase)
+            && parentDir?.FullName is { } oneUp
+            && IsPlausibleGameRoot(oneUp))
+        {
+            return oneUp;
+        }
+
+        return folder;
+
+        static bool IsPlausibleGameRoot(string? candidate) =>
+            !string.IsNullOrEmpty(candidate)
+            && !string.Equals(candidate, Path.GetPathRoot(candidate), StringComparison.OrdinalIgnoreCase)
+            && Directory.Exists(candidate);
+
+        static bool HasRootMarkers(string candidate)
+        {
+            if (Directory.Exists(Path.Combine(candidate, "Engine"))) return true;
+
+            foreach (var mark in AntiCheatMarks.Keys)
+                if (Path.Exists(Path.Combine(candidate, mark))) return true;
+
+            try { return Directory.EnumerateFiles(candidate, "*.exe").Any(); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return false; }
+        }
+    }
+
+    /// <summary>
+    /// The proxy file name OptiScaler already sits under in this folder (including <c>OptiScaler.asi</c>), or null.
+    /// Recognised by its OriginalFilename version field, whatever the file is called — the same test its own setup uses.
     /// </summary>
     public static string? ExistingProxy(string folder)
     {
-        foreach (var name in ProxyNames.All)
+        foreach (var name in ProxyNames.Recognised)
         {
             var path = Path.Combine(folder, name);
             if (!File.Exists(path)) continue;
 
-            try
-            {
-                if (string.Equals(FileVersionInfo.GetVersionInfo(path).OriginalFilename, "OptiScaler.dll",
-                        StringComparison.OrdinalIgnoreCase)) return name;
-            }
-            catch (IOException)
-            {
-                // Unreadable: treat as not OptiScaler.
-            }
+            if (name.Equals(ProxyNames.AsiName, StringComparison.OrdinalIgnoreCase) || IsOptiScalerBinary(path))
+                return name;
         }
 
         return null;
     }
 
+    /// <summary>True when <paramref name="path"/> carries OptiScaler's version resource.</summary>
+    public static bool IsOptiScalerBinary(string path)
+    {
+        try
+        {
+            return string.Equals(FileVersionInfo.GetVersionInfo(path).OriginalFilename, "OptiScaler.dll",
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Selectable proxy DLL names already occupied in <paramref name="folder"/> by non-OptiScaler files.</summary>
+    private static IReadOnlyList<string> PresentProxies(string folder, string? existingOptiScaler) =>
+    [
+        .. ProxyNames.All.Where(name =>
+            !string.Equals(name, existingOptiScaler, StringComparison.OrdinalIgnoreCase)
+            && File.Exists(Path.Combine(folder, name))
+            && !IsOptiScalerBinary(Path.Combine(folder, name))),
+    ];
+
     private static string? ChooseProgram(Game game, List<string> programs, HashSet<string> upscalerFolders)
     {
         if (programs.Count == 0) return null;
 
-        // Unreal: the top-level exe is a stub; the real game is …\Binaries\Win64\<Name>-Win64-Shipping.exe,
-        // and that is the folder Windows loads OptiScaler from.
+        // Unreal: the top-level exe is a stub; the real game sits in …\Binaries\Win64\ or …\Binaries\WinGDK\
+        // (with or without "-Shipping" in its filename), and that is the folder Windows loads OptiScaler from.
         var shipping = programs.Where(IsUnrealGame).ToList();
-        if (shipping.Count > 0) return Best(shipping);
+        if (shipping.Count > 0)
+        {
+            if (game.Store == GameStore.Custom
+                && game.Executable is { } customUnreal
+                && shipping.Contains(customUnreal, StringComparer.OrdinalIgnoreCase))
+            {
+                return customUnreal;
+            }
+
+            return Best(shipping);
+        }
 
         if (game.Executable is { } hint && File.Exists(hint))
         {
@@ -155,6 +254,7 @@ public static class GameInspector
 
         string Best(List<string> among) => among
             .OrderByDescending(program => upscalerFolders.Contains(Path.GetDirectoryName(program)!))
+            .ThenByDescending(IsUnrealShipping)
             .ThenByDescending(program => string.Equals(program, game.Executable, StringComparison.OrdinalIgnoreCase))
             .ThenByDescending(program => NamedLike(program, game))
             .ThenByDescending(Size)
@@ -172,13 +272,16 @@ public static class GameInspector
 
     private static bool IsUnrealGame(string program)
     {
-        var name = Path.GetFileNameWithoutExtension(program);
         var folder = Path.GetDirectoryName(program)!;
+        return IsUnrealTarget(folder) && !IsHelper(program);
+    }
 
-        var shipping = name.EndsWith("-Shipping", StringComparison.OrdinalIgnoreCase)
-                    || name.EndsWith("_Shipping", StringComparison.OrdinalIgnoreCase);
-
-        return shipping && IsUnrealTarget(folder) && !folder.Contains(@"\Engine\", StringComparison.OrdinalIgnoreCase);
+    private static bool IsUnrealShipping(string program)
+    {
+        var name = Path.GetFileNameWithoutExtension(program);
+        return name.EndsWith("-Shipping", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith("_Shipping", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith("-Retail", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsHelper(string program)

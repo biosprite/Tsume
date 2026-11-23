@@ -109,7 +109,7 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
             _availableOptiPatcher = null;
         }
 
-        _xmx = _hub.Xmx.Current();
+        _xmx = Tsume.Upscaling.GpuVendor.HasIntelXmxGpu() ? _hub.Xmx.Current() : null;
         Outdated = _build is null ? [] : [.. GamesOnAnotherBuild(_build)];
         OldSize = _hub.Builds.Old(_hub.Installer.BuildsInUse()).Sum(old => old.Size);
 
@@ -200,6 +200,8 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
     private long OldSize { get; set; }
 
     public string RemoveOldLabel => OldSize > 0 ? Strings.RemoveOldBuildsSized(OldSize) : Strings.RemoveOldBuilds;
+
+    public Visibility XmxShown => Tsume.Upscaling.GpuVendor.HasIntelXmxGpu() ? Visibility.Visible : Visibility.Collapsed;
 
     public string XmxLabel => _xmx is null ? Strings.AddXmx : Strings.ReplaceXmx;
 
@@ -443,6 +445,8 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
     /// </summary>
     private async Task AddXmxAsync()
     {
+        if (!Tsume.Upscaling.GpuVendor.HasIntelXmxGpu()) return;
+
         var had = _xmx;
         var archives = XmxStore.Lying();
 
@@ -496,10 +500,25 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
         }
 
         var plan = Outdated
-            .Select(manifest => _hub.List.Find(manifest.GameId) is { } listed
-                ? (Manifest: manifest, Listed: listed, Settings: _hub.SettingsForUpdate(manifest, listed))
-                : default)
-            .Where(item => item.Listed is not null)
+            .Select(manifest =>
+            {
+                if (_hub.List.Find(manifest.GameId) is { } known)
+                    return (Manifest: manifest, Listed: known, KnownInList: true, Settings: _hub.SettingsForUpdate(manifest, known));
+
+                var fallback = new Tsume.Upscaling.Games.ListedGame
+                {
+                    Game = new Tsume.Upscaling.Games.Game
+                    {
+                        Id = manifest.GameId,
+                        Name = manifest.GameName,
+                        Folder = Tsume.Upscaling.Games.GameInspector.InferRootFolder(manifest.Executable),
+                        Executable = manifest.Executable,
+                        Store = Tsume.Upscaling.Games.GameStore.Custom,
+                    },
+                };
+                var settings = Installer.ReadSettings(manifest, _hub.List.Defaults);
+                return (Manifest: manifest, Listed: fallback, KnownInList: false, Settings: settings);
+            })
             .ToList();
 
         // When at least one game in the batch needs stored OptiPatcher, verify it up front so a damaged file
@@ -514,12 +533,13 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
         var updated = 0;
         var failures = new List<string>();
 
-        foreach (var (manifest, listed, settings) in plan)
+        foreach (var (manifest, listed, knownInList, settings) in plan)
         {
             Status = $"{manifest.GameName}: {Strings.Installing}";
             try
             {
                 await Task.Run(() => _hub.PutIn(listed, build, settings));
+                if (knownInList) listed.Settings = settings;
                 updated++;
             }
             catch (Exception error)
@@ -527,6 +547,8 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
                 failures.Add(Strings.CouldNotUpdate(manifest.GameName, Strings.Explain(error)));
             }
         }
+
+        if (updated > 0) _hub.SaveList();
 
         Status = string.Join(Environment.NewLine, failures.Prepend(Strings.UpdatedGames(updated)));
     }

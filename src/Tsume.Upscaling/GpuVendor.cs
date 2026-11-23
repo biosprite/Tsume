@@ -16,45 +16,167 @@ public static partial class GpuVendor
     private const uint DxgiGpuPreferenceHighPerformance = 2;
     private const int DxgiErrorNotFound = unchecked((int)0x887A0002);
 
-    private static readonly Lazy<(bool Intel, bool IntelArc, bool Amd)> Primary = new(Detect);
+    internal readonly record struct GpuCapabilities(
+        bool Intel,
+        bool IntelArc,
+        bool IntelXmx,
+        bool Amd,
+        bool AmdRdna3Plus);
+
+    private static readonly Lazy<GpuCapabilities> Primary = new(Detect);
 
     /// <summary>True if the active high-performance GPU is an Intel GPU.</summary>
     public static bool HasIntelGpu() => Primary.Value.Intel;
 
-    /// <summary>True if the active high-performance GPU is an Intel Arc GPU.</summary>
+    /// <summary>True if the active high-performance GPU is an Intel Arc GPU (Xe-LPG, Xe2, Xe3, or discrete Arc).</summary>
     public static bool HasIntelArcGpu() => Primary.Value.IntelArc;
+
+    /// <summary>
+    /// True if the active high-performance GPU is an Intel GPU with hardware XMX matrix engines
+    /// (Lunar Lake, Arrow Lake-H, Panther Lake / Core G3, or discrete Arc — excludes Meteor Lake Xe-LPG and Iris Xe).
+    /// </summary>
+    public static bool HasIntelXmxGpu() => Primary.Value.IntelXmx;
 
     /// <summary>True if the active high-performance GPU is an AMD Radeon GPU.</summary>
     public static bool HasAmdGpu() => Primary.Value.Amd;
 
-    /// <summary>Classifies a GPU adapter from its PCI vendor ID and DXGI adapter description.</summary>
-    internal static (bool Intel, bool IntelArc, bool Amd) Classify(uint vendorId, string? description)
+    /// <summary>
+    /// True if the active high-performance GPU is an AMD RDNA 3 / RDNA 3.5 or newer GPU (e.g. Z1/Z1E, Z2E, HX 370),
+    /// excluding RDNA 2 and older APUs (e.g. Z2 Go / 680M, Z2 A, Vega).
+    /// </summary>
+    public static bool HasAmdRdna3PlusGpu() => Primary.Value.AmdRdna3Plus;
+
+    /// <summary>Classifies a GPU adapter from its PCI vendor ID, PCI device ID, and DXGI adapter description.</summary>
+    internal static GpuCapabilities Classify(uint vendorId, uint deviceId, string? description)
     {
-        var intel = vendorId == VendorIntel;
-        var intelArc = intel && !string.IsNullOrEmpty(description) && ArcWord().IsMatch(description);
-        var amd = vendorId == VendorAmd;
-        return (intel, intelArc, amd);
+        if (vendorId == VendorIntel)
+        {
+            var (arc, xmx) = ClassifyIntel(deviceId, description);
+            return new GpuCapabilities(Intel: true, IntelArc: arc, IntelXmx: xmx, Amd: false, AmdRdna3Plus: false);
+        }
+
+        if (vendorId == VendorAmd)
+        {
+            var rdna3Plus = ClassifyAmdRdna3Plus(deviceId, description);
+            return new GpuCapabilities(Intel: false, IntelArc: false, IntelXmx: false, Amd: true, AmdRdna3Plus: rdna3Plus);
+        }
+
+        return default;
+    }
+
+    internal static GpuCapabilities Classify(uint vendorId, string? description) =>
+        Classify(vendorId, 0, description);
+
+    /// <summary>
+    /// Intel handheld GPUs ordered oldest → newest: returns <c>(IntelArc, IntelXmx)</c>.
+    /// </summary>
+    private static (bool Arc, bool Xmx) ClassifyIntel(uint deviceId, string? description)
+    {
+        switch (deviceId)
+        {
+            // --- Pre-Arc: Tiger Lake & Alder Lake (Iris Xe — DP4a only, no Arc DX11 XeSS, no XeFG 3×/4×, no XMX) ---
+            case 0x9A49: // Intel Iris Xe Graphics G7 (Core i7-1165G7 / 1195G7 — OneXPlayer 1S, GPD Win 3)
+            case 0x46A6: // Intel Iris Xe Graphics (Core i7-1260P / 1280P — OneXPlayer Mini, AYANEO Next)
+                return (Arc: false, Xmx: false);
+
+            // --- Meteor Lake & Arrow Lake-U/S (Xe-LPG — Arc DX11 XeSS & XeFG 3×/4× where Arc-branded, NO XMX matrix engines) ---
+            case 0x7D40: // Intel Graphics (Core Ultra 100U Meteor Lake-U — no XMX)
+            case 0x7D45: // Intel Arc Graphics (Core Ultra 100H Meteor Lake-H — no XMX)
+            case 0x7D55: // Intel Arc Graphics (Core Ultra 5 135H / Ultra 7 155H — MSI Claw A1M, OneXPlayer X1 Mini — no XMX)
+            case 0x7D60: // Intel Graphics (Core Ultra 100 Meteor Lake — no XMX)
+            case 0x7DD5: // Intel Arc Graphics (Core Ultra 100H Meteor Lake-H refresh — no XMX)
+            case 0x7D41: // Intel Graphics (Core Ultra 200U Arrow Lake-U — no XMX)
+            case 0x7D67: // Intel Graphics (Core Ultra 200 Arrow Lake 4-core Xe-LPG — no XMX)
+                return (Arc: HasArcBrand(description, defaultWhenUnbranded: deviceId is 0x7D45 or 0x7D55 or 0x7DD5), Xmx: false);
+
+            // --- Lunar Lake (Xe2-LPG — Arc + hardware XMX) ---
+            case 0x6420: // Intel Arc 130V GPU (Core Ultra 5 226V / 228V — MSI Claw 7 AI+ / Lunar Lake handhelds)
+            case 0x64A0: // Intel Arc 140V GPU (Core Ultra 7 256V / 258V — MSI Claw 8 AI+, MSI Claw 7 AI+)
+            case 0x64B0: // Intel Arc 140V / Xe2 variant (Core Ultra 200V Lunar Lake)
+                return (Arc: true, Xmx: true);
+
+            // --- Arrow Lake-H (Xe-LPG+ — Arc + hardware XMX) ---
+            case 0x7D51: // Intel Arc 140T / 130T GPU (Core Ultra 200H — OneXPlayer X1 Pro 255H / 285H)
+            case 0x7DD1: // Intel Arc 140T / 130T GPU (Core Ultra 200H Arrow Lake-H)
+                return (Arc: true, Xmx: true);
+
+            // --- Panther Lake / Arc G3 (Xe3 — Arc + hardware XMX) ---
+            case 0xB081 or 0xB083 or 0xB085 or 0xB087: // Intel Arc B370 GPU, 10 Xe3 cores (Arc G3 non-Extreme & Core Ultra 300)
+            case 0xB080 or 0xB082 or 0xB084 or 0xB086: // Intel Arc B390 GPU, 12 Xe3 cores (Arc G3 Extreme & Core Ultra X7/X9 — MSI Claw 8 EX AI+)
+            case >= 0xB088 and <= 0xB0FF:              // Intel Graphics / Arc Xe3 (remaining Panther Lake steppings)
+                return (Arc: true, Xmx: true);
+        }
+
+        // Unlisted / future Intel SKUs: fall back to adapter name ("Arc 140V", "Arc B390", etc. vs bare "Arc Graphics").
+        var intelArc = !string.IsNullOrEmpty(description) && ArcWord().IsMatch(description);
+        var intelXmx = intelArc && !string.IsNullOrEmpty(description) && XmxArcModel().IsMatch(description);
+        return (intelArc, intelXmx);
+
+        static bool HasArcBrand(string? desc, bool defaultWhenUnbranded) =>
+            string.IsNullOrEmpty(desc) ? defaultWhenUnbranded : ArcWord().IsMatch(desc);
+    }
+
+    /// <summary>
+    /// AMD Windows handheld GPUs ordered oldest → newest: true for RDNA 3 / 3.5+ (defaults to FSR 4),
+    /// false for Vega and RDNA 2 APUs (defaults to FSR 3).
+    /// </summary>
+    private static bool ClassifyAmdRdna3Plus(uint deviceId, string? description)
+    {
+        switch (deviceId)
+        {
+            // --- Vega & RDNA 2 APUs (Default: FSR 3) ---
+            case 0x15D8: // AMD Radeon Vega Mobile (Ryzen 3000U Picasso — GPD Win Max 2020, AYANEO Founders)
+            case 0x1636: // AMD Radeon Graphics Vega (Ryzen 4000U Renoir — AYANEO 2021, OneXPlayer AMD)
+            case 0x164C: // AMD Radeon Graphics Vega (Ryzen 5000U Lucienne — AYANEO Next Lite)
+            case 0x1638: // AMD Radeon Graphics Vega (Ryzen 5000U Cezanne / Barcelo — AYANEO Next, OneXPlayer Mini)
+            case 0x1681: // AMD Radeon 680M / 660M, RDNA 2 (Ryzen Z2 Go & Ryzen 6800U — Lenovo Legion Go S, GPD Win 4, AYANEO 2)
+            case 0x1506: // AMD Radeon 610M, RDNA 2 (Ryzen 7020 Mendocino — AYANEO Air Plus)
+            case 0x163F: // AMD Radeon Graphics, RDNA 2 (Ryzen Z2 A — ASUS ROG Xbox Ally)
+            case 0x1435: // AMD Radeon Graphics, RDNA 2 (Ryzen Z2 A variant — ASUS ROG Xbox Ally)
+                return false;
+
+            // --- RDNA 3 APUs (Default: FSR 4 INT8) ---
+            case 0x15BF: // AMD Radeon 780M / 760M, RDNA 3 (Ryzen Z1 Extreme & 7840U — ASUS ROG Ally, ROG Ally X, Lenovo Legion Go)
+            case 0x15C8: // AMD Radeon 740M, RDNA 3 (Ryzen Z1 & 7540U — ASUS ROG Ally Z1)
+            case 0x1900: // AMD Radeon 780M / 760M, RDNA 3 (Ryzen 8840U / 8640U Hawk Point — GPD Win Mini 2024, AYANEO Flip, OneXFly)
+                return true;
+
+            // --- RDNA 3.5+ APUs (Default: FSR 4 INT8) ---
+            case 0x150E: // AMD Radeon 890M / 880M, RDNA 3.5 (Ryzen Z2 Extreme & AI 9 HX 370 — ROG Xbox Ally X, MSI Claw A8, Legion Go 2, OneXFly F1 Pro)
+            case 0x1114: // AMD Radeon 860M / 840M, RDNA 3.5 (Ryzen Z2 / Ryzen AI 300 Krackan Point handhelds)
+            case 0x1586: // AMD Radeon 8060S / 8050S, RDNA 3.5 (Ryzen AI Max+ 395 / 385 Strix Halo — GPD Win 5, AYANEO Next II)
+                return true;
+        }
+
+        // Unlisted / future AMD SKUs (e.g. Z3 / RDNA 4+): default to RDNA 3+ unless the name marks an older 600M / Vega iGPU.
+        return string.IsNullOrEmpty(description) || !AmdPreRdna3Name().IsMatch(description);
     }
 
     [GeneratedRegex(@"\bArc\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ArcWord();
 
-    private static (bool Intel, bool IntelArc, bool Amd) Detect()
+    [GeneratedRegex(@"\bArc(?:\(TM\)|™|\(R\))?\s+(?:Pro\b|[A-Z]\d{2,3}\b|\d{3}[A-Z]\b|G\d\b)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex XmxArcModel();
+
+    [GeneratedRegex(@"\b(?:Radeon(?:\(TM\)|™)?\s+6\d0M|Vega|RX\s+[56]\d{3})\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex AmdPreRdna3Name();
+
+    private static GpuCapabilities Detect()
     {
         try
         {
             if (TryDetectHighPerformance(out var desc))
-                return Classify(desc.VendorId, desc.Description);
+                return Classify(desc.VendorId, desc.DeviceId, desc.Description);
 
             if (TryDetectFallback(out desc))
-                return Classify(desc.VendorId, desc.Description);
+                return Classify(desc.VendorId, desc.DeviceId, desc.Description);
         }
         catch (Exception error) when (error is COMException or DllNotFoundException or EntryPointNotFoundException or SEHException)
         {
             // Fall through to unknown GPU (Auto defaults, conservative feature gates).
         }
 
-        return (false, false, false);
+        return default;
     }
 
     /// <summary>

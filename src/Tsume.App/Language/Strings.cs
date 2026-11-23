@@ -274,6 +274,8 @@ public static class Strings
     public static string XmxModelLiteDetail => Find();
 
     public static string FrameGenOutputHeading => Find();
+    public static string FrameGenXefgDetail => Find();
+    public static string FrameGenFsrDetail => Find();
     public static string FrameGenInputHeading => Find();
     public static string FrameGenMultiplierHeading => Find();
     public static string ChoiceOff => Find();
@@ -281,6 +283,7 @@ public static class Strings
     public static string SourceAnyDetail => Find();
     public static string SourceDlssgDetail => Find();
     public static string SourceFsrDetail => Find();
+    public static string SourceXefgDetail => Find();
 
     public static string InGameHeading => Find();
     public static string SpoofNvidia => Find();
@@ -296,16 +299,18 @@ public static class Strings
 
     /// <summary>"Loads as winmm.dll"</summary>
     public static string LoadsAs(string proxy) => Fill(Find(), proxy);
-    public static string LoadsAsAuto => Find();
     public static string LoadsAsDetail => Find();
+    public static string LoadsAsOccupied(string proxy) => Fill(Find(), proxy);
     public static string LoadsAsLockedInstalled(string proxy) => Fill(Find(), proxy);
     public static string LoadsAsLockedExisting(string proxy) => Fill(Find(), proxy);
-    public static string ProxyAutoHint => Find();
     public static string ProxyDxgiHint => Find();
     public static string ProxyWinmmHint => Find();
     public static string ProxyVersionHint => Find();
+    public static string ProxyDbghelpHint => Find();
     public static string ProxyD3d12Hint => Find();
-    public static string ProxyFallbackHint => Find();
+    public static string ProxyWininetHint => Find();
+    public static string ProxyWinhttpHint => Find();
+    public static string ProxyAsiHint => Find();
     public static string XmxLockedBuild => Find();
     public static string XmxLockedUpdate => Find();
     public static string MultiplierIntelOnly => Find();

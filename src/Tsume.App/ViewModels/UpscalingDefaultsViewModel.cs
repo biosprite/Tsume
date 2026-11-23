@@ -26,7 +26,7 @@ public sealed class UpscalingDefaultsViewModel : LayerViewModel
 
     protected override void OnOpened() => Tuning.Load(
         _hub.List.Defaults,
-        hasXmx: _hub.Xmx.Current() is not null,
+        hasXmx: Tsume.Upscaling.GpuVendor.HasIntelXmxGpu() && _hub.Xmx.Current() is not null,
         hasOptiPatcher: false,
         showOptiPatcher: false);
 }
