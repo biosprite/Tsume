@@ -21,9 +21,13 @@ public static partial class GpuVendor
         bool IntelArc,
         bool IntelXmx,
         bool Amd,
-        bool AmdRdna3Plus);
+        bool AmdRdna3Plus,
+        long? AdapterLuid = null);
 
     private static readonly Lazy<GpuCapabilities> Primary = new(Detect);
+
+    /// <summary>LUID of the active high-performance hardware GPU, or null if DXGI detection failed.</summary>
+    public static long? GetPrimaryAdapterLuid() => Primary.Value.AdapterLuid;
 
     /// <summary>True if the active high-performance GPU is an Intel GPU.</summary>
     public static bool HasIntelGpu() => Primary.Value.Intel;
@@ -166,10 +170,10 @@ public static partial class GpuVendor
         try
         {
             if (TryDetectHighPerformance(out var desc))
-                return Classify(desc.VendorId, desc.DeviceId, desc.Description);
+                return Classify(desc.VendorId, desc.DeviceId, desc.Description) with { AdapterLuid = desc.AdapterLuid };
 
             if (TryDetectFallback(out desc))
-                return Classify(desc.VendorId, desc.DeviceId, desc.Description);
+                return Classify(desc.VendorId, desc.DeviceId, desc.Description) with { AdapterLuid = desc.AdapterLuid };
         }
         catch (Exception error) when (error is COMException or DllNotFoundException or EntryPointNotFoundException or SEHException)
         {

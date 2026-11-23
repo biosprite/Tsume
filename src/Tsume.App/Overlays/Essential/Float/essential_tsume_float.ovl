@@ -12,7 +12,7 @@ LockUserSettings=1
 EmbeddedImage=essential_tsume_float_atlas.png
 PingAddr=127.0.0.1
 [General]
-Sources=25
+Sources=26
 Tables=0
 Layers=236
 [Source0]
@@ -72,118 +72,125 @@ Formula=
 Provider=HAL
 ID=GPU1 power
 [Source8]
+Name=HAL GPU1 memory usage
+Units=GB
+Format=
+Formula=
+Provider=HAL
+ID=GPU1 memory usage
+[Source9]
 Name=CPU temperature
 Units=°C
 Format=
 Formula=(validate("HAL CPU temperature") ? "HAL CPU temperature" : x)
 Provider=AIDA
 ID=TSUME_CPU_TEMP
-[Source9]
+[Source10]
 Name=CPU power
 Units=W
 Format=
 Formula=(validate("HAL CPU power") ? "HAL CPU power" : x)
 Provider=AIDA
 ID=TSUME_CPU_POWER
-[Source10]
+[Source11]
 Name=CPU clock
 Units=GHz
 Format=%.2f
 Formula=(validate("HAL CPU clock") ? "HAL CPU clock" : x) / 1000
 Provider=AIDA
 ID=TSUME_CPU_CLOCK
-[Source11]
+[Source12]
 Name=GPU1 power
 Units=W
 Format=
 Formula=(validate("HAL GPU1 power") ? "HAL GPU1 power" : x)
 Provider=AIDA
 ID=TSUME_GPU_POWER
-[Source12]
+[Source13]
+Name=GPU1 memory usage
+Units=GB
+Format=%.1f
+Formula=(validate("HAL GPU1 memory usage") ? ("HAL GPU1 memory usage" > 0 ? "HAL GPU1 memory usage" : x) : x) / 1024
+Provider=AIDA
+ID=TSUME_GPU_VRAM
+[Source14]
 Name=CPU usage
 Units=%
 Format=
 Formula=
 Provider=HAL
 ID=CPU usage
-[Source13]
+[Source15]
 Name=GPU1 usage
 Units=%
 Format=
 Formula=
 Provider=HAL
 ID=GPU1 usage
-[Source14]
+[Source16]
 Name=GPU clock
 Units=GHz
 Format=%.2f
 Formula=x / 1000
 Provider=HAL
 ID=GPU1 clock
-[Source15]
+[Source17]
 Name=RAM usage
 Units=GB
 Format=%.1f
 Formula=x / 1024
 Provider=HAL
 ID=RAM usage
-[Source16]
-Name=GPU1 memory usage
-Units=GB
-Format=%.1f
-Formula=x / 1024
-Provider=HAL
-ID=GPU1 memory usage
-[Source17]
+[Source18]
 Name=GPU fan
 Units=RPM
 Format=%.0f
 Formula=
 Provider=HAL
 ID=GPU1 fan tachometer
-[Source18]
+[Source19]
 Name=GPU core voltage
 Units=V
 Format=%.2f
 Formula=x / 1000
 Provider=HAL
 ID=GPU1 voltage
-[Source19]
+[Source20]
 Name=Framerate 1% Low
 Units=FPS
 Format=%.0f
 Formula=1000 / percentile("Frametime", 99)
 Provider=HAL
 ID=Stub
-[Source20]
+[Source21]
 Name=Framerate 0.1% Low
 Units=FPS
 Format=%.0f
 Formula=1000 / percentile("Frametime", 99.9)
 Provider=HAL
 ID=Stub
-[Source21]
+[Source22]
 Name=CPU usage stage1
 Units=%
 Format=
 Formula=if(validate("CPU usage stage1"), "CPU usage stage1" + ("CPU usage" - "CPU usage stage1") * 0.18, "CPU usage")
 Provider=HAL
 ID=Timer
-[Source22]
+[Source23]
 Name=CPU usage smooth
 Units=%
 Format=
 Formula=if(validate("CPU usage smooth"), "CPU usage smooth" + ("CPU usage stage1" - "CPU usage smooth") * 0.18, "CPU usage")
 Provider=HAL
 ID=Timer
-[Source23]
+[Source24]
 Name=GPU1 usage stage1
 Units=%
 Format=
 Formula=if(validate("GPU1 usage stage1"), "GPU1 usage stage1" + ("GPU1 usage" - "GPU1 usage stage1") * 0.18, "GPU1 usage")
 Provider=HAL
 ID=Timer
-[Source24]
+[Source25]
 Name=GPU1 usage smooth
 Units=%
 Format=

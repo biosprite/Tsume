@@ -39,6 +39,7 @@ public sealed class RtssOverlayService : IDisposable
     private double? _lastCpuWatts;
     private double? _lastGpuWatts;
     private double? _lastCpuClockMhz;
+    private double? _lastGpuVramMb;
     private bool _disposed;
 
     public RtssOverlayService(HelperClient helper, SavedState state)
@@ -372,15 +373,19 @@ public sealed class RtssOverlayService : IDisposable
         double? cpuWatts;
         double? gpuWatts;
         double? cpuClockMhz;
+        double? gpuVramMb;
         lock (_gate)
         {
             cpuTemp = _lastCpuTemp;
             cpuWatts = _lastCpuWatts;
             gpuWatts = _lastGpuWatts;
             cpuClockMhz = _lastCpuClockMhz;
+            gpuVramMb = _lastGpuVramMb;
         }
 
-        var published = _aida.TryPublish(new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz), _install?.Folder);
+        var published = _aida.TryPublish(
+            new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb),
+            _install?.Folder);
         CheckConflictChanged();
 
         if (ensureOsdVisible && IsRunning)
@@ -451,7 +456,7 @@ public sealed class RtssOverlayService : IDisposable
                         continue;
                     }
 
-                    var (cpuWatts, gpuWatts, cpuClockMhz) = _energy.Sample();
+                    var (cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb) = _energy.Sample();
 
                     int? cpuTemp = null;
                     try
@@ -476,13 +481,14 @@ public sealed class RtssOverlayService : IDisposable
                         _lastCpuWatts = cpuWatts;
                         _lastGpuWatts = gpuWatts;
                         _lastCpuClockMhz = cpuClockMhz;
+                        _lastGpuVramMb = gpuVramMb;
                     }
 
                     level = _settings.Level;
                     if (level == RtssOverlayLevel.Off) break;
 
                     var ok = _aida.TryPublish(
-                        new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz),
+                        new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb),
                         _install?.Folder);
                     CheckConflictChanged();
 

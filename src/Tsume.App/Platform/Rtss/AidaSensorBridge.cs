@@ -22,7 +22,8 @@ public readonly record struct AidaSensorSnapshot(
     int? CpuTempC = null,
     double? CpuPowerWatts = null,
     double? GpuPowerWatts = null,
-    double? CpuClockMhz = null);
+    double? CpuClockMhz = null,
+    double? GpuVramMb = null);
 
 /// <summary>
 /// Publishes Tsume's live overlay level and missing handheld telemetry (EC temperature and RAPL power) into the
@@ -203,6 +204,12 @@ public sealed class AidaSensorBridge : IDisposable
         {
             AppendSensor(sb, "sys", "TSUME_CPU_CLOCK", "CPU Clock",
                 cpuMhz.ToString("F0", CultureInfo.InvariantCulture));
+        }
+
+        if (s.GpuVramMb is { } gpuVramMb)
+        {
+            AppendSensor(sb, "sys", "TSUME_GPU_VRAM", "GPU VRAM",
+                gpuVramMb.ToString("F0", CultureInfo.InvariantCulture));
         }
 
         return sb.ToString();

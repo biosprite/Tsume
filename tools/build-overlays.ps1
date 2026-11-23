@@ -19,9 +19,10 @@
       - Level 3 (Detail): CPU (ring + stats) | GPU (ring + stats) | TEMP | FPS + lows + graph
       - Level 4 (Full):   Side panel with FPS + TEMP header, then CPU and GPU sections
 
-    Temperature, CPU power, GPU power, and CPU clock prefer OverlayEditor's built-in HAL
-    source when valid and fall back to Tsume's AIDA64 readings (EC + PDH Energy Meter)
-    when HAL reports blank values.
+    Temperature, CPU power, GPU power, CPU clock, and GPU VRAM prefer OverlayEditor's
+    built-in HAL source when valid (and > 0 for VRAM, since unified-memory iGPUs report
+    0 dedicated VRAM) and fall back to Tsume's AIDA64 readings (EC + PDH) when HAL
+    reports blank or zero values.
 #>
 [CmdletBinding()]
 param()
@@ -558,10 +559,11 @@ foreach ($theme in $themes) {
     }
 
     $fallbackSpecs = @(
-        @{ Display = 'CPU temperature'; Raw = 'HAL CPU temperature'; Units = $degC; Format = '';     Scale = '';       HalId = 'CPU temperature'; AidaId = 'TSUME_CPU_TEMP'  }
-        @{ Display = 'CPU power';       Raw = 'HAL CPU power';       Units = 'W';   Format = '';     Scale = '';       HalId = 'CPU power';       AidaId = 'TSUME_CPU_POWER' }
-        @{ Display = 'CPU clock';       Raw = 'HAL CPU clock';       Units = 'GHz'; Format = '%.2f'; Scale = ' / 1000'; HalId = 'CPU clock';      AidaId = 'TSUME_CPU_CLOCK' }
-        @{ Display = 'GPU1 power';      Raw = 'HAL GPU1 power';      Units = 'W';   Format = '';     Scale = '';       HalId = 'GPU1 power';      AidaId = 'TSUME_GPU_POWER' }
+        @{ Display = 'CPU temperature';   Raw = 'HAL CPU temperature';   Units = $degC; Format = '';     Scale = '';        HalId = 'CPU temperature';   AidaId = 'TSUME_CPU_TEMP';  RequirePositive = $false }
+        @{ Display = 'CPU power';         Raw = 'HAL CPU power';         Units = 'W';   Format = '';     Scale = '';        HalId = 'CPU power';         AidaId = 'TSUME_CPU_POWER'; RequirePositive = $false }
+        @{ Display = 'CPU clock';         Raw = 'HAL CPU clock';         Units = 'GHz'; Format = '%.2f'; Scale = ' / 1000'; HalId = 'CPU clock';         AidaId = 'TSUME_CPU_CLOCK'; RequirePositive = $false }
+        @{ Display = 'GPU1 power';        Raw = 'HAL GPU1 power';        Units = 'W';   Format = '';     Scale = '';        HalId = 'GPU1 power';        AidaId = 'TSUME_GPU_POWER'; RequirePositive = $false }
+        @{ Display = 'GPU1 memory usage'; Raw = 'HAL GPU1 memory usage'; Units = 'GB';  Format = '%.1f'; Scale = ' / 1024'; HalId = 'GPU1 memory usage'; AidaId = 'TSUME_GPU_VRAM';  RequirePositive = $true  }
     )
     $skipSourceNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($spec in $fallbackSpecs) { [void]$skipSourceNames.Add($spec.Display) }
@@ -572,7 +574,13 @@ foreach ($theme in $themes) {
         $sources.Add((New-SourceLines $spec.Raw $spec.Units '' '' 'HAL' $spec.HalId))
     }
     foreach ($spec in $fallbackSpecs) {
-        $formula = "(validate(`"$($spec.Raw)`") ? `"$($spec.Raw)`" : x)$($spec.Scale)"
+        $halRef = "`"$($spec.Raw)`""
+        $expr = if ($spec.RequirePositive) {
+            "validate($halRef) ? ($halRef > 0 ? $halRef : x) : x"
+        } else {
+            "validate($halRef) ? $halRef : x"
+        }
+        $formula = "($expr)$($spec.Scale)"
         $sources.Add((New-SourceLines $spec.Display $spec.Units $spec.Format $formula 'AIDA' $spec.AidaId))
     }
 

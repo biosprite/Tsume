@@ -1,11 +1,14 @@
 using System.Runtime.InteropServices;
+using Tsume.Upscaling;
 
 namespace Tsume.App.Platform.Rtss;
 
 /// <summary>
-/// Lightweight Windows PDH sampler for <c>\Energy Meter(*)\Power</c> (milliwatts) and
+/// Lightweight Windows PDH sampler for <c>\Energy Meter(*)\Power</c> (milliwatts),
 /// <c>\Processor Information(_Total)\% Processor Performance</c> (multiplied by the CPU's nominal clock from
-/// <c>CallNtPowerInformation</c>, matching Windows Task Manager's live turbo clock).
+/// <c>CallNtPowerInformation</c>, matching Windows Task Manager's live turbo clock), and
+/// <c>\GPU Adapter Memory(*)\Dedicated Usage</c> + <c>Shared Usage</c> (matching Windows Task Manager's GPU memory
+/// on unified-memory handhelds such as Intel Arc iGPUs and AMD APUs).
 /// Opened lazily only when detailed overlay levels are active, and closed immediately when turned off.
 /// </summary>
 public sealed class EnergyMeterTelemetry : IDisposable
@@ -15,25 +18,34 @@ public sealed class EnergyMeterTelemetry : IDisposable
     private const uint PdhCStatusValidData = 0x00000000;
     private const uint PdhCStatusNewData = 0x00000001;
     private const int ProcessorInformationLevel = 11;
+    private const double BytesPerMiB = 1024.0 * 1024.0;
+    private const double MaxSaneGpuBytes = 1024.0 * 1024.0 * 1024.0 * 1024.0; // 1 TiB
 
     private nint _query;
     private nint _powerCounter;
     private nint _cpuPerfCounter;
+    private nint _gpuDedicatedMemCounter;
+    private nint _gpuSharedMemCounter;
     private uint _baseClockMhz;
+    private string? _primaryGpuLuidPrefix;
     private bool _initialized;
     private bool _cpuPerfPrimed;
 
-    /// <summary>Reads CPU/GPU power in Watts and effective CPU clock in MHz, or null for any unavailable counter.</summary>
-    public (double? CpuWatts, double? GpuWatts, double? CpuClockMhz) Sample()
+    /// <summary>
+    /// Reads CPU/GPU power in Watts, effective CPU clock in MHz, and primary GPU memory usage in MiB,
+    /// or null for any unavailable counter.
+    /// </summary>
+    public (double? CpuWatts, double? GpuWatts, double? CpuClockMhz, double? GpuVramMb) Sample()
     {
         EnsureOpen();
-        if (_query == 0) return (null, null, null);
+        if (_query == 0) return (null, null, null, null);
 
-        if (PdhCollectQueryData(_query) != 0) return (null, null, null);
+        if (PdhCollectQueryData(_query) != 0) return (null, null, null, null);
 
         var (cpuW, gpuW) = _powerCounter != 0 ? ReadPowerRails() : (null, null);
         var cpuMhz = ReadCpuClockMhz();
-        return (cpuW, gpuW, cpuMhz);
+        var gpuVramMb = ReadGpuVramMb();
+        return (cpuW, gpuW, cpuMhz, gpuVramMb);
     }
 
     /// <summary>Releases PDH handles when the overlay is turned off or set to FPS-only.</summary>
@@ -49,6 +61,13 @@ public sealed class EnergyMeterTelemetry : IDisposable
         if (_baseClockMhz == 0)
             _baseClockMhz = ReadBaseClockMhz();
 
+        if (_primaryGpuLuidPrefix is null && GpuVendor.GetPrimaryAdapterLuid() is { } luid && luid != 0)
+        {
+            var low = unchecked((uint)luid);
+            var high = unchecked((uint)(luid >> 32));
+            _primaryGpuLuidPrefix = $"luid_0x{high:x8}_0x{low:x8}_";
+        }
+
         if (PdhOpenQueryW(null, 0, out _query) != 0)
         {
             _query = 0;
@@ -62,7 +81,13 @@ public sealed class EnergyMeterTelemetry : IDisposable
         if (PdhAddEnglishCounterW(_query, @"\Processor Information(_Total)\% Processor Performance", 0, out _cpuPerfCounter) != 0)
             _cpuPerfCounter = 0;
 
-        if (_powerCounter == 0 && _cpuPerfCounter == 0)
+        if (PdhAddEnglishCounterW(_query, @"\GPU Adapter Memory(*)\Dedicated Usage", 0, out _gpuDedicatedMemCounter) != 0)
+            _gpuDedicatedMemCounter = 0;
+
+        if (PdhAddEnglishCounterW(_query, @"\GPU Adapter Memory(*)\Shared Usage", 0, out _gpuSharedMemCounter) != 0)
+            _gpuSharedMemCounter = 0;
+
+        if (_powerCounter == 0 && _cpuPerfCounter == 0 && _gpuDedicatedMemCounter == 0 && _gpuSharedMemCounter == 0)
         {
             PdhCloseQuery(_query);
             _query = 0;
@@ -79,6 +104,8 @@ public sealed class EnergyMeterTelemetry : IDisposable
 
         _powerCounter = 0;
         _cpuPerfCounter = 0;
+        _gpuDedicatedMemCounter = 0;
+        _gpuSharedMemCounter = 0;
         _initialized = false;
         _cpuPerfPrimed = false;
     }
@@ -178,6 +205,79 @@ public sealed class EnergyMeterTelemetry : IDisposable
             }
 
             return (pp0 ?? pkg, pp1);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    private double? ReadGpuVramMb()
+    {
+        if (_gpuDedicatedMemCounter == 0 && _gpuSharedMemCounter == 0) return null;
+
+        var totalsByInstance = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        if (_gpuDedicatedMemCounter != 0)
+            AccumulateGpuMemoryCounter(_gpuDedicatedMemCounter, totalsByInstance);
+        if (_gpuSharedMemCounter != 0)
+            AccumulateGpuMemoryCounter(_gpuSharedMemCounter, totalsByInstance);
+
+        if (totalsByInstance.Count == 0) return null;
+
+        if (_primaryGpuLuidPrefix is { } prefix)
+        {
+            var matched = false;
+            var primaryBytes = 0.0;
+            foreach (var (instance, bytes) in totalsByInstance)
+            {
+                if (instance.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    primaryBytes += bytes;
+                    matched = true;
+                }
+            }
+
+            if (matched)
+                return primaryBytes > 0 ? primaryBytes / BytesPerMiB : null;
+        }
+
+        // Fallback if DXGI LUID was unavailable or changed (e.g. driver reset): pick the busiest adapter.
+        var maxBytes = 0.0;
+        foreach (var bytes in totalsByInstance.Values)
+        {
+            if (bytes > maxBytes) maxBytes = bytes;
+        }
+
+        return maxBytes > 0 ? maxBytes / BytesPerMiB : null;
+    }
+
+    private static unsafe void AccumulateGpuMemoryCounter(nint counter, Dictionary<string, double> totalsByInstance)
+    {
+        uint bufferSize = 0;
+        var status = PdhGetFormattedCounterArrayW(counter, PdhFmtDouble, ref bufferSize, out var count, 0);
+        if (status != PdhMoreData || bufferSize == 0) return;
+
+        var buffer = Marshal.AllocHGlobal((int)bufferSize);
+        try
+        {
+            if (PdhGetFormattedCounterArrayW(counter, PdhFmtDouble, ref bufferSize, out count, buffer) != 0)
+                return;
+
+            var items = (PdhCounterItemDouble*)buffer;
+            for (var i = 0; i < count; i++)
+            {
+                if (items[i].CStatus is not (PdhCStatusValidData or PdhCStatusNewData)) continue;
+
+                var bytes = items[i].Value;
+                if (double.IsNaN(bytes) || double.IsInfinity(bytes) || bytes < 0 || bytes > MaxSaneGpuBytes) continue;
+
+                var name = Marshal.PtrToStringUni(items[i].Name);
+                if (string.IsNullOrEmpty(name)) continue;
+
+                totalsByInstance[name] = totalsByInstance.TryGetValue(name, out var existing)
+                    ? existing + bytes
+                    : bytes;
+            }
         }
         finally
         {
