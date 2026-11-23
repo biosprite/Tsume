@@ -16,7 +16,7 @@
     CPU/GPU temperatures (and omits discrete GDDR VRAM temperature):
       - Level 1 (FPS):    FPS + 1% low pill
       - Level 2 (Bar):    Symmetrical CPU (ring + W) | FPS, 1% LOW, TEMP | GPU (W + ring)
-      - Level 3 (Detail): CPU (ring + stats) | GPU (ring + stats) | TEMP | FPS + lows + graph
+      - Level 3 (Detail): CPU (ring + stats) | GPU (ring + stats) | FPS + Temp + lows + graph
       - Level 4 (Full):   Side panel with FPS + TEMP header, then CPU and GPU sections
 
     Temperature, CPU power, GPU power, CPU clock, and GPU VRAM prefer OverlayEditor's
@@ -48,7 +48,7 @@ $themes = @(
         CpuHex     = '0A84FF'
         GpuHex     = 'BF5AF2'
         FpsHex     = '30D158'
-        TempColor  = 'FFFFFF,,75,FF9F0A,75,85,FF453A,85,(CPU temperature,1)'
+        TempColor  = 'FFFFFF,,1,FF9F0A,1,2,FF453A,2,(Temperature tier,1)'
         HasShadows = $false
     }
     @{
@@ -61,7 +61,7 @@ $themes = @(
         CpuHex     = '0A84FF'
         GpuHex     = 'BF5AF2'
         FpsHex     = '30D158'
-        TempColor  = 'FFFFFF,,75,FF9F0A,75,85,FF453A,85,(CPU temperature,1)'
+        TempColor  = 'FFFFFF,,1,FF9F0A,1,2,FF453A,2,(Temperature tier,1)'
         HasShadows = $false
     }
     @{
@@ -74,7 +74,7 @@ $themes = @(
         CpuHex     = '007AFF'
         GpuHex     = 'AF52DE'
         FpsHex     = '248A3D'
-        TempColor  = '0A0A0C,,75,C93400,75,85,D70015,85,(CPU temperature,1)'
+        TempColor  = '0A0A0C,,1,C93400,1,2,D70015,2,(Temperature tier,1)'
         HasShadows = $false
     }
     @{
@@ -87,7 +87,7 @@ $themes = @(
         CpuHex     = '0A84FF'
         GpuHex     = 'BF5AF2'
         FpsHex     = '30D158'
-        TempColor  = 'FFFFFF,,75,FF9F0A,75,85,FF453A,85,(CPU temperature,1)'
+        TempColor  = 'FFFFFF,,1,FF9F0A,1,2,FF453A,2,(Temperature tier,1)'
         HasShadows = $true
     }
 )
@@ -105,7 +105,7 @@ $baseRefresh = 250
 
 # Reworked panel chrome dimensions.
 $sleekPanelW   = 520; $sleekPanelH   = 72;  $sleekDividers   = @(144, 376)
-$compactPanelW = 778; $compactPanelH = 93;  $compactDividers = @(232, 464, 556)
+$compactPanelW = 686; $compactPanelH = 93;  $compactDividers = @(232, 464)
 $perfPanelW    = 225; $perfPanelH    = 504; $perfDividers    = @(168, 304)
 
 # Crisp native Raster 3D master font: Segoe UI is built into every Windows PC with full LCD hinting,
@@ -584,6 +584,11 @@ foreach ($theme in $themes) {
         $sources.Add((New-SourceLines $spec.Display $spec.Units $spec.Format $formula 'AIDA' $spec.AidaId))
     }
 
+    # Per-chip temperature color thresholds published by Tsume (default 75/85 C; Intel handhelds 85/95 C).
+    $sources.Add((New-SourceLines 'Temp warn threshold' $degC '%.0f' 'validate(x) ? x : 75' 'AIDA' 'TSUME_TEMP_WARN'))
+    $sources.Add((New-SourceLines 'Temp hot threshold'  $degC '%.0f' 'validate(x) ? x : 85' 'AIDA' 'TSUME_TEMP_HOT'))
+    $sources.Add((New-SourceLines 'Temperature tier'    ''    '%.0f' 'validate("CPU temperature") ? ("CPU temperature" >= "Temp hot threshold" ? 2 : ("CPU temperature" >= "Temp warn threshold" ? 1 : 0)) : 0' 'AIDA' 'TSUME_OVERLAY_LEVEL'))
+
     foreach ($sec in ($perfSections | Where-Object { $_.Name -match '^Source\d+$' })) {
         $nameLine = $sec.Lines | Where-Object { $_ -match '^Name=' } | Select-Object -First 1
         $srcName = if ($nameLine) { $nameLine.Substring(5) } else { '' }
@@ -636,43 +641,42 @@ foreach ($theme in $themes) {
     Add-RingLayer   $mergedLayers $vis2 'GPU ring' $sleekGpuRing 1147 29 $totalWidth $totalHeight
     Add-TextLayer   $mergedLayers $theme $vis2 'GPU usage'    '%GPU1 usage%'          1147 50 62 20 4 100 $theme.ValueHex
 
-    # ── Level 3: Detail (778x93, centered at x=960) ───────────────────────────────────────────────
-    #    [CPU Ring] CPU + Power/Clock/RAM | [GPU Ring] GPU + Power/Clock/VRAM | TEMP | FPS + lows + graph
+    # ── Level 3: Detail (686x93, centered at x=960) ───────────────────────────────────────────────
+    #    [CPU Ring] CPU + Power/Clock/RAM | [GPU Ring] GPU + Power/Clock/VRAM | FPS/Temp + lows + graph
     $vis3 = 'Tsume level 3 visible'
-    Add-SpriteLayer $mergedLayers $vis3 'Panel' 571 24 $compactPanelX $compactPanelY $compactPanelW $compactPanelH $totalWidth $totalHeight
+    Add-SpriteLayer $mergedLayers $vis3 'Panel' 617 24 $compactPanelX $compactPanelY $compactPanelW $compactPanelH $totalWidth $totalHeight
 
-    Add-RingLayer   $mergedLayers $vis3 'CPU ring' $compactCpuRing 583 37 $totalWidth $totalHeight
-    Add-TextLayer   $mergedLayers $theme $vis3 'CPU usage'       '%CPU usage%'         583 60 67  20 4 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'CPU label'       'CPU'                 662 32 0   0  0 100 $theme.CpuHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'CPU Power label' 'Power'               662 51 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'CPU Power'       '%CPU power% W'       662 51 127 19 2 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'CPU Clock label' 'Clock'               662 70 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'CPU Clock'       '%CPU clock% GHz'     662 70 127 19 2 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'CPU RAM label'   'RAM'                 662 89 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'CPU RAM'         '%RAM usage% GB'      662 89 127 19 2 100 $theme.ValueHex
+    Add-RingLayer   $mergedLayers $vis3 'CPU ring' $compactCpuRing 629 37 $totalWidth $totalHeight
+    Add-TextLayer   $mergedLayers $theme $vis3 'CPU usage'       '%CPU usage%'         629 60 67  20 4 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'CPU label'       'CPU'                 708 32 0   0  0 100 $theme.CpuHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'CPU Power label' 'Power'               708 51 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'CPU Power'       '%CPU power% W'       708 51 127 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'CPU Clock label' 'Clock'               708 70 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'CPU Clock'       '%CPU clock% GHz'     708 70 127 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'CPU RAM label'   'RAM'                 708 89 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'CPU RAM'         '%RAM usage% GB'      708 89 127 19 2 100 $theme.ValueHex
 
-    Add-RingLayer   $mergedLayers $vis3 'GPU ring' $compactGpuRing 817 37 $totalWidth $totalHeight
-    Add-TextLayer   $mergedLayers $theme $vis3 'GPU usage'       '%GPU1 usage%'        817 60 67  20 4 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'GPU label'       'GPU'                 896 32 0   0  0 100 $theme.GpuHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'GPU Power label' 'Power'               896 51 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'GPU Power'       '%GPU1 power% W'      896 51 127 19 2 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'GPU Clock label' 'Clock'               896 70 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'GPU Clock'       '%GPU clock% GHz'     896 70 127 19 2 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'GPU VRAM label'  'VRAM'                896 89 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'GPU VRAM'        '%GPU1 memory usage% GB' 896 89 127 19 2 100 $theme.ValueHex
+    Add-RingLayer   $mergedLayers $vis3 'GPU ring' $compactGpuRing 863 37 $totalWidth $totalHeight
+    Add-TextLayer   $mergedLayers $theme $vis3 'GPU usage'       '%GPU1 usage%'        863 60 67  20 4 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'GPU label'       'GPU'                 942 32 0   0  0 100 $theme.GpuHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'GPU Power label' 'Power'               942 51 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'GPU Power'       '%GPU1 power% W'      942 51 127 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'GPU Clock label' 'Clock'               942 70 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'GPU Clock'       '%GPU clock% GHz'     942 70 127 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'GPU VRAM label'  'VRAM'                942 89 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'GPU VRAM'        '%GPU1 memory usage% GB' 942 89 127 19 2 100 $theme.ValueHex
 
-    Add-TextLayer   $mergedLayers $theme $vis3 'Temp label'      'TEMP'                  1041 36 80 19 1 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'Temperature'     "%CPU temperature%$deg" 1044 54 80 38 1 200 $theme.TempColor
-
-    Add-TextLayer   $mergedLayers $theme $vis3 'FPS label'       'FPS'                  1141 36 0   0  0 100 $theme.FpsHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'FPS'             '%Framerate%'          1140 54 0   0  0 200 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis3 '1% label'        '1%'                   1226 36 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 '1%'              '%Framerate 1% Low%'   1255 36 80  19 2 100 $theme.ValueHex 1000
-    Add-TextLayer   $mergedLayers $theme $vis3 '0.1% label'      '0.1%'                 1226 56 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 '0.1%'            '%Framerate 0.1% Low%' 1255 56 80  19 2 100 $theme.ValueHex 1000
-    Add-TextLayer   $mergedLayers $theme $vis3 'FT label'        'FT'                   1226 76 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'FT'              '<FT> ms'              1255 76 80  19 2 100 $theme.ValueHex
-    Add-GraphLayer  $mergedLayers $vis3 'Frametime graph' '<G=Frametime,0,0,1,0,40,0>'  1141 97 194 12 $theme.FpsHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'FPS label'       'FPS'                  1095 32 0   0  0 100 $theme.FpsHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'FPS'             '%Framerate%'          1094 42 0   0  0 200 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'Temp label'      'Temp'                 1095 74 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'Temperature'     "%CPU temperature%$deg" 1138 74 0  0  0 100 $theme.TempColor
+    Add-TextLayer   $mergedLayers $theme $vis3 '1% label'        '1%'                   1180 32 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $theme $vis3 '1%'              '%Framerate 1% Low%'   1209 32 80  19 2 100 $theme.ValueHex 1000
+    Add-TextLayer   $mergedLayers $theme $vis3 '0.1% label'      '0.1%'                 1180 53 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $theme $vis3 '0.1%'            '%Framerate 0.1% Low%' 1209 53 80  19 2 100 $theme.ValueHex 1000
+    Add-TextLayer   $mergedLayers $theme $vis3 'FT label'        'FT'                   1180 74 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $theme $vis3 'FT'              '<FT> ms'              1209 74 80  19 2 100 $theme.ValueHex
+    Add-GraphLayer  $mergedLayers $vis3 'Frametime graph' '<G=Frametime,0,0,1,0,40,0>'  1095 97 194 12 $theme.FpsHex
 
     # ── Level 4: Full side panel (225x504, top-right at x=1671, y=160) ────────────────────────────
     #    Header: FPS (left) + TEMP (right), 1% low, 0.1% low, Frametime, graph

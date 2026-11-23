@@ -33,8 +33,20 @@ public sealed record DeviceProfile
     /// </summary>
     public IReadOnlyList<int> ChargeLimits { get; init; } = [];
 
+    /// <summary>Default temperature (°C) where the overlay switches to warning (amber) color.</summary>
+    public const int DefaultTempWarnC = 75;
+
+    /// <summary>Default temperature (°C) where the overlay switches to hot (red) color.</summary>
+    public const int DefaultTempHotC = 85;
+
     /// <summary>Points below the charge limit where charging resumes; null if unknown.</summary>
     public int? ChargeResumeGap { get; init; }
+
+    /// <summary>Temperature (°C) where the overlay turns amber; tuned per chip (Intel handhelds run hotter than AMD).</summary>
+    public int TempWarnC { get; init; } = DefaultTempWarnC;
+
+    /// <summary>Temperature (°C) where the overlay turns red; tuned per chip.</summary>
+    public int TempHotC { get; init; } = DefaultTempHotC;
 
     /// <summary>Dedicated buttons and verified back-button map; null if unverified.</summary>
     public ControlsProfile? Controls { get; init; }
@@ -69,6 +81,8 @@ public sealed record DeviceProfile
         && FanModes.SequenceEqual(other.FanModes)
         && ChargeLimits.SequenceEqual(other.ChargeLimits)
         && ChargeResumeGap == other.ChargeResumeGap
+        && TempWarnC == other.TempWarnC
+        && TempHotC == other.TempHotC
         && (Controls is null ? other.Controls is null : other.Controls is not null && Controls.Matches(other.Controls));
 
     /// <summary>

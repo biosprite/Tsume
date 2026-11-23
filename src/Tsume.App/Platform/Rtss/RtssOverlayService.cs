@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using Microsoft.Win32;
+using Tsume.Core.Devices;
 using Tsume.Core.Diagnostics;
 using Tsume.Core.Ipc;
 using Tsume.Upscaling.Games;
@@ -383,8 +384,9 @@ public sealed class RtssOverlayService : IDisposable
             gpuVramMb = _lastGpuVramMb;
         }
 
+        var (tempWarnC, tempHotC) = CurrentTempThresholds();
         var published = _aida.TryPublish(
-            new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb),
+            new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb, tempWarnC, tempHotC),
             _install?.Folder);
         CheckConflictChanged();
 
@@ -403,6 +405,14 @@ public sealed class RtssOverlayService : IDisposable
             StopTelemetryLoop();
             _energy.Reset();
         }
+    }
+
+    private (int WarnC, int HotC) CurrentTempThresholds()
+    {
+        var device = _state.Device;
+        return device is not null
+            ? (device.TempWarnC, device.TempHotC)
+            : (DeviceProfile.DefaultTempWarnC, DeviceProfile.DefaultTempHotC);
     }
 
     private void StartTelemetryLoop()
@@ -487,8 +497,9 @@ public sealed class RtssOverlayService : IDisposable
                     level = _settings.Level;
                     if (level == RtssOverlayLevel.Off) break;
 
+                    var (tempWarnC, tempHotC) = CurrentTempThresholds();
                     var ok = _aida.TryPublish(
-                        new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb),
+                        new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb, tempWarnC, tempHotC),
                         _install?.Folder);
                     CheckConflictChanged();
 

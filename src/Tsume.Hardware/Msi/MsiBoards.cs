@@ -59,6 +59,8 @@ public static class MsiBoards
             FanModes = [FanMode.Auto, FanMode.Max],
             ChargeLimits = [80, 90, 100],   // the owner's choice; MSI Center M's own are 60, 80 and 100
             ChargeResumeGap = 10,
+            TempWarnC = 85,
+            TempHotC = 95,
             Controls = new()
             {
                 HasGameBarButton = true,
@@ -135,6 +137,8 @@ public static class MsiBoards
             FanModes = [FanMode.Auto, FanMode.Max],
             ChargeLimits = [80, 90, 100],
             ChargeResumeGap = 10,
+            TempWarnC = 85,
+            TempHotC = 95,
             Controls = new()
             {
                 HasGameBarButton = true,

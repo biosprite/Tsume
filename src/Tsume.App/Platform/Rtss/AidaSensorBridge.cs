@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using Tsume.Core.Devices;
 using Tsume.Core.Diagnostics;
 
 namespace Tsume.App.Platform.Rtss;
@@ -23,7 +24,9 @@ public readonly record struct AidaSensorSnapshot(
     double? CpuPowerWatts = null,
     double? GpuPowerWatts = null,
     double? CpuClockMhz = null,
-    double? GpuVramMb = null);
+    double? GpuVramMb = null,
+    int TempWarnC = DeviceProfile.DefaultTempWarnC,
+    int TempHotC = DeviceProfile.DefaultTempHotC);
 
 /// <summary>
 /// Publishes Tsume's live overlay level and missing handheld telemetry (EC temperature and RAPL power) into the
@@ -181,6 +184,10 @@ public sealed class AidaSensorBridge : IDisposable
         var sb = new StringBuilder(384);
         AppendSensor(sb, "sys", "TSUME_OVERLAY_LEVEL", "Overlay Level",
             s.OverlayLevel.ToString(CultureInfo.InvariantCulture));
+        AppendSensor(sb, "sys", "TSUME_TEMP_WARN", "Temp Warn",
+            s.TempWarnC.ToString(CultureInfo.InvariantCulture));
+        AppendSensor(sb, "sys", "TSUME_TEMP_HOT", "Temp Hot",
+            s.TempHotC.ToString(CultureInfo.InvariantCulture));
 
         if (s.CpuTempC is { } cpuTemp)
         {
