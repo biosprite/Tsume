@@ -20,7 +20,8 @@ namespace Tsume.App.ViewModels;
 
 /// <summary>
 /// The OptiScaler games list, and the state shared by its sub-pages (Game, Build, Defaults, Browse).
-/// Reads no files until the screen is opened; the work itself is in Tsume.Upscaling.
+/// The list is read in the background when the panel first opens (<see cref="PrepareAsync"/>);
+/// the work itself is in Tsume.Upscaling.
 /// </summary>
 public sealed class UpscalingViewModel : LayerViewModel
 {
@@ -29,6 +30,9 @@ public sealed class UpscalingViewModel : LayerViewModel
     private static readonly Journal Log = new("optiscaler");
 
     private GameList? _list;
+    private string? _savedJson;
+    private int _rowsVersion;
+    private Task? _preparing;
     private bool _rescanRequested;
     private bool _manualScan;
 
@@ -101,9 +105,49 @@ public sealed class UpscalingViewModel : LayerViewModel
     public OptiPatcherStore OptiPatcher { get; }
 
     /// <summary>The games and their settings, loaded from disk on first use.</summary>
-    public GameList List => _list ??= GameList.Load(Paths);
+    public GameList List => _list ??= LoadList();
 
-    public void SaveList() => List.Save(Paths);
+    /// <summary>
+    /// Reads the list and makes its rows in the background, once, so the first opening of the screen
+    /// does not wait on the file, the first use of the JSON serializer, or the first row reads.
+    /// </summary>
+    /// <returns>The same task on every call; done once the rows are made.</returns>
+    public Task PrepareAsync() => _preparing ??= LoadAheadAsync();
+
+    private async Task LoadAheadAsync()
+    {
+        if (_list is not null) return;
+
+        var (list, json) = await Task.Run(() =>
+        {
+            var loaded = GameList.Load(Paths);
+            return (loaded, loaded.ToJson());
+        });
+
+        if (_list is not null) return;   // the screen opened meanwhile and loaded it on the spot
+
+        _list = list;
+        _savedJson = json;
+        ShowGames();
+    }
+
+    private GameList LoadList()
+    {
+        var list = GameList.Load(Paths);
+        _savedJson = list.ToJson();
+        return list;
+    }
+
+    /// <summary>Writes the list to disk unless it is unchanged since it was last read or written.</summary>
+    /// <returns>True if the list had changed.</returns>
+    public bool SaveList()
+    {
+        var json = List.ToJson();
+        if (json == _savedJson) return false;
+
+        if (GameList.Save(Paths, json)) _savedJson = json;
+        return true;
+    }
 
     /// <summary>True while files are being downloaded or moved; other actions are refused meanwhile.</summary>
     public bool IsBusy
@@ -383,6 +427,7 @@ public sealed class UpscalingViewModel : LayerViewModel
         IsLooking = true;
         ScanStatus = Strings.ScanningGames;
         var started = Stopwatch.StartNew();
+        var listChanged = false;
 
         try
         {
@@ -390,7 +435,7 @@ public sealed class UpscalingViewModel : LayerViewModel
             {
                 _rescanRequested = false;
 
-                try { await ScanOnceAsync(); }
+                try { listChanged |= await ScanOnceAsync(); }
                 catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException)
                 {
                     // Keep the list as it was.
@@ -408,25 +453,31 @@ public sealed class UpscalingViewModel : LayerViewModel
             var wasManual = _manualScan;
             _manualScan = false;
             IsLooking = false;
-            if (IsOpen) ShowGames();
-            ScanStatus = wasManual && IsOpen ? Strings.ScanFoundGames(Games.Count) : "";
+
+            // The rows were refreshed as the screen opened; read them again only if the scan changed the list,
+            // or the user asked for the rescan.
+            if (IsOpen && (listChanged || wasManual)) ShowGames();
+            else ShowEmptyNote();
+
+            ScanStatus = wasManual && IsOpen ? Strings.ScanFoundGames(List.Games.Count) : "";
         }
     }
 
-    private async Task ScanOnceAsync()
+    /// <returns>True if the list changed.</returns>
+    private async Task<bool> ScanOnceAsync()
     {
         var list = List;
-        var installed = Installer.InstalledGames();
         var folders = list.Folders.ToList();
         var byHand = list.Games.Where(listed => listed.Game.Store == GameStore.Custom).Select(listed => listed.Game).ToList();
 
-        var (found, facts) = await Task.Run(() =>
+        var (installed, found, facts) = await Task.Run(() =>
         {
+            var withOptiScaler = Installer.InstalledGames();
             var games = GameLibrary.Find(folders);
 
             // Re-inspect hand-added games too: they also get updated.
             var all = games.Concat(byHand).DistinctBy(game => game.Id);
-            return (games, all.ToDictionary(game => game.Id, GameInspector.Inspect));
+            return (withOptiScaler, games, all.ToDictionary(game => game.Id, GameInspector.Inspect));
         });
 
         // A program already listed (added by hand, or by a store) is not listed again from a saved folder.
@@ -450,21 +501,104 @@ public sealed class UpscalingViewModel : LayerViewModel
         foreach (var listed in list.Games)
             if (facts.TryGetValue(listed.Game.Id, out var seen)) listed.Facts = seen;
 
-        SaveList();
+        return SaveList();
     }
 
-    /// <summary>Syncs the rows with the list, reusing existing rows.</summary>
+    /// <summary>
+    /// Syncs the rows with the list, reusing existing rows. Rows for games taken off the list go at once; the
+    /// manifests, store records and game folders are read in the background, and the rows (new ones included)
+    /// are brought up to date when that is done, so a slow or sleeping drive does not hold up the screen.
+    /// </summary>
     public void ShowGames()
+    {
+        FoldersLine = List.Folders.Count > 0 ? Strings.FolderCount(List.Folders.Count) : "";
+
+        if (DropUnlistedRows()) ListChanged?.Invoke();
+        ShowEmptyNote();
+
+        _ = RefreshRowsAsync(++_rowsVersion, [.. List.Games]);
+    }
+
+    /// <summary>What was read from disk for one game.</summary>
+    private sealed record RowRead(ListedGame Listed, InstallManifest? Manifest, InstallState State, bool IsCurrent, bool OptiPatcherOn);
+
+    /// <summary>What was read from disk for the whole screen.</summary>
+    private sealed record RowsRead(StoredBuild? Build, StoredOptiPatcher? Patcher, IReadOnlyList<RowRead> Rows, int InstalledCount);
+
+    private async Task RefreshRowsAsync(int version, IReadOnlyList<ListedGame> games)
+    {
+        RowsRead read;
+
+        try
+        {
+            read = await Task.Run(() => ReadRows(games));
+        }
+        catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            Log.Write($"games list could not be read: {error.Message}");
+            return;
+        }
+
+        // A later refresh has started: its reads are newer.
+        if (version != _rowsVersion) return;
+
+        ApplyRows(read);
+    }
+
+    /// <summary>Reads each game's install from disk. Runs on a background thread, and touches no rows.</summary>
+    private RowsRead ReadRows(IReadOnlyList<ListedGame> games)
     {
         var build = Builds.Current();
         var xmx = Xmx.Current();
         var patcher = OptiPatcher.Current();
-        var baseBuildLine = build is null ? Strings.NoBuildOnDisk : Strings.NightlyOf(Night(build.Build.Tag));
-        BuildLine = patcher is null
-            ? baseBuildLine
-            : Strings.BuildLineWithOptiPatcher(baseBuildLine, patcher.Release.Tag);
-        FoldersLine = List.Folders.Count > 0 ? Strings.FolderCount(List.Folders.Count) : "";
 
+        var rows = games.Select(listed =>
+        {
+            var manifest = Installer.Find(listed.Game.Id);
+            var state = Installer.Check(manifest);
+            var optiPatcherOn = manifest is not null && state == InstallState.Healthy && Installer.IsOptiPatcherEnabled(manifest);
+            var isCurrent = manifest is null || Installer.IsCurrent(manifest, build, xmx, patcher);
+            return new RowRead(listed, manifest, state, isCurrent, optiPatcherOn);
+        }).ToList();
+
+        return new RowsRead(build, patcher, rows, Installer.InstalledGames().Count);
+    }
+
+    private void ApplyRows(RowsRead read)
+    {
+        var baseBuildLine = read.Build is null ? Strings.NoBuildOnDisk : Strings.NightlyOf(Night(read.Build.Build.Tag));
+        BuildLine = read.Patcher is null
+            ? baseBuildLine
+            : Strings.BuildLineWithOptiPatcher(baseBuildLine, read.Patcher.Release.Tag);
+
+        // The list may have changed while the reads were under way.
+        var changed = DropUnlistedRows();
+
+        foreach (var game in read.Rows)
+        {
+            var listed = game.Listed;
+            var index = List.Games.IndexOf(listed);
+            if (index < 0) continue;   // taken off the list meanwhile
+
+            if (Games.FirstOrDefault(row => row.Listed == listed) is not { } row)
+            {
+                Games.Insert(Math.Min(index, Games.Count), row = new UpscalingGameRow(listed, () => Show(listed)));
+                changed = true;
+            }
+
+            row.Describe(game.Manifest, game.State, game.IsCurrent, game.OptiPatcherOn);
+        }
+
+        InstalledCount = read.InstalledCount;
+        ShowEmptyNote();
+
+        if (changed) ListChanged?.Invoke();
+    }
+
+    /// <summary>Removes the rows of games no longer on the list.</summary>
+    /// <returns>True if any row was removed.</returns>
+    private bool DropUnlistedRows()
+    {
         var changed = false;
 
         for (var i = Games.Count - 1; i >= 0; i--)
@@ -475,27 +609,12 @@ public sealed class UpscalingViewModel : LayerViewModel
             changed = true;
         }
 
-        for (var i = 0; i < List.Games.Count; i++)
-        {
-            var listed = List.Games[i];
-
-            if (Games.FirstOrDefault(row => row.Listed == listed) is not { } row)
-            {
-                Games.Insert(Math.Min(i, Games.Count), row = new UpscalingGameRow(listed, () => Show(listed)));
-                changed = true;
-            }
-
-            var manifest = Installer.Find(listed.Game.Id);
-            var state = Installer.Check(manifest);
-            var optiPatcherOn = manifest is not null && state == InstallState.Healthy && Installer.IsOptiPatcherEnabled(manifest);
-            row.Describe(manifest, state, manifest is null || Installer.IsCurrent(manifest, build, xmx, patcher), optiPatcherOn);
-        }
-
-        EmptyNote = Games.Count > 0 ? "" : IsLooking ? Strings.LookingForGames : Strings.NoGamesYet;
-        RefreshTile();
-
-        if (changed) ListChanged?.Invoke();
+        return changed;
     }
+
+    /// <remarks>Goes by the list rather than the rows, which may not have been made yet.</remarks>
+    private void ShowEmptyNote() =>
+        EmptyNote = List.Games.Count > 0 ? "" : IsLooking ? Strings.LookingForGames : Strings.NoGamesYet;
 }
 
 public enum GameTagTone

@@ -90,6 +90,7 @@ public sealed class PanelViewModel : IDisposable
         Status.Refresh();
         Actions.Refresh();
         Upscaling.RefreshTile();
+        _ = Upscaling.PrepareAsync();
         Rtss.RefreshTile();
         _tick.Start();
 

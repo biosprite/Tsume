@@ -91,15 +91,22 @@ public sealed class GameList
         }
     }
 
-    public void Save(UpscalingPaths paths)
+    /// <summary>The list as games.json holds it.</summary>
+    public string ToJson() => JsonSerializer.Serialize(this, Format);
+
+    /// <summary>Writes <paramref name="json"/> (from <see cref="ToJson"/>) to games.json.</summary>
+    /// <returns>False if it could not be written.</returns>
+    public static bool Save(UpscalingPaths paths, string json)
     {
         try
         {
-            Files.WriteWhole(paths.GameList, JsonSerializer.Serialize(this, Format));
+            Files.WriteWhole(paths.GameList, json);
+            return true;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             // Losing a choice is better than taking the panel down.
+            return false;
         }
     }
 
