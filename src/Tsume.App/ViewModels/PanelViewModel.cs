@@ -71,10 +71,11 @@ public sealed class PanelViewModel : IDisposable
     /// <summary>Starts background features that keep running while the panel is closed (e.g. Tsume's RTSS overlay).</summary>
     public void StartBackgroundServices() => _rtssService.StartIfEnabled();
 
-    /// <summary>Closes whichever layer is on top.</summary>
+    /// <summary>Steps back inside the top layer if it handles Back internally, otherwise closes it.</summary>
     public void CloseTopLayer()
     {
-        if (Layers.LastOrDefault(layer => layer.IsOpen) is { } top) top.IsOpen = false;
+        if (Layers.LastOrDefault(layer => layer.IsOpen) is not { } top) return;
+        if (!top.GoBack()) top.IsOpen = false;
     }
 
     public void CloseLayers()

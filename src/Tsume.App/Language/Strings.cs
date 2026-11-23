@@ -188,8 +188,19 @@ public static class Strings
     public static string ToolsHeading => Find();
     public static string NoGamesYet => Find();
     public static string LookingForGames => Find();
+    public static string RescanGames => Find();
+    public static string ScanningGames => Find();
+    public static string ScanFoundGames(int count) => count switch
+    {
+        0 => Find("ScanFoundNoGames"),
+        1 => Find("ScanFoundOneGame"),
+        _ => Fill(Find(), count),
+    };
     public static string AddGame => Find();
+    public static string AddFolder => Find();
+    public static string FolderCount(int count) => count == 1 ? Find("OneFolder") : Fill(Find(), count);
     public static string Defaults => Find();
+    public static string DefaultsDetail => Find();
     public static string OptiScalerBuild => Find();
     public static string OpenGameMenu => Find();
     public static string OpenGameMenuDetail => Find();
@@ -383,6 +394,15 @@ public static class Strings
 
     public static string DefaultsExplained => Find();
     public static string BrowseHint => Find();
+    public static string BrowseFolderHint => Find();
+    public static string BrowseFolderSavedHint => Find();
+    public static string UseThisFolder => Find();
+    public static string RemoveThisFolder => Find();
+    public static string SavedFoldersHeading => Find();
+    public static string DrivesHeading => Find();
+    public static string RemoveFolder => Find();
+    public static string FolderMissingDetail(string folder) => Fill(Find(), folder);
+    public static string NoSubfolders => Find();
     public static string BrowseUp => Find();
     public static string ThisPC => Find();
     public static string CannotOpenFolder => Find();

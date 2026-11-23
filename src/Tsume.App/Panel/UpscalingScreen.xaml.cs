@@ -12,7 +12,7 @@ public partial class UpscalingScreen
         // Stops Windows moving the window when a touch list is dragged past its end.
         List.ManipulationBoundaryFeedback += (_, e) => e.Handled = true;
 
-        // Lets focus reach Back, Add a game and Defaults, which are outside the list.
+        // Lets focus reach Back, Rescan, Add a game and Add folder, which are outside the list.
         Controls.StepOut.LetFocusLeave((UIElement)List.Content);
 
         // Scrolls smoothly to the focused item.

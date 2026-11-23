@@ -16,8 +16,15 @@
                      AutomationProperties.Name="{x:Static lang:Strings.Back}"
                      Command="{Binding Close}" />
 
+      <controls:Tile DockPanel.Dock="Right" Style="{StaticResource Tile.Icon}"
+                     Glyph="{x:Static theme:Glyphs.Update}"
+                     ToolTip="{x:Static lang:Strings.RescanGames}"
+                     AutomationProperties.Name="{x:Static lang:Strings.RescanGames}"
+                     IsEnabled="{Binding IsIdle}"
+                     Command="{Binding Rescan}" />
+
       <TextBlock Style="{StaticResource Text.Title}" Text="{x:Static lang:Strings.OptiScaler}"
-                 Margin="16,0,0,0" VerticalAlignment="Center" />
+                 Margin="16,0,12,0" VerticalAlignment="Center" />
     </DockPanel>
 
     <StackPanel DockPanel.Dock="Bottom">
@@ -26,10 +33,11 @@
       <UniformGrid Columns="2" Margin="-4,0,-4,-4">
         <controls:Tile Style="{StaticResource Tile.Row}"
                        Glyph="{x:Static theme:Glyphs.Add}" Label="{x:Static lang:Strings.AddGame}"
-                       Command="{Binding Browse.Open}" />
+                       Command="{Binding Browse.OpenGame}" />
         <controls:Tile Style="{StaticResource Tile.Row}"
-                       Glyph="{x:Static theme:Glyphs.Sliders}" Label="{x:Static lang:Strings.Defaults}"
-                       Command="{Binding Defaults.Open}" />
+                       Glyph="{x:Static theme:Glyphs.Folder}" Label="{x:Static lang:Strings.AddFolder}"
+                       Detail="{Binding FoldersLine}"
+                       Command="{Binding Browse.OpenFolder}" />
       </UniformGrid>
     </StackPanel>
 
@@ -48,7 +56,23 @@
                          Command="{Binding OpenOptiPatcherCompatibility}" />
         </UniformGrid>
 
-        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.GamesHeading}" />
+        <DockPanel Margin="4,0,4,10">
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"
+                      Visibility="{Binding ScanStatusShown}">
+            <controls:ProgressRing Width="12" Height="12" RingThickness="1.8"
+                                   Margin="0,0,6,0" VerticalAlignment="Center"
+                                   Foreground="{x:Static theme:Accent.Brush}"
+                                   TrackBrush="{DynamicResource Switch.Groove}"
+                                   IsActive="{Binding IsLooking}"
+                                   Visibility="{Binding IsLookingShown}" />
+            <TextBlock Style="{StaticResource Text.Caption}" FontSize="11"
+                       Foreground="{DynamicResource Text.Muted}"
+                       Text="{Binding ScanStatus}" VerticalAlignment="Center" />
+          </StackPanel>
+
+          <TextBlock Style="{StaticResource Text.Heading}" Margin="0"
+                     Text="{x:Static lang:Strings.GamesHeading}" VerticalAlignment="Center" />
+        </DockPanel>
 
         <!-- Focus lands on the first game, or on Back when none are listed. -->
         <ItemsControl ItemsSource="{Binding Games}" Focusable="False" controls:Screen.TakesFocus="True">
@@ -171,6 +195,12 @@
                        Label="{x:Static lang:Strings.OptiScalerBuild}"
                        Detail="{Binding BuildLine}"
                        Command="{Binding Build.Open}" />
+
+        <controls:Tile Style="{StaticResource Tile.Link}"
+                       Glyph="{x:Static theme:Glyphs.Sliders}"
+                       Label="{x:Static lang:Strings.Defaults}"
+                       Detail="{x:Static lang:Strings.DefaultsDetail}"
+                       Command="{Binding Defaults.Open}" />
 
         <controls:Tile Style="{StaticResource Tile.Link}"
                        Glyph="{x:Static theme:Glyphs.Remove}"

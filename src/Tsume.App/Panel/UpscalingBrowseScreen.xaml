@@ -6,7 +6,7 @@
              xmlns:lang="clr-namespace:Tsume.App.Language"
              Focusable="False">
 
-  <!-- Adding a game by hand: browse drives, then folders, to the game's program. -->
+  <!-- Adding a game by hand (.exe) or managing saved games folders. -->
 
   <DockPanel DataContext="{Binding Upscaling.Browse}">
 
@@ -23,25 +23,75 @@
                      Command="{Binding Up}" />
 
       <StackPanel Margin="16,0,12,0" VerticalAlignment="Center">
-        <TextBlock Style="{StaticResource Text.Title}" Text="{x:Static lang:Strings.AddGame}" />
+        <TextBlock Style="{StaticResource Text.Title}" Text="{Binding Title}" />
         <TextBlock Style="{StaticResource Text.Caption}" Text="{Binding Location}" Margin="0,2,0,0" />
       </StackPanel>
     </DockPanel>
 
-    <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
-               Text="{Binding Status}" Margin="4,12,0,0" />
+    <StackPanel DockPanel.Dock="Bottom">
+      <controls:Tile x:Name="FolderAction" Style="{StaticResource Tile.Row}" Margin="-4,10,-4,0"
+                     IsOn="{Binding CanAddCurrentFolder}"
+                     Glyph="{Binding FolderActionGlyph}"
+                     Label="{Binding FolderActionLabel}"
+                     Visibility="{Binding FolderActionShown}"
+                     Command="{Binding ToggleCurrentFolder}" />
+
+      <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+                 Text="{Binding Status}" Margin="4,10,0,0" />
+    </StackPanel>
 
     <ScrollViewer x:Name="List" Focusable="False" Margin="0,8,0,0"
                   VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
-      <ItemsControl x:Name="Rows" ItemsSource="{Binding Entries}" Focusable="False" controls:Screen.TakesFocus="True">
-        <ItemsControl.ItemTemplate>
-          <DataTemplate>
-            <controls:Tile Style="{StaticResource Tile.Link}" MinHeight="50"
-                           Glyph="{Binding Glyph}" Label="{Binding Name}" IsOn="{Binding IsProgram}"
-                           Command="{Binding Open}" />
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
+      <StackPanel controls:Screen.TakesFocus="True">
+
+        <StackPanel Visibility="{Binding SavedFoldersShown}" Margin="0,0,0,14">
+          <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.SavedFoldersHeading}" />
+
+          <ItemsControl ItemsSource="{Binding SavedFolders}" Focusable="False">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <!-- The folder comes before Remove, so focus landing on the row never lands on Remove. -->
+                <Grid Margin="0,0,0,8">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <controls:Tile Style="{StaticResource Tile.Link}" Margin="0" MinHeight="50"
+                                 Glyph="{x:Static theme:Glyphs.Folder}"
+                                 Label="{Binding Name}"
+                                 Detail="{Binding Detail}"
+                                 IsOn="True"
+                                 Command="{Binding Open}" />
+                  <controls:Tile Grid.Column="1" Style="{StaticResource Tile.Icon}"
+                                 Width="46" Height="46" Margin="8,0,0,0"
+                                 Glyph="{x:Static theme:Glyphs.Remove}"
+                                 ToolTip="{x:Static lang:Strings.RemoveFolder}"
+                                 AutomationProperties.Name="{x:Static lang:Strings.RemoveFolder}"
+                                 Command="{Binding Remove}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.DrivesHeading}"
+                     Margin="4,8,0,10" />
+        </StackPanel>
+
+        <ItemsControl x:Name="Rows" ItemsSource="{Binding Entries}" Focusable="False">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <controls:Tile Style="{StaticResource Tile.Link}" MinHeight="50"
+                             Glyph="{Binding Glyph}" Label="{Binding Name}" IsOn="{Binding Highlight}"
+                             Command="{Binding Open}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+                   Text="{x:Static lang:Strings.NoSubfolders}" Visibility="{Binding EmptyFolderNoteShown}"
+                   Margin="4,4,4,0" />
+
+      </StackPanel>
     </ScrollViewer>
 
   </DockPanel>

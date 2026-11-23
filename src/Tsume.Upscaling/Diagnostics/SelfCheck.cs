@@ -535,6 +535,68 @@ public static class SelfCheck
                 "requesting OptiPatcher with a damaged file fails cleanly and sets the damaged file aside");
 
             Say("");
+
+            Say("H. Custom game folders");
+            var customLib = Path.Combine(bench, "CustomLibrary");
+            var (libFlat, _) = MakeGame(customLib, "AlphaGame", _ => { });
+            var libUe = Path.Combine(customLib, "UnrealGame");
+            var libUeBin = Path.Combine(libUe, "UnrealGame", "Binaries", "Win64");
+            Directory.CreateDirectory(Path.Combine(libUe, "Engine", "Binaries"));
+            Directory.CreateDirectory(libUeBin);
+            File.WriteAllBytes(Path.Combine(libUeBin, "UnrealGame-Win64-Shipping.exe"), new byte[4096]);
+            File.WriteAllText(Path.Combine(libUeBin, "libxess.dll"), "stand-in for XeSS");
+
+            var libPlain = Path.Combine(customLib, "NoUpscalerGame");
+            Directory.CreateDirectory(libPlain);
+            File.WriteAllBytes(Path.Combine(libPlain, "NoUpscalerGame.exe"), new byte[4096]);
+
+            var folderList = new GameList();
+            Check(folderList.AddFolder(customLib + Path.DirectorySeparatorChar)
+                  && !folderList.AddFolder(customLib)
+                  && folderList.HasFolder(customLib)
+                  && folderList.Folders.SequenceEqual([customLib]),
+                "custom folders normalize trailing slashes and avoid duplicates");
+
+            var fromLib = GameLibrary.FromFolder(customLib).ToList();
+            var libSupported = fromLib
+                .Where(game => GameInspector.Inspect(game) is { Upscalers.Count: > 0 })
+                .Select(game => game.Name)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            Check(libSupported.SequenceEqual(["AlphaGame", "UnrealGame"])
+                  && fromLib.All(game => game.Store == GameStore.Folder),
+                "scanning a library folder finds supported games and filters out games without upscalers");
+
+            var singleFromUe = GameLibrary.FromFolder(libUe).ToList();
+            Check(singleFromUe.Count == 1 && singleFromUe[0].Name == "UnrealGame"
+                  && string.Equals(singleFromUe[0].Folder, libUe, StringComparison.OrdinalIgnoreCase),
+                "adding a single Unreal game folder directly detects it by its folder name rather than Engine");
+
+            var singleFromFlat = GameLibrary.FromFolder(libFlat.Folder).ToList();
+            Check(singleFromFlat.Count == 1 && singleFromFlat[0].Name == "AlphaGame",
+                "adding a single flat game folder directly detects it as one game");
+
+            var drives = Path.Combine(bench, "Drive");
+            var steamApps = Path.Combine(drives, "SteamLibrary", "steamapps");
+            MakeGame(Path.Combine(steamApps, "common"), "BetaGame", _ => { });
+            Directory.CreateDirectory(Path.Combine(steamApps, "common", "Steamworks Common Redistributables"));
+            Directory.CreateDirectory(Path.Combine(steamApps, "shadercache", "123"));
+            Check(new[] { drives, Path.Combine(drives, "SteamLibrary"), steamApps }.All(folder =>
+                    GameLibrary.FromFolder(folder).Select(game => game.Name).SequenceEqual(["BetaGame"])),
+                "a Steam library is looked into for its games, whether added from above it, itself, or its steamapps");
+
+            var emptyKeep = new HashSet<string>();
+            folderList.Absorb(fromLib.Where(game => GameInspector.Inspect(game) is { Upscalers.Count: > 0 }), emptyKeep);
+            Check(folderList.Games.Select(listed => listed.Game.Name).SequenceEqual(["AlphaGame", "UnrealGame"]),
+                "Absorb adds discovered folder games to the list");
+
+            Check(folderList.RemoveFolder(customLib) && !folderList.HasFolder(customLib),
+                "removing a saved folder clears it from the folder list");
+            folderList.Absorb([], new HashSet<string> { singleFromFlat[0].Id });
+            Check(folderList.Games.Select(listed => listed.Game.Name).SequenceEqual(["AlphaGame"]),
+                "after removing a folder, uninstalled folder games drop while installed ones stay removable");
+
+            Say("");
         }
         finally
         {

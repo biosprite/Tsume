@@ -17,15 +17,8 @@
                      AutomationProperties.Name="{x:Static lang:Strings.Back}"
                      Command="{Binding Close}" />
 
-      <controls:Tile DockPanel.Dock="Right" Style="{StaticResource Tile.Icon}"
-                     Glyph="{x:Static theme:Glyphs.Folder}"
-                     ToolTip="{x:Static lang:Strings.OpenGameFolder}"
-                     AutomationProperties.Name="{x:Static lang:Strings.OpenGameFolder}"
-                     IsEnabled="{Binding CanOpenFolder}"
-                     Command="{Binding OpenFolder}" />
-
       <TextBlock Style="{StaticResource Text.Title}" Text="{Binding Name}"
-                 Margin="16,0,12,0" VerticalAlignment="Center" />
+                 Margin="16,0,0,0" VerticalAlignment="Center" />
     </DockPanel>
 
     <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
@@ -56,11 +49,50 @@
                            VerticalAlignment="Center" />
               </StackPanel>
             </Border>
+            <ItemsControl ItemsSource="{Binding FoundUpscalers}" Focusable="False"
+                          AutomationProperties.Name="{Binding FoundLine}"
+                          Margin="0,8,0,-4"
+                          Visibility="{Binding FoundUpscalersShown}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border Background="{DynamicResource Surface.Hover}"
+                          BorderBrush="{DynamicResource Surface.Divider}"
+                          BorderThickness="1" CornerRadius="4" Padding="6,2"
+                          Margin="0,0,5,4">
+                    <TextBlock Style="{StaticResource Text.Caption}" FontSize="10.5"
+                               Foreground="{DynamicResource Text.Muted}"
+                               Text="{Binding}" VerticalAlignment="Center" />
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
             <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
-                       Text="{Binding FoundLine}" Margin="0,6,0,0" />
-            <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text.Faint}"
-                       TextWrapping="Wrap" TextTrimming="None"
-                       Text="{Binding FolderLine}" Margin="0,4,0,0" />
+                       Text="{x:Static lang:Strings.FoundNoUpscalers}" Margin="0,6,0,0"
+                       Visibility="{Binding FoundNoUpscalersShown}" />
+            <Grid Margin="0,10,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <controls:Tile Grid.Column="0" Style="{StaticResource Tile.Icon}"
+                             Width="36" Height="36"
+                             HorizontalAlignment="Left" VerticalAlignment="Center"
+                             Glyph="{x:Static theme:Glyphs.Folder}"
+                             ToolTip="{x:Static lang:Strings.OpenGameFolder}"
+                             AutomationProperties.Name="{x:Static lang:Strings.OpenGameFolder}"
+                             IsEnabled="{Binding CanOpenFolder}"
+                             Command="{Binding OpenFolder}" />
+              <TextBlock Grid.Column="1" Style="{StaticResource Text.Caption}"
+                         Foreground="{DynamicResource Text.Faint}"
+                         TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center"
+                         Text="{Binding FolderLine}" Margin="10,0,0,0"
+                         Visibility="{Binding FolderLineShown}" />
+            </Grid>
           </StackPanel>
         </Border>
 
@@ -69,9 +101,25 @@
                      TextWrapping="Wrap" TextTrimming="None" Text="{Binding Notice}" />
         </Border>
 
-        <Border Style="{StaticResource Card.Note}" Visibility="{Binding CautionShown}">
-          <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
-                     TextWrapping="Wrap" TextTrimming="None" Text="{x:Static lang:Strings.OnlineGameCaution}" />
+        <Border Style="{StaticResource Card.Info}"
+                Background="{x:Static theme:Accent.Tint}"
+                BorderBrush="{x:Static theme:Accent.Wash}"
+                Padding="12,8" Margin="0,0,0,8"
+                Visibility="{Binding CautionShown}">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Style="{StaticResource Text.Icon}" FontSize="13"
+                       Foreground="{x:Static theme:Accent.Brush}"
+                       Text="{x:Static theme:Glyphs.Info}"
+                       VerticalAlignment="Center" Margin="0,0,8,0" />
+            <TextBlock Grid.Column="1" Style="{StaticResource Text.Caption}"
+                       Foreground="{DynamicResource Text}"
+                       Text="{x:Static lang:Strings.OnlineGameCaution}"
+                       TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center" />
+          </Grid>
         </Border>
 
         <!-- Install-time proxy choice and install/update/remove actions sit above the tuning options. -->

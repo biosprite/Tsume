@@ -29,7 +29,8 @@ public sealed class UpscalingViewModel : LayerViewModel
     private static readonly Journal Log = new("optiscaler");
 
     private GameList? _list;
-    private bool _looking;
+    private bool _rescanRequested;
+    private bool _manualScan;
 
     /// <param name="dismiss">Closes the panel and completes once it is fully off screen.</param>
     public UpscalingViewModel(Func<Task> dismiss)
@@ -52,6 +53,7 @@ public sealed class UpscalingViewModel : LayerViewModel
 
         // The panel stays open: the key press is posted straight to the game behind it.
         OpenGameMenu = new Command(QuickActions.OpenOptiScalerMenu);
+        Rescan = new Command(() => { if (!IsBusy) _ = LookForGamesAsync(manual: true); });
 
         OpenOptiScalerCompatibility = new Command(() => _ = OpenUrlAsync(OptiScalerCompatibilityUrl, dismiss));
         OpenOptiPatcherCompatibility = new Command(() => _ = OpenUrlAsync(OptiPatcherCompatibilityUrl, dismiss));
@@ -271,11 +273,33 @@ public sealed class UpscalingViewModel : LayerViewModel
     public ObservableCollection<UpscalingGameRow> Games { get; } = [];
 
     public ICommand OpenGameMenu { get; }
+    public ICommand Rescan { get; }
     public ICommand OpenOptiScalerCompatibility { get; }
     public ICommand OpenOptiPatcherCompatibility { get; }
 
     /// <summary>The line under the build's row: which nightly is here.</summary>
     public string BuildLine { get; private set => Set(ref field, value); } = "";
+
+    /// <summary>The line under Add folder: how many folders are saved, or empty when none.</summary>
+    public string FoldersLine { get; private set => Set(ref field, value); } = "";
+
+    /// <summary>True while stores and custom folders are being scanned.</summary>
+    public bool IsLooking
+    {
+        get;
+        private set { if (Set(ref field, value)) Notify(nameof(IsLookingShown)); }
+    }
+
+    public Visibility IsLookingShown => IsLooking ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Shown beside the GAMES heading while scanning or right after a manual rescan.</summary>
+    public string ScanStatus
+    {
+        get;
+        private set { if (Set(ref field, value)) Notify(nameof(ScanStatusShown)); }
+    } = "";
+
+    public Visibility ScanStatusShown => ScanStatus.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>Shown in place of the list while it is empty: still looking, or nothing found.</summary>
     public string EmptyNote { get; private set => Set(ref field, value); } = "";
@@ -286,7 +310,9 @@ public sealed class UpscalingViewModel : LayerViewModel
     protected override void OnOpened()
     {
         RestoreAll.Reset();
-        _ = LookForGamesAsync();   // runs to its first await, setting _looking before ShowGames reads it
+        _manualScan = false;
+        if (!IsLooking) ScanStatus = "";   // the last rescan's count; a scan still running keeps "Scanning…"
+        _ = LookForGamesAsync();   // runs to its first await, setting IsLooking before ShowGames reads it
         ShowGames();
     }
 
@@ -310,6 +336,24 @@ public sealed class UpscalingViewModel : LayerViewModel
         Show(listed);
     }
 
+    /// <summary>Remembers a library folder and scans it for games.</summary>
+    public void AddFolder(string folder)
+    {
+        if (!List.AddFolder(folder)) return;
+        SaveList();
+        ShowGames();
+        _ = LookForGamesAsync(manual: true);
+    }
+
+    /// <summary>Stops scanning a saved library folder and updates the games list.</summary>
+    public void RemoveFolder(string folder)
+    {
+        if (!List.RemoveFolder(folder)) return;
+        SaveList();
+        ShowGames();
+        _ = LookForGamesAsync();
+    }
+
     /// <summary>"Witchfire-Win64-Shipping.exe" → "Witchfire"; "my_game.exe" → "my game".</summary>
     private static string NameFrom(string program)
     {
@@ -322,50 +366,91 @@ public sealed class UpscalingViewModel : LayerViewModel
     }
 
     /// <summary>
-    /// Finds the stores' installed games and inspects each one in the background,
+    /// Finds the stores' and saved folders' installed games and inspects each one in the background,
     /// while the last known list is already on screen.
     /// </summary>
-    private async Task LookForGamesAsync()
+    private async Task LookForGamesAsync(bool manual = false)
     {
-        if (_looking) return;
-        _looking = true;
+        _manualScan |= manual;
+
+        // Already looking: go round once more when this pass ends, so the latest folders are read.
+        if (IsLooking)
+        {
+            _rescanRequested = true;
+            return;
+        }
+
+        IsLooking = true;
+        ScanStatus = Strings.ScanningGames;
+        var started = Stopwatch.StartNew();
 
         try
         {
-            var list = List;
-            var installed = Installer.InstalledGames();
-
-            var (found, facts) = await Task.Run(() =>
+            do
             {
-                var games = GameLibrary.Find();
+                _rescanRequested = false;
 
-                // Re-inspect hand-added games too: they also get updated.
-                var all = games
-                    .Concat(list.Games.Where(listed => listed.Game.Store == GameStore.Custom).Select(listed => listed.Game))
-                    .DistinctBy(game => game.Id);
-                return (games, all.ToDictionary(game => game.Id, GameInspector.Inspect));
-            });
+                try { await ScanOnceAsync(); }
+                catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException)
+                {
+                    // Keep the list as it was.
+                }
 
-            // Store games get a row only if they ship an upscaler or already have OptiScaler;
-            // the rest can still be added by hand.
-            list.Absorb(
-                found.Where(game => facts[game.Id] is { Upscalers.Count: > 0 } || installed.Contains(game.Id)),
-                installed);
-
-            foreach (var listed in list.Games)
-                if (facts.TryGetValue(listed.Game.Id, out var seen)) listed.Facts = seen;
-
-            SaveList();
-        }
-        catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException)
-        {
-            // Keep the list as it was.
+                // Give manual rescans a brief visible spin even when disk reads finish in a few milliseconds.
+                // Checked inside the loop, so a request made during the wait is not lost.
+                var remaining = TimeSpan.FromMilliseconds(300) - started.Elapsed;
+                if (_manualScan && !_rescanRequested && remaining > TimeSpan.Zero) await Task.Delay(remaining);
+            }
+            while (_rescanRequested);
         }
         finally
         {
-            _looking = false;
+            var wasManual = _manualScan;
+            _manualScan = false;
+            IsLooking = false;
             if (IsOpen) ShowGames();
+            ScanStatus = wasManual && IsOpen ? Strings.ScanFoundGames(Games.Count) : "";
         }
+    }
+
+    private async Task ScanOnceAsync()
+    {
+        var list = List;
+        var installed = Installer.InstalledGames();
+        var folders = list.Folders.ToList();
+        var byHand = list.Games.Where(listed => listed.Game.Store == GameStore.Custom).Select(listed => listed.Game).ToList();
+
+        var (found, facts) = await Task.Run(() =>
+        {
+            var games = GameLibrary.Find(folders);
+
+            // Re-inspect hand-added games too: they also get updated.
+            var all = games.Concat(byHand).DistinctBy(game => game.Id);
+            return (games, all.ToDictionary(game => game.Id, GameInspector.Inspect));
+        });
+
+        // A program already listed (added by hand, or by a store) is not listed again from a saved folder.
+        var targets = new HashSet<string>(
+            byHand.Select(game => facts[game.Id]?.Target).OfType<string>(), StringComparer.OrdinalIgnoreCase);
+
+        // Store and folder games get a row only if they ship an upscaler or already have OptiScaler;
+        // the rest can still be added by hand.
+        var eligible = found
+            .OrderBy(game => game.Store == GameStore.Folder)
+            .Where(game =>
+            {
+                var seen = facts[game.Id];
+                var isNew = seen is null || targets.Add(seen.Target);
+                return installed.Contains(game.Id) || (isNew && seen is { Upscalers.Count: > 0 });
+            })
+            .ToList();
+
+        list.Absorb(eligible, installed);
+
+        foreach (var listed in list.Games)
+            if (facts.TryGetValue(listed.Game.Id, out var seen)) listed.Facts = seen;
+
+        SaveList();
     }
 
     /// <summary>Syncs the rows with the list, reusing existing rows.</summary>
@@ -378,6 +463,7 @@ public sealed class UpscalingViewModel : LayerViewModel
         BuildLine = patcher is null
             ? baseBuildLine
             : Strings.BuildLineWithOptiPatcher(baseBuildLine, patcher.Release.Tag);
+        FoldersLine = List.Folders.Count > 0 ? Strings.FolderCount(List.Folders.Count) : "";
 
         var changed = false;
 
@@ -405,7 +491,7 @@ public sealed class UpscalingViewModel : LayerViewModel
             row.Describe(manifest, state, manifest is null || Installer.IsCurrent(manifest, build, xmx, patcher), optiPatcherOn);
         }
 
-        EmptyNote = Games.Count > 0 ? "" : _looking ? Strings.LookingForGames : Strings.NoGamesYet;
+        EmptyNote = Games.Count > 0 ? "" : IsLooking ? Strings.LookingForGames : Strings.NoGamesYet;
         RefreshTile();
 
         if (changed) ListChanged?.Invoke();

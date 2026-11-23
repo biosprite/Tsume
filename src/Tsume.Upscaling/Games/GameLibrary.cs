@@ -10,26 +10,125 @@ namespace Tsume.Upscaling.Games;
 /// </summary>
 public static partial class GameLibrary
 {
-    public static IReadOnlyList<Game> Find()
+    public static IReadOnlyList<Game> Find(IEnumerable<string>? customFolders = null)
     {
         var games = new Dictionary<string, Game>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var store in new Func<IEnumerable<Game>>[] { Steam, Epic, Gog, Ubisoft, Xbox })
+        // Stores go first: a game a store knows keeps the store's name even when a saved folder holds it too.
+        var sources = new Func<IEnumerable<Game>>[] { Steam, Epic, Gog, Ubisoft, Xbox }
+            .Concat((customFolders ?? []).Select(folder => (Func<IEnumerable<Game>>)(() => FromFolder(folder))));
+
+        foreach (var source in sources)
         {
             try
             {
-                foreach (var game in store())
+                foreach (var game in source())
                     if (Directory.Exists(game.Folder)) games.TryAdd(game.Folder, game);
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException
                                               or System.Security.SecurityException or JsonException)
             {
-                // That store's games can still be added by hand.
+                // That store's or folder's games can still be added by hand.
             }
         }
 
         return [.. games.Values.OrderBy(game => game.Name, StringComparer.CurrentCultureIgnoreCase)];
     }
+
+    /// <summary>OS folders at a drive root that never hold games directly and are expensive to walk.</summary>
+    private static readonly HashSet<string> SkippedDriveRootFolders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Windows", "Users", "Program Files", "Program Files (x86)", "ProgramData", "Recovery", "PerfLogs", "MSOCache",
+    };
+
+    /// <summary>Folders only a game's own folder has, never a library of games.</summary>
+    private static readonly string[] GameOnlyFolders =
+        [@"Engine\Binaries", "bin64", @"bin\x64", @"bin\x64_dx12", @"bin\win64", @"Binaries\Win64", @"Binaries\WinGDK"];
+
+    /// <summary>The defaults skip hidden and system folders (the recycle bin, System Volume Information …).</summary>
+    private static readonly EnumerationOptions Visible = new();
+
+    /// <summary>
+    /// Finds games inside a user-added folder: either the folder itself if it looks like a single game,
+    /// or its immediate subfolders when it is a games library. Steam libraries are looked into for their games.
+    /// </summary>
+    public static IEnumerable<Game> FromFolder(string root)
+    {
+        if (string.IsNullOrWhiteSpace(root)) yield break;
+
+        string full;
+        try { full = GameList.NormalizeFolder(root); }
+        catch (Exception error) when (error is ArgumentException or NotSupportedException or PathTooLongException) { yield break; }
+
+        if (!Directory.Exists(full)) yield break;
+
+        // A Steam library's own steamapps folder: its games are in common.
+        if (SteamCommon(full, nested: false) is { } steamCommon) full = steamCommon;
+
+        var isDriveRoot = string.Equals(full, Path.GetPathRoot(full), StringComparison.OrdinalIgnoreCase);
+
+        if (!isDriveRoot && LooksLikeSingleGame(full))
+        {
+            yield return FolderGame(full, Path.GetFileName(full));
+            yield break;
+        }
+
+        foreach (var child in new DirectoryInfo(full).EnumerateDirectories("*", Visible))
+        {
+            if (isDriveRoot && SkippedDriveRootFolders.Contains(child.Name)) continue;
+
+            if (SteamCommon(child.FullName, nested: true) is { } common)
+            {
+                foreach (var steamGame in new DirectoryInfo(common).EnumerateDirectories("*", Visible))
+                    if (!IsSteamTool(steamGame.Name)) yield return FolderGame(steamGame.FullName, steamGame.Name);
+            }
+            else if (!IsSteamTool(child.Name))
+            {
+                yield return FolderGame(child.FullName, child.Name);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A Steam library's common folder, given its steamapps folder or, when <paramref name="nested"/>,
+    /// the library folder that holds steamapps. Null when it is neither.
+    /// </summary>
+    private static string? SteamCommon(string folder, bool nested)
+    {
+        var common = Path.GetFileName(folder).Equals("steamapps", StringComparison.OrdinalIgnoreCase)
+            ? Path.Combine(folder, "common")
+            : nested ? Path.Combine(folder, "steamapps", "common") : null;
+
+        return Directory.Exists(common) ? common : null;
+    }
+
+    /// <summary>A game in a saved folder; a Microsoft Store (GDK) game's program sits in its Content folder.</summary>
+    private static Game FolderGame(string folder, string name) =>
+        Game.At(HasGdkContent(folder) ? Path.Combine(folder, "Content") : folder, name, GameStore.Folder);
+
+    private static bool HasGdkContent(string folder) =>
+        File.Exists(Path.Combine(folder, "Content", "MicrosoftGame.config"))
+        || File.Exists(Path.Combine(folder, "Content", "appxmanifest.xml"));
+
+    private static bool LooksLikeSingleGame(string folder)
+    {
+        if (HasGdkContent(folder) || GameOnlyFolders.Any(inner => Directory.Exists(Path.Combine(folder, inner))))
+            return true;
+
+        try
+        {
+            // An upscaler beside the program, or a Unity game's "<program>_Data" folder.
+            return Directory.EnumerateFiles(folder, "*.dll").Any(dll => GameInspector.IsUpscalerFile(Path.GetFileName(dll)))
+                || Directory.EnumerateFiles(folder, "*.exe").Any(exe => Directory.Exists(Path.ChangeExtension(exe, null) + "_Data"));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsSteamTool(string name) =>
+        SteamTools.Any(tool => name.StartsWith(tool, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Name prefixes of Steam runtimes and redistributables, which are listed like games.</summary>
     private static readonly string[] SteamTools = ["Steamworks Common", "Steam Linux Runtime", "Proton", "SteamVR"];
@@ -63,7 +162,7 @@ public static partial class GameLibrary
                 var name = Values(text, "name").FirstOrDefault() ?? folder;
 
                 if (folder is null || name is null) continue;
-                if (SteamTools.Any(tool => name.StartsWith(tool, StringComparison.OrdinalIgnoreCase))) continue;
+                if (IsSteamTool(name)) continue;
 
                 yield return Game.At(Path.Combine(apps, "common", folder), name, GameStore.Steam);
             }

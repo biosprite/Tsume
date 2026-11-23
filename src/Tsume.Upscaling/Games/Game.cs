@@ -7,6 +7,8 @@ public enum GameStore
 {
     /// <summary>Added by hand, by pointing at its program.</summary>
     Custom,
+    /// <summary>Found inside a user-added games folder.</summary>
+    Folder,
     Steam,
     Epic,
     Gog,

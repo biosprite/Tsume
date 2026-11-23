@@ -119,6 +119,14 @@ public static class ScreenShots
             await Task.Delay(TimeSpan.FromSeconds(2));   // the stores are being read
             await Shot("3-optiscaler-games");
 
+            if (Descendants<Panel.UpscalingScreen>(window).FirstOrDefault() is { } upscalingScreen
+                && Descendants<System.Windows.Controls.ScrollViewer>(upscalingScreen).FirstOrDefault() is { } upscalingScroll)
+            {
+                upscalingScroll.ScrollToBottom();
+                await Shot("3a-optiscaler-games-bottom");
+                upscalingScroll.ScrollToTop();
+            }
+
             // Only the question: the sheet is closed again without answering yes.
             upscaling.RestoreAll.Ask.Execute(null);
             await Shot("3b-optiscaler-restore-all");
@@ -177,8 +185,12 @@ public static class ScreenShots
             await Shot("7-optiscaler-defaults");
             upscaling.Defaults.IsOpen = false;
 
-            upscaling.Browse.IsOpen = true;
+            upscaling.Browse.OpenGame.Execute(null);
             await Shot("8-optiscaler-add-a-game");
+            upscaling.Browse.IsOpen = false;
+
+            upscaling.Browse.OpenFolder.Execute(null);
+            await Shot("8b-optiscaler-add-folder");
             upscaling.Browse.IsOpen = false;
 
             await WalkMadeUpGame(upscaling, Shot, folder);

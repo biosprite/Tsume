@@ -66,6 +66,9 @@ public static class GameInspector
         "patcher", "benchmark", "protected_game",
     ];
 
+    /// <summary>True when <paramref name="fileName"/> is an upscaler library OptiScaler can take over.</summary>
+    public static bool IsUpscalerFile(string fileName) => UpscalerFiles.ContainsKey(fileName);
+
     /// <summary>Null when the folder is gone or holds no program at all.</summary>
     public static GameFacts? Inspect(Game game)
     {

@@ -35,4 +35,10 @@ public abstract class LayerViewModel : Observable
 
     /// <summary>Called each time the layer closes, to settle anything left pending.</summary>
     protected virtual void OnClosed() { }
+
+    /// <summary>
+    /// Called when Back (controller B / Escape) is pressed while this layer is on top.
+    /// Return true to consume it internally instead of closing the layer.
+    /// </summary>
+    public virtual bool GoBack() => false;
 }

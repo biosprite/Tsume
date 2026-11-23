@@ -43,6 +43,32 @@ public sealed class GameList
 
     public List<ListedGame> Games { get; set; } = [];
 
+    /// <summary>User-added library folders scanned alongside the game stores.</summary>
+    public List<string> Folders { get; set; } = [];
+
+    /// <summary>The full path without a trailing separator, except on a drive's root: "D:\Games\" → "D:\Games".</summary>
+    public static string NormalizeFolder(string folder) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+
+    /// <remarks>Saved folders are stored normalized, so only <paramref name="folder"/> needs normalizing.</remarks>
+    public bool HasFolder(string folder) => Folders.Contains(NormalizeFolder(folder), StringComparer.OrdinalIgnoreCase);
+
+    public bool AddFolder(string folder)
+    {
+        if (HasFolder(folder)) return false;
+
+        Folders.Add(NormalizeFolder(folder));
+        Folders.Sort(StringComparer.CurrentCultureIgnoreCase);
+        return true;
+    }
+
+    public bool RemoveFolder(string folder)
+    {
+        // The exact text too, so a hand-edited entry in games.json can still be removed.
+        var normalized = NormalizeFolder(folder);
+        return Folders.RemoveAll(saved => string.Equals(saved, folder, StringComparison.OrdinalIgnoreCase)
+                                          || string.Equals(saved, normalized, StringComparison.OrdinalIgnoreCase)) > 0;
+    }
+
     public ListedGame? Find(string gameId) => Games.FirstOrDefault(listed => listed.Game.Id == gameId);
 
     public UpscalerSettings SettingsFor(string gameId) => Find(gameId)?.Settings ?? Defaults;
@@ -90,8 +116,14 @@ public sealed class GameList
 
         foreach (var game in now.Values)
         {
-            if (Find(game.Id) is { } known) known.Game = game;   // the store may have renamed it
-            else Games.Add(new ListedGame { Game = game });
+            if (Find(game.Id) is { } known)
+            {
+                if (known.Game.Store != GameStore.Custom) known.Game = game;   // the store may have renamed it
+            }
+            else
+            {
+                Games.Add(new ListedGame { Game = game });
+            }
         }
 
         Games.Sort((a, b) => string.Compare(a.Game.Name, b.Game.Name, StringComparison.CurrentCultureIgnoreCase));

@@ -259,10 +259,25 @@
 
   <data name="GamesHeading" xml:space="preserve"><value>GAMES</value></data>
   <data name="ToolsHeading" xml:space="preserve"><value>OPTISCALER</value></data>
-  <data name="NoGamesYet" xml:space="preserve"><value>No supported games found. Use Add a game to pick a game's .exe.</value></data>
+  <data name="NoGamesYet" xml:space="preserve"><value>No supported games found. Use Add a game to pick an .exe, or Add folder to scan a games folder.</value></data>
   <data name="LookingForGames" xml:space="preserve"><value>Looking for games…</value></data>
+  <data name="RescanGames" xml:space="preserve"><value>Rescan store and game folders</value></data>
+  <data name="ScanningGames" xml:space="preserve"><value>Scanning…</value></data>
+  <data name="ScanFoundGames" xml:space="preserve">
+    <value>{0} games found</value>
+    <comment>{0} = how many games are listed after a manual rescan</comment>
+  </data>
+  <data name="ScanFoundOneGame" xml:space="preserve"><value>1 game found</value></data>
+  <data name="ScanFoundNoGames" xml:space="preserve"><value>No games found</value></data>
   <data name="AddGame" xml:space="preserve"><value>Add a game</value></data>
+  <data name="AddFolder" xml:space="preserve"><value>Add folder</value></data>
+  <data name="FolderCount" xml:space="preserve">
+    <value>{0} folders</value>
+    <comment>{0} = how many custom games folders are saved</comment>
+  </data>
+  <data name="OneFolder" xml:space="preserve"><value>1 folder</value></data>
   <data name="Defaults" xml:space="preserve"><value>Global Defaults</value></data>
+  <data name="DefaultsDetail" xml:space="preserve"><value>Starting settings for new games</value></data>
   <data name="OptiScalerBuild" xml:space="preserve"><value>Download Build &amp; Addons</value></data>
   <data name="OpenGameMenu" xml:space="preserve"><value>Open in-game menu</value></data>
   <data name="OpenGameMenuDetail" xml:space="preserve"><value>Presses Insert in the game</value></data>
@@ -463,6 +478,18 @@
 
   <data name="DefaultsExplained" xml:space="preserve"><value>Starting settings for new games. Games you edit keep their own settings.</value></data>
   <data name="BrowseHint" xml:space="preserve"><value>Pick the game's .exe file.</value></data>
+  <data name="BrowseFolderHint" xml:space="preserve"><value>Open a games folder, then press Add this folder.</value></data>
+  <data name="BrowseFolderSavedHint" xml:space="preserve"><value>This folder is scanned for games automatically.</value></data>
+  <data name="UseThisFolder" xml:space="preserve"><value>Add this folder</value></data>
+  <data name="RemoveThisFolder" xml:space="preserve"><value>Remove this folder</value></data>
+  <data name="SavedFoldersHeading" xml:space="preserve"><value>SAVED FOLDERS</value></data>
+  <data name="DrivesHeading" xml:space="preserve"><value>DRIVES</value></data>
+  <data name="RemoveFolder" xml:space="preserve"><value>Remove folder</value></data>
+  <data name="FolderMissingDetail" xml:space="preserve">
+    <value>{0} (folder missing)</value>
+    <comment>{0} = the saved folder's path</comment>
+  </data>
+  <data name="NoSubfolders" xml:space="preserve"><value>No subfolders here.</value></data>
   <data name="BrowseUp" xml:space="preserve"><value>Up</value></data>
   <data name="ThisPC" xml:space="preserve"><value>This PC</value></data>
   <data name="CannotOpenFolder" xml:space="preserve"><value>Could not open folder.</value></data>
