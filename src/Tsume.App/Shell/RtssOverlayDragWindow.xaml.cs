@@ -20,14 +20,13 @@ namespace Tsume.App.Shell;
 /// on touchscreens (and pointers). Operates in two seamless modes:
 /// 1. Standby hit-target: invisible window tightly bounded to the active FPS overlay; dragging it expands
 ///    to full screen without stealing focus from the game, shows a 60–120 FPS glass frame + alignment snap
-///    guides, streams live coordinates to RTSS, and commits the new position on release.
+///    guides, and commits the new position to RTSS on release.
 /// 2. Interactive "Drag on screen" mode: full-screen positioning with clickable 9-point anchors, Reset &amp; Done.
 /// </summary>
 public sealed partial class RtssOverlayDragWindow : Window
 {
     private const double DragThresholdDip = 6.0;
     private const double MinStandbyTouchDip = 44.0;
-    private const long LiveStreamIntervalMs = 35;
 
     private readonly RtssOverlayService _service;
     private readonly Border[] _snapDots = new Border[9];
@@ -51,7 +50,6 @@ public sealed partial class RtssOverlayDragWindow : Window
     private Point _downScreenDip;
     private int _startPhysX;
     private int _startPhysY;
-    private long _lastStreamTick;
 
     public RtssOverlayDragWindow(RtssOverlayService service)
     {
@@ -251,7 +249,6 @@ public sealed partial class RtssOverlayDragWindow : Window
         _downScreenDip = screenDip;
         _startPhysX = _currentPhysX;
         _startPhysY = _currentPhysY;
-        _lastStreamTick = 0;
 
         if (_interactive)
             ShowDragChrome(visible: true);
@@ -299,14 +296,6 @@ public sealed partial class RtssOverlayDragWindow : Window
 
         PositionOverlayBox(clampedX, clampedY, snapped);
         UpdateBadge(clampedX, clampedY, snapped ?? RtssOverlayAlignment.Custom);
-
-        // Stream live position to RTSS so the real overlay glides right behind the 120 FPS frame.
-        var now = Environment.TickCount64;
-        if (now - _lastStreamTick >= LiveStreamIntervalMs)
-        {
-            _lastStreamTick = now;
-            _service.SetLiveDragPosition(clampedX, clampedY);
-        }
     }
 
     private void EndDrag(bool commit)
