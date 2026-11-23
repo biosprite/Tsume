@@ -101,14 +101,14 @@
           <controls:Reveal IsOpen="{Binding IsRunning}">
             <StackPanel>
 
-              <UniformGrid Columns="2" Margin="-4,0,-4,8">
-                <controls:Tile Style="{StaticResource Tile.Row}"
+              <UniformGrid Columns="2" Margin="-4,0,-4,14">
+                <controls:Tile Style="{StaticResource Tile.Mini}"
                                Glyph="{x:Static theme:Glyphs.GameMenu}"
                                Label="{x:Static lang:Strings.RtssOpenMenu}"
-                               IsOn="True"
                                Command="{Binding OpenRtssMenu}" />
 
-                <controls:Tile Style="{StaticResource Tile.Row}"
+                <controls:Tile Style="{StaticResource Tile.Mini}"
+                               Foreground="{StaticResource Signal.Danger}"
                                Glyph="{x:Static theme:Glyphs.Quit}"
                                Label="{x:Static lang:Strings.RtssClose}"
                                Command="{Binding CloseRtss}" />

@@ -89,6 +89,34 @@
                          Command="{Binding CheckAgain}" />
         </StackPanel>
 
+        <!-- Update: winget is asked for a newer RTSS when the page opens. The small ring shows while it
+             looks; the Update tile only appears when there is something newer. -->
+        <StackPanel Visibility="{Binding UpdateSectionVisibility}">
+          <DockPanel Margin="4,14,4,10">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+              <controls:ProgressRing Width="12" Height="12" RingThickness="1.8"
+                                     Margin="0,0,6,0" VerticalAlignment="Center"
+                                     Foreground="{x:Static theme:Accent.Brush}"
+                                     TrackBrush="{DynamicResource Switch.Groove}"
+                                     IsActive="{Binding IsCheckingForUpdate}"
+                                     Visibility="{Binding UpdateCheckingVisibility}" />
+              <TextBlock Style="{StaticResource Text.Caption}" FontSize="11"
+                         Foreground="{DynamicResource Text.Muted}"
+                         Text="{Binding UpdateCheckText}" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <TextBlock Style="{StaticResource Text.Heading}" Margin="0"
+                       Text="{x:Static lang:Strings.RtssUpdateHeading}" VerticalAlignment="Center" />
+          </DockPanel>
+
+          <controls:Tile Style="{StaticResource Tile.Link}" Tag=""
+                         Visibility="{Binding UpdateTileVisibility}"
+                         Glyph="{x:Static theme:Glyphs.Update}"
+                         Label="{Binding UpdateLabel}"
+                         Detail="{Binding UpdateDetail}"
+                         Command="{Binding UpdateRtss}" />
+        </StackPanel>
+
         <!-- Uninstall: only once RTSS is installed. The first press arms it, the second goes ahead. -->
         <StackPanel Visibility="{Binding InstalledVisibility}">
           <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.RtssUninstallHeading}"

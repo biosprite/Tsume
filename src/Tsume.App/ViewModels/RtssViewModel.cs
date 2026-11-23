@@ -34,6 +34,10 @@ public sealed class RtssViewModel : LayerViewModel
     private int? _excludedGamesCount;
     private string? _downloadedInstaller;
 
+    // Minimum gap between winget update checks, so reopening the pages never spams winget.
+    private const long UpdateCheckSpacing = 5000;
+    private long _lastUpdateCheck = -UpdateCheckSpacing;
+
     public RtssViewModel(RtssOverlayService service, Func<Task> dismiss)
     {
         _service = service;
@@ -53,6 +57,7 @@ public sealed class RtssViewModel : LayerViewModel
 
         InstallAutomatically = new Command(async () => await InstallAutomaticallyAsync());
         Uninstall = new Command(async () => await UninstallAsync());
+        UpdateRtss = new Command(async () => await UpdateAsync());
 
         Download = new RtssDownloadViewModel(
             opened: () =>
@@ -61,6 +66,7 @@ public sealed class RtssViewModel : LayerViewModel
                 if (IsBusy) return;
                 RefreshState();
                 Status = DefaultStatus();
+                _ = CheckForUpdateAsync();
             },
             closed: () => ConfirmingUninstall = false);
 
@@ -123,6 +129,7 @@ public sealed class RtssViewModel : LayerViewModel
     public ICommand OpenDownloadPage { get; }
     public ICommand InstallAutomatically { get; }
     public ICommand Uninstall { get; }
+    public ICommand UpdateRtss { get; }
     public ICommand RunDownloadedInstaller { get; }
 
     /// <summary>The download page that opens over this screen.</summary>
@@ -178,7 +185,7 @@ public sealed class RtssViewModel : LayerViewModel
     // What the screens present is held steady while an install or uninstall is in flight, even though
     // RTSS.exe appears or vanishes on disk partway through. That way nobody starts a half-installed
     // RTSS, and the tile that was pressed stays put until the work has fully finished.
-    private bool PresentsInstalled => IsUninstalling || (IsInstalled && !IsInstalling);
+    private bool PresentsInstalled => IsUninstalling || IsUpdating || (IsInstalled && !IsInstalling);
 
     public Visibility InstalledVisibility => PresentsInstalled ? Visibility.Visible : Visibility.Collapsed;
     public Visibility NotInstalledVisibility => PresentsInstalled ? Visibility.Collapsed : Visibility.Visible;
@@ -203,12 +210,80 @@ public sealed class RtssViewModel : LayerViewModel
         }
     }
 
-    /// <summary>True while an install or uninstall is in flight; everything else on the page waits.</summary>
-    public bool IsBusy => IsInstalling || IsUninstalling;
+    /// <summary>True while Tsume's own winget update of RTSS is running.</summary>
+    public bool IsUpdating
+    {
+        get;
+        private set
+        {
+            if (!Set(ref field, value)) return;
+            NotifyPresentation();
+            Notify(nameof(IsNotRunning));
+        }
+    }
+
+    /// <summary>True while an install, update or uninstall is in flight; everything else on the page waits.</summary>
+    public bool IsBusy => IsInstalling || IsUninstalling || IsUpdating;
 
     public Visibility BusyVisibility => IsBusy ? Visibility.Visible : Visibility.Collapsed;
 
-    public string BusyText => IsUninstalling ? Strings.RtssUninstalling : InstallProgressText;
+    public string BusyText =>
+        IsUninstalling ? Strings.RtssUninstalling
+        : IsUpdating && InstallStage is RtssInstallStage.Installing ? Strings.RtssUpdateStageInstalling
+        : InstallProgressText;
+
+    /// <summary>True while winget is being asked for a newer RTSS; shows the small loading ring.</summary>
+    public bool IsCheckingForUpdate
+    {
+        get;
+        private set
+        {
+            if (Set(ref field, value)) NotifyUpdate();
+        }
+    }
+
+    /// <summary>The newer RTSS winget offers, or "" when none is known.</summary>
+    public string AvailableVersion
+    {
+        get;
+        private set
+        {
+            if (Set(ref field, value)) NotifyUpdate();
+        }
+    } = "";
+
+    /// <summary>Caption beside the Update heading: checking, up to date, or could not check.</summary>
+    public string UpdateCheckText
+    {
+        get => IsCheckingForUpdate ? Strings.RtssUpdateChecking : field;
+        private set
+        {
+            if (Set(ref field, value)) NotifyUpdate();
+        }
+    } = "";
+
+    public Visibility UpdateSectionVisibility =>
+        PresentsInstalled && CanInstallAutomatically ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility UpdateCheckingVisibility => IsCheckingForUpdate ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility UpdateTileVisibility =>
+        AvailableVersion.Length > 0 || IsUpdating ? Visibility.Visible : Visibility.Collapsed;
+
+    public string UpdateLabel => Strings.RtssUpdate(AvailableVersion);
+
+    public string UpdateDetail => IsUpdating ? Strings.RtssUpdateBusy : Strings.RtssUpdateDetail(InstalledVersion);
+
+    private void NotifyUpdate()
+    {
+        Notify(nameof(UpdateCheckText));
+        Notify(nameof(UpdateSectionVisibility));
+        Notify(nameof(UpdateCheckingVisibility));
+        Notify(nameof(UpdateTileVisibility));
+        Notify(nameof(UpdateLabel));
+        Notify(nameof(UpdateDetail));
+        Notify(nameof(DownloadPageDetail));
+    }
 
     /// <summary>Set by the first press of Uninstall; the second press goes ahead.</summary>
     public bool ConfirmingUninstall
@@ -233,9 +308,10 @@ public sealed class RtssViewModel : LayerViewModel
 
     public string DownloadPageLabel => PresentsInstalled ? Strings.RtssDownloadPageInstalled : Strings.RtssDownloadPage;
 
-    public string DownloadPageDetail => PresentsInstalled
-        ? Strings.RtssDownloadPageInstalledDetail
-        : Strings.RtssDownloadPageDetail;
+    public string DownloadPageDetail =>
+        !PresentsInstalled ? Strings.RtssDownloadPageDetail
+        : AvailableVersion.Length > 0 ? Strings.RtssDownloadPageUpdateDetail(AvailableVersion)
+        : Strings.RtssDownloadPageInstalledDetail;
 
     private void NotifyPresentation()
     {
@@ -251,6 +327,7 @@ public sealed class RtssViewModel : LayerViewModel
         Notify(nameof(UninstallDetail));
         Notify(nameof(DownloadPageLabel));
         Notify(nameof(DownloadPageDetail));
+        NotifyUpdate();
     }
 
     /// <summary>How far the automatic install has got; only ever moves forward.</summary>
@@ -279,7 +356,9 @@ public sealed class RtssViewModel : LayerViewModel
         get;
         private set
         {
-            if (Set(ref field, value)) Notify(nameof(AutoInstallVisibility));
+            if (!Set(ref field, value)) return;
+            Notify(nameof(AutoInstallVisibility));
+            Notify(nameof(UpdateSectionVisibility));
         }
     }
 
@@ -300,7 +379,7 @@ public sealed class RtssViewModel : LayerViewModel
         }
     }
 
-    public bool IsNotRunning => IsInstalled && !IsRunning;
+    public bool IsNotRunning => IsInstalled && !IsRunning && !IsUpdating;
 
     public bool StartsWithWindows { get; private set => Set(ref field, value); }
 
@@ -344,6 +423,7 @@ public sealed class RtssViewModel : LayerViewModel
             if (!Set(ref field, value)) return;
             Notify(nameof(RtssAppDetail));
             Notify(nameof(UninstallDetail));
+            Notify(nameof(UpdateDetail));
         }
     } = "";
 
@@ -514,7 +594,7 @@ public sealed class RtssViewModel : LayerViewModel
     public void RefreshTile()
     {
         // Looking for RTSS loads its hooks DLL, which would stop the uninstaller deleting it.
-        if (IsUninstalling) return;
+        if (IsUninstalling || IsUpdating) return;
 
         _ = Task.Run(() =>
         {
@@ -557,6 +637,7 @@ public sealed class RtssViewModel : LayerViewModel
             _ = RefreshStartWithWindowsAsync();
             if (SkipAntiCheatGames && _excludedGamesCount is null)
                 _ = SyncAntiCheatAsync();
+            _ = CheckForUpdateAsync();
         }
     }
 
@@ -721,6 +802,128 @@ public sealed class RtssViewModel : LayerViewModel
         }
 
         Settled?.Invoke();
+    }
+
+    /// <summary>Asks winget for a newer RTSS, at most once every few seconds so reopening pages never spams it.</summary>
+    private async Task CheckForUpdateAsync()
+    {
+        if (!IsInstalled || IsBusy || IsCheckingForUpdate || !CanInstallAutomatically) return;
+        if (Environment.TickCount64 - _lastUpdateCheck < UpdateCheckSpacing) return;
+
+        var version = InstalledVersion;
+        IsCheckingForUpdate = true;
+        try
+        {
+            var found = await RtssWingetInstaller.FindUpgradeAsync();
+            if (InstalledVersion != version || IsBusy) return;
+
+            AvailableVersion = found ?? "";
+            UpdateCheckText = found switch
+            {
+                null => Strings.RtssUpdateCheckFailed,
+                ""   => Strings.RtssUpdateUpToDate,
+                _    => "",
+            };
+        }
+        finally
+        {
+            _lastUpdateCheck = Environment.TickCount64;
+            IsCheckingForUpdate = false;
+        }
+    }
+
+    private async Task UpdateAsync()
+    {
+        if (IsBusy || RtssWingetInstaller.IsBusy)
+        {
+            Status = Strings.RtssInstallAlreadyRunning;
+            return;
+        }
+
+        if (AvailableVersion.Length == 0) return;
+
+        var before = InstalledVersion;
+        var wasRunning = _service.IsRunning;
+
+        ConfirmingUninstall = false;
+        InstallStage = RtssInstallStage.Preparing;
+        IsUpdating = true;
+        Status = "";
+
+        // Created on the UI thread, so stage reports arrive back on it.
+        var progress = new Progress<RtssInstallStage>(stage =>
+        {
+            if (IsUpdating && stage > InstallStage) InstallStage = stage;
+        });
+
+        RtssInstallResult? result = null;
+        string? failure = null;
+        try
+        {
+            // The installer cannot replace files that RTSS, or Tsume's own overlay, still has open.
+            if (wasRunning && !await _service.StopRtssAsync())
+            {
+                failure = Strings.RtssUpdateStillRunning;
+            }
+            else
+            {
+                IsRunning = false;
+                _service.ReleaseHooks();
+
+                result = await RtssWingetInstaller.UpgradeAsync(progress);
+                if (result.Value.Outcome is RtssInstallOutcome.Finished)
+                {
+                    InstallStage = RtssInstallStage.Finishing;
+
+                    // The new version can take a moment to show up after the installer returns.
+                    for (var attempt = 0; attempt < 6; attempt++)
+                    {
+                        if (await Task.Run(RtssInstallation.Find) is { } found && found.Version != before) break;
+                        await Task.Delay(500);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            IsUpdating = false;
+        }
+
+        RefreshState();
+
+        var updated = IsInstalled && (InstalledVersion != before
+            || result is { Outcome: RtssInstallOutcome.Finished, ExitCode: 0 });
+
+        string message;
+        if (updated)
+        {
+            AvailableVersion = "";
+            UpdateCheckText = Strings.RtssUpdateUpToDate;
+            message = Strings.RtssUpdateDone(InstalledVersion);
+        }
+        else
+        {
+            message = failure ?? result?.Outcome switch
+            {
+                RtssInstallOutcome.WingetMissing     => Strings.RtssInstallNoWinget,
+                RtssInstallOutcome.CouldNotStart     => Strings.RtssInstallNoWinget,
+                RtssInstallOutcome.Offline           => Strings.RtssInstallOffline,
+                RtssInstallOutcome.AlreadyInstalling => Strings.RtssInstallAlreadyRunning,
+                RtssInstallOutcome.TimedOut          => Strings.RtssUpdateTimedOut,
+                _                                    => Strings.RtssUpdateFailed(result?.ExitCode ?? 0),
+            };
+        }
+
+        if (IsInstalled) _ = RefreshStartWithWindowsAsync();
+        Status = message;
+        Settled?.Invoke();
+
+        // Put RTSS back the way it was; a failed start reports itself instead.
+        if (wasRunning && IsInstalled && !IsRunning)
+        {
+            await StartRtssAsync();
+            if (IsRunning) Status = message;
+        }
     }
 
     private async Task UninstallAsync()

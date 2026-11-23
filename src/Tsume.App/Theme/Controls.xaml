@@ -320,6 +320,8 @@
   <Style x:Key="Tile.Mini" TargetType="controls:Tile">
     <Setter Property="Height" Value="36" />
     <Setter Property="Margin" Value="4,2" />
+    <!-- Icon color; set Foreground on the tile to tint it (e.g. Signal.Danger for a close action). -->
+    <Setter Property="Foreground" Value="{DynamicResource Text.Muted}" />
     <Setter Property="AutomationProperties.Name" Value="{Binding Label, RelativeSource={RelativeSource Self}}" />
     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Template">
@@ -334,7 +336,7 @@
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="10,0" IsHitTestVisible="False">
               <TextBlock Style="{StaticResource Text.Icon}" FontSize="12"
-                         Foreground="{DynamicResource Text.Muted}"
+                         Foreground="{TemplateBinding Foreground}"
                          Text="{TemplateBinding Glyph}" VerticalAlignment="Center" />
               <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
                          Text="{TemplateBinding Label}" Margin="7,0,0,0" VerticalAlignment="Center" />

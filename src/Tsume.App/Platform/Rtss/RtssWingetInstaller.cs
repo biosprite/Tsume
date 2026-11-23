@@ -105,7 +105,66 @@ public static class RtssWingetInstaller
     /// tell "already installed" from a real failure reliably across winget versions.
     /// </summary>
     /// <param name="progress">Told each time the install moves on to a later stage.</param>
-    public static async Task<RtssInstallResult> InstallAsync(IProgress<RtssInstallStage>? progress = null)
+    public static Task<RtssInstallResult> InstallAsync(IProgress<RtssInstallStage>? progress = null) =>
+        RunAsync("install", progress);
+
+    /// <summary>
+    /// Runs <c>winget upgrade Guru3D.RTSS</c> silently and waits for it, exactly like <see cref="InstallAsync"/>.
+    /// RTSS must already be closed: its installer would otherwise restart it under a running game.
+    /// </summary>
+    public static Task<RtssInstallResult> UpgradeAsync(IProgress<RtssInstallStage>? progress = null) =>
+        RunAsync("upgrade", progress);
+
+    /// <summary>
+    /// Asks winget whether a newer RTSS is available. Returns the newer version, "" when there is none,
+    /// or null when winget could not be asked (missing, offline, busy, or it failed).
+    /// </summary>
+    public static async Task<string?> FindUpgradeAsync()
+    {
+        if (IsBusy || FindWinget() is not { } winget || !NetworkInterface.GetIsNetworkAvailable()) return null;
+
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo(winget)
+            {
+                ArgumentList =
+                {
+                    "list", "--id", PackageId, "--exact", "--upgrade-available",
+                    "--source", "winget", "--accept-source-agreements", "--disable-interactivity",
+                },
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                StandardOutputEncoding = Encoding.UTF8,
+            });
+            if (process is null) return null;
+
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            var output = await process.StandardOutput.ReadToEndAsync(timeout.Token);
+            await process.WaitForExitAsync(timeout.Token);
+
+            // Headers are translated, so find the row by id and read what follows it:
+            // "… Guru3D.RTSS 7.3.6 7.3.7" is installed, then available (a Source column may follow,
+            // and installed can read "< 7.3.6").
+            foreach (var line in output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+            {
+                var tokens = line.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .Where(t => t != "<" && !t.Equals("winget", StringComparison.OrdinalIgnoreCase)).ToArray();
+                var at = Array.FindIndex(tokens, t => t.Equals(PackageId, StringComparison.OrdinalIgnoreCase));
+                if (at >= 0 && tokens.Length - at - 1 >= 2) return tokens[^1];
+            }
+
+            // 0x8A150014: no installed package matched, i.e. nothing to upgrade.
+            return process.ExitCode is 0 or unchecked((int)0x8A150014) ? "" : null;
+        }
+        catch (Exception error) when (error is Win32Exception or InvalidOperationException or IOException or OperationCanceledException)
+        {
+            Log.Write($"rtss upgrade check failed: {error.Message}");
+            return null;
+        }
+    }
+
+    private static async Task<RtssInstallResult> RunAsync(string verb, IProgress<RtssInstallStage>? progress)
     {
         if (Interlocked.Exchange(ref _busy, 1) != 0)
             return new RtssInstallResult(RtssInstallOutcome.AlreadyInstalling);
@@ -125,7 +184,7 @@ public static class RtssWingetInstaller
                 {
                     ArgumentList =
                     {
-                        "install", "--id", PackageId, "--exact",
+                        verb, "--id", PackageId, "--exact",
                         "--source", "winget",              // skips the Store source, which fails in some regions
                         "--silent",
                         "--accept-source-agreements", "--accept-package-agreements",
@@ -163,11 +222,11 @@ public static class RtssWingetInstaller
                     try { process.Kill(entireProcessTree: true); }
                     catch (Exception error) when (error is Win32Exception or InvalidOperationException or AggregateException or NotSupportedException) { }
 
-                    Log.Write("rtss winget install timed out");
+                    Log.Write($"rtss winget {verb} timed out");
                     return new RtssInstallResult(RtssInstallOutcome.TimedOut);
                 }
 
-                Log.Write($"rtss winget install exited 0x{process.ExitCode:X8}");
+                Log.Write($"rtss winget {verb} exited 0x{process.ExitCode:X8}");
                 return new RtssInstallResult(RtssInstallOutcome.Finished, process.ExitCode);
             }
         }

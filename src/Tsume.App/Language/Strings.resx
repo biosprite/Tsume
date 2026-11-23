@@ -182,14 +182,14 @@
   <data name="FaceButtons" xml:space="preserve"><value>A B X Y</value></data>
   <data name="Hue" xml:space="preserve"><value>Hue</value></data>
   <data name="Saturation" xml:space="preserve"><value>Saturation</value></data>
-  <data name="SameOnBothSticks" xml:space="preserve"><value>Same colour on both sticks</value></data>
+  <data name="SameOnBothSticks" xml:space="preserve"><value>Same color on both sticks</value></data>
   <data name="SameOnBothSticksDetail" xml:space="preserve"><value>The right stick follows the left</value></data>
   <data name="StickLights" xml:space="preserve"><value>Stick lights</value></data>
   <data name="StickLightsDetail" xml:space="preserve"><value>The rings around both sticks</value></data>
   <data name="ButtonLights" xml:space="preserve"><value>A B X Y lights</value></data>
   <data name="ButtonLightsDetail" xml:space="preserve"><value>The four face buttons</value></data>
   <data name="ButtonsSteady" xml:space="preserve"><value>Keep steady</value></data>
-  <data name="ButtonsSteadyDetail" xml:space="preserve"><value>A B X Y hold their colour while the sticks move</value></data>
+  <data name="ButtonsSteadyDetail" xml:space="preserve"><value>A B X Y hold their color while the sticks move</value></data>
   <data name="BothSticks" xml:space="preserve"><value>Both sticks</value></data>
   <data name="ControllerNotFound" xml:space="preserve"><value>Controller not found</value></data>
   <data name="ControllerNotAnswering" xml:space="preserve"><value>The controller stopped answering</value></data>
@@ -223,7 +223,7 @@
 
   <data name="AppearanceHeading" xml:space="preserve"><value>APPEARANCE</value></data>
   <data name="Customization" xml:space="preserve"><value>Customization</value></data>
-  <data name="CustomizationDetail" xml:space="preserve"><value>Colours for the whole of Tsume</value></data>
+  <data name="CustomizationDetail" xml:space="preserve"><value>Colors for the whole of Tsume</value></data>
   <data name="CustomizationSaved" xml:space="preserve"><value>Changes show at once and are kept.</value></data>
   <data name="PresetsHeading" xml:space="preserve"><value>PRESETS</value></data>
   <data name="ColoursHeading" xml:space="preserve"><value>YOUR OWN</value></data>
@@ -248,7 +248,7 @@
   <data name="Experimental" xml:space="preserve"><value>EXPERIMENTAL</value></data>
   <data name="ShowOptiScalerDetail" xml:space="preserve"><value>Better upscaling in your games. Nothing is downloaded until you ask.</value></data>
   <data name="ShowRtss" xml:space="preserve"><value>RTSS overlay tile</value></data>
-  <data name="ShowRtssDetail" xml:space="preserve"><value>Steam-style performance overlay and frame-rate cap. Links to Guru3D; nothing is bundled.</value></data>
+  <data name="ShowRtssDetail" xml:space="preserve"><value>FPS Overlay and frame-rate cap. Installs RTSS via winget.</value></data>
   <data name="GamesWithOptiScaler" xml:space="preserve">
     <value>{0} games</value>
     <comment>{0} = how many games have OptiScaler installed</comment>
@@ -435,8 +435,8 @@
   <data name="DownloadBuild" xml:space="preserve"><value>Download</value></data>
   <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="CancelDownload" xml:space="preserve"><value>Cancel download</value></data>
-  <data name="CheckCancelled" xml:space="preserve"><value>Check cancelled.</value></data>
-  <data name="DownloadCancelled" xml:space="preserve"><value>Download cancelled.</value></data>
+  <data name="CheckCancelled" xml:space="preserve"><value>Check canceled.</value></data>
+  <data name="DownloadCancelled" xml:space="preserve"><value>Download canceled.</value></data>
   <data name="HaveNewest" xml:space="preserve"><value>Already up to date.</value></data>
   <data name="GotNewer" xml:space="preserve">
     <value>Downloaded the {0} nightly.</value>
@@ -659,11 +659,40 @@
   <data name="RtssInstallDonePlain" xml:space="preserve"><value>RTSS installed. Start it to show the overlay.</value></data>
   <data name="RtssAlreadyInstalled" xml:space="preserve"><value>RTSS is already installed.</value></data>
 
-  <data name="RtssDownloadTitle" xml:space="preserve"><value>RTSS download</value></data>
+  <data name="RtssDownloadTitle" xml:space="preserve"><value>RTSS Download</value></data>
   <data name="RtssDownloadPage" xml:space="preserve"><value>Download RTSS</value></data>
   <data name="RtssDownloadPageDetail" xml:space="preserve"><value>Install it automatically or get it from Guru3D</value></data>
-  <data name="RtssDownloadPageInstalled" xml:space="preserve"><value>Download or uninstall</value></data>
+  <data name="RtssDownloadPageInstalled" xml:space="preserve"><value>Download or Uninstall</value></data>
   <data name="RtssDownloadPageInstalledDetail" xml:space="preserve"><value>Guru3D's download page, or remove RTSS from this PC</value></data>
+  <data name="RtssDownloadPageUpdateDetail" xml:space="preserve">
+    <value>RTSS {0} is available to install</value>
+    <comment>{0} = newer RTSS version</comment>
+  </data>
+  <data name="RtssUpdateHeading" xml:space="preserve"><value>UPDATE</value></data>
+  <data name="RtssUpdateChecking" xml:space="preserve"><value>Checking for updates…</value></data>
+  <data name="RtssUpdateUpToDate" xml:space="preserve"><value>Up to date</value></data>
+  <data name="RtssUpdateCheckFailed" xml:space="preserve"><value>Couldn't check for updates</value></data>
+  <data name="RtssUpdate" xml:space="preserve">
+    <value>Update to RTSS {0}</value>
+    <comment>{0} = newer RTSS version</comment>
+  </data>
+  <data name="RtssUpdateDetail" xml:space="preserve">
+    <value>Installed: {0} · RTSS closes while it updates</value>
+    <comment>{0} = installed RTSS version</comment>
+  </data>
+  <data name="RtssUpdateDetailPlain" xml:space="preserve"><value>RTSS closes while it updates</value></data>
+  <data name="RtssUpdateBusy" xml:space="preserve"><value>Updating…</value></data>
+  <data name="RtssUpdateStageInstalling" xml:space="preserve"><value>Updating RTSS…</value></data>
+  <data name="RtssUpdateDone" xml:space="preserve">
+    <value>RTSS updated to {0}.</value>
+    <comment>{0} = RTSS version</comment>
+  </data>
+  <data name="RtssUpdateFailed" xml:space="preserve">
+    <value>RTSS was not updated (error {0}). Accept the Windows permission prompt and try again.</value>
+    <comment>{0} = winget exit code in hexadecimal, e.g. 0x8A150008</comment>
+  </data>
+  <data name="RtssUpdateTimedOut" xml:space="preserve"><value>The RTSS update took too long and was stopped. Try again later.</value></data>
+  <data name="RtssUpdateStillRunning" xml:space="preserve"><value>Could not close RTSS, so it was not updated. Quit it from the system tray and try again.</value></data>
   <data name="RtssAutomaticHeading" xml:space="preserve"><value>AUTOMATIC INSTALL</value></data>
   <data name="RtssManualHeading" xml:space="preserve"><value>MANUAL DOWNLOAD</value></data>
   <data name="RtssUninstallHeading" xml:space="preserve"><value>UNINSTALL</value></data>
@@ -680,13 +709,13 @@
   <data name="RtssUninstallDone" xml:space="preserve"><value>RTSS was removed from this PC.</value></data>
   <data name="RtssUninstallFailed" xml:space="preserve"><value>RTSS is still installed. Close any game using it, then try again or remove it from Windows Settings › Apps.</value></data>
   <data name="RtssUninstallCancelled" xml:space="preserve"><value>RTSS was not removed. Accept the Windows permission prompt to uninstall it.</value></data>
-  <data name="RtssUninstallStillRunning" xml:space="preserve"><value>Could not end RTSS, so it was not removed. Close it from the system tray and try again.</value></data>
+  <data name="RtssUninstallStillRunning" xml:space="preserve"><value>Could not close RTSS, so it was not removed. Quit it from the system tray and try again.</value></data>
   <data name="RtssUninstallNotFound" xml:space="preserve"><value>RTSS's uninstaller was not found. Remove it from Windows Settings › Apps instead.</value></data>
 
   <data name="RtssOverlayHeading" xml:space="preserve"><value>OVERLAY</value></data>
-  <data name="RtssUseTsumeOverlay" xml:space="preserve"><value>Steam-style overlay</value></data>
-  <data name="RtssUseTsumeOverlayOn" xml:space="preserve"><value>Drawn by Tsume through RTSS</value></data>
-  <data name="RtssUseTsumeOverlayOff" xml:space="preserve"><value>Off. Your own RTSS overlay is left alone</value></data>
+  <data name="RtssUseTsumeOverlay" xml:space="preserve"><value>FPS Overlay</value></data>
+  <data name="RtssUseTsumeOverlayOn" xml:space="preserve"><value>Tsume shows its own stats in games using RTSS</value></data>
+  <data name="RtssUseTsumeOverlayOff" xml:space="preserve"><value>Off. RTSS shows your own overlay setup instead</value></data>
 
   <data name="RtssLevelOff" xml:space="preserve"><value>Off</value></data>
   <data name="RtssLevelFps" xml:space="preserve"><value>FPS</value></data>
@@ -719,17 +748,17 @@
   </data>
   <data name="RtssOsdOn" xml:space="preserve"><value>OSD on</value></data>
 
-  <data name="RtssOnlineWarning" xml:space="preserve"><value>Using RTSS in live online games may trigger anti-cheat and result in a ban. End RTSS before playing.</value></data>
+  <data name="RtssOnlineWarning" xml:space="preserve"><value>Using RTSS in live online games may trigger anti-cheat and result in a ban. Close RTSS before playing.</value></data>
 
   <data name="RtssAppHeading" xml:space="preserve"><value>RIVATUNER</value></data>
   <data name="RtssStart" xml:space="preserve"><value>Start RTSS</value></data>
   <data name="RtssOpenMenu" xml:space="preserve"><value>Open RTSS</value></data>
   <data name="RtssOpenMenuDetail" xml:space="preserve"><value>Brings up the RivaTuner Statistics Server window</value></data>
-  <data name="RtssClose" xml:space="preserve"><value>End RTSS</value></data>
+  <data name="RtssClose" xml:space="preserve"><value>Close RTSS</value></data>
   <data name="RtssCloseDetail" xml:space="preserve"><value>Stops RTSS and unhooks it until you start it again</value></data>
-  <data name="RtssClosing" xml:space="preserve"><value>Ending RTSS…</value></data>
-  <data name="RtssClosed" xml:space="preserve"><value>RTSS ended.</value></data>
-  <data name="RtssCloseFailed" xml:space="preserve"><value>Could not end RTSS. Close it from the system tray.</value></data>
+  <data name="RtssClosing" xml:space="preserve"><value>Closing RTSS…</value></data>
+  <data name="RtssClosed" xml:space="preserve"><value>RTSS closed.</value></data>
+  <data name="RtssCloseFailed" xml:space="preserve"><value>Could not close RTSS. Quit it from the system tray.</value></data>
   <data name="RtssOpenMenuFailed" xml:space="preserve"><value>Could not open the RTSS window. Open it from the system tray.</value></data>
   <data name="RtssStartWithWindowsDetail" xml:space="preserve"><value>Launches RTSS minimized after you sign in</value></data>
   <data name="RtssStartWithWindowsFailed" xml:space="preserve"><value>Could not update RTSS startup. Make sure the helper service is running.</value></data>
