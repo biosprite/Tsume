@@ -416,36 +416,53 @@ function Draw-RingGrid(
     }
 }
 
-function New-SourceLines([string]$name, [string]$units, [string]$format, [string]$formula, [string]$provider, [string]$id) {
-    return @(
-        "Name=$name"
-        "Units=$units"
-        "Format=$format"
-        "Formula=$formula"
-        "Provider=$provider"
-        "ID=$id"
-    )
+function New-SourceLines([string]$name, [string]$units, [string]$format, [string]$formula, [string]$provider, [string]$id, [int]$refresh = 0) {
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add("Name=$name")
+    $lines.Add("Units=$units")
+    $lines.Add("Format=$format")
+    $lines.Add("Formula=$formula")
+    $lines.Add("Provider=$provider")
+    $lines.Add("ID=$id")
+    if ($refresh -gt 0) { $lines.Add("RefreshPeriod=$refresh") }
+    return $lines.ToArray()
+}
+
+function Format-DynamicPos([System.Collections.Generic.HashSet[int]]$usedX, [System.Collections.Generic.HashSet[int]]$usedY, [int]$layerIdx, [int]$dx, [int]$dy, [int]$ex, [int]$ey, [int]$origin) {
+    [void]$usedX.Add($dx)
+    [void]$usedY.Add($dy)
+    # In RTSS hypertext, <P=x,y> MUST precede <L...> so the layer origin and <E=w,h,origin> box
+    # anchor at (x, y) instead of OverlayEditor's static (0, 0) layer header.
+    $tag = "<P=%PX_${dx}%,%PY_${dy}%><L$layerIdx>"
+    if ($ex -gt 0 -and $ey -gt 0) {
+        if ($origin -ne 0) { $tag += "<E=$ex,$ey,$origin>" }
+        else { $tag += "<E=$ex,$ey>" }
+    }
+    return $tag
 }
 
 function Add-SpriteLayer(
     [System.Collections.Generic.List[string[]]]$list,
+    [System.Collections.Generic.HashSet[int]]$usedX,
+    [System.Collections.Generic.HashSet[int]]$usedY,
     [string]$vis,
     [string]$name,
-    [int]$px, [int]$py,
+    [int]$dx, [int]$dy,
     [int]$sx, [int]$sy, [int]$sw, [int]$sh,
     [int]$atlasW, [int]$atlasH) {
 
     if ($sx + $sw -gt $atlasW -or $sy + $sh -gt $atlasH) {
         throw "Sprite '$name' out of stitched atlas bounds: x=$sx y=$sy w=$sw h=$sh vs ${atlasW}x${atlasH}"
     }
+    $pos = Format-DynamicPos $usedX $usedY $list.Count $dx $dy $sw $sh 0
     $list.Add(@(
         "Name=$name"
         "VisibilitySource=$vis"
-        "Text=<I=0,0,$sx,$sy,$sw,$sh>"
-        "PositionX=$px"
-        "PositionY=$py"
-        "ExtentX=$sw"
-        "ExtentY=$sh"
+        "Text=$pos<I=$sw,$sh,$sx,$sy,$sw,$sh>"
+        "PositionX=0"
+        "PositionY=0"
+        "ExtentX=0"
+        "ExtentY=0"
         "ExtentOrigin=0"
         "RefreshPeriod=$baseRefresh"
     ))
@@ -453,10 +470,12 @@ function Add-SpriteLayer(
 
 function Add-RingLayer(
     [System.Collections.Generic.List[string[]]]$list,
+    [System.Collections.Generic.HashSet[int]]$usedX,
+    [System.Collections.Generic.HashSet[int]]$usedY,
     [string]$vis,
     [string]$name,
     [hashtable]$ring,
-    [int]$px, [int]$py,
+    [int]$dx, [int]$dy,
     [int]$atlasW, [int]$atlasH) {
 
     $gridW = $ring.PerLine * $ring.Size
@@ -464,14 +483,15 @@ function Add-RingLayer(
     if ($ring.X + $gridW -gt $atlasW -or $ring.Y + $gridH -gt $atlasH) {
         throw "Ring '$name' out of stitched atlas bounds: x=$($ring.X) y=$($ring.Y) ${gridW}x${gridH} vs ${atlasW}x${atlasH}"
     }
+    $pos = Format-DynamicPos $usedX $usedY $list.Count $dx $dy $ring.Size $ring.Size 0
     $list.Add(@(
         "Name=$name"
         "VisibilitySource=$vis"
-        "Text=<AI=$($ring.Source),0,0,0,$($ring.Max),$($ring.X),$($ring.Y),$($ring.Size),$($ring.Size),$($ring.Frames),$($ring.PerLine),$($ring.Bias)>"
-        "PositionX=$px"
-        "PositionY=$py"
-        "ExtentX=$($ring.Size)"
-        "ExtentY=$($ring.Size)"
+        "Text=$pos<AI=$($ring.Source),$($ring.Size),$($ring.Size),0,$($ring.Max),$($ring.X),$($ring.Y),$($ring.Size),$($ring.Size),$($ring.Frames),$($ring.PerLine),$($ring.Bias)>"
+        "PositionX=0"
+        "PositionY=0"
+        "ExtentX=0"
+        "ExtentY=0"
         "ExtentOrigin=0"
         "RefreshPeriod=$ringRefresh"
     ))
@@ -479,20 +499,23 @@ function Add-RingLayer(
 
 function Add-GraphLayer(
     [System.Collections.Generic.List[string[]]]$list,
+    [System.Collections.Generic.HashSet[int]]$usedX,
+    [System.Collections.Generic.HashSet[int]]$usedY,
     [string]$vis,
     [string]$name,
     [string]$graphTag,
-    [int]$px, [int]$py, [int]$ex, [int]$ey,
+    [int]$dx, [int]$dy, [int]$ex, [int]$ey,
     [string]$color) {
 
+    $pos = Format-DynamicPos $usedX $usedY $list.Count $dx $dy $ex $ey 0
     $list.Add(@(
         "Name=$name"
         "VisibilitySource=$vis"
-        "Text=$graphTag"
-        "PositionX=$px"
-        "PositionY=$py"
-        "ExtentX=$ex"
-        "ExtentY=$ey"
+        "Text=$pos$graphTag"
+        "PositionX=0"
+        "PositionY=0"
+        "ExtentX=0"
+        "ExtentY=0"
         "ExtentOrigin=0"
         "TextColor=$color"
         "RefreshPeriod=$baseRefresh"
@@ -501,26 +524,29 @@ function Add-GraphLayer(
 
 function Add-TextLayer(
     [System.Collections.Generic.List[string[]]]$list,
+    [System.Collections.Generic.HashSet[int]]$usedX,
+    [System.Collections.Generic.HashSet[int]]$usedY,
     [hashtable]$theme,
     [string]$vis,
     [string]$name,
     [string]$text,
-    [int]$px, [int]$py, [int]$ex, [int]$ey, [int]$origin,
+    [int]$dx, [int]$dy, [int]$ex, [int]$ey, [int]$origin,
     [int]$size,
     [string]$color,
     [int]$refresh = $baseRefresh) {
 
     if ($theme.HasShadows) {
         foreach ($off in @(@(1, 1), @(0, 2))) {
+            $shadowPos = Format-DynamicPos $usedX $usedY $list.Count ($dx + $off[0]) ($dy + $off[1]) $ex $ey $origin
             $shadowLines = [System.Collections.Generic.List[string]]::new()
             $shadowLines.Add("Name=$name shadow")
             $shadowLines.Add("VisibilitySource=$vis")
-            $shadowLines.Add("Text=$text")
-            $shadowLines.Add("PositionX=$($px + $off[0])")
-            $shadowLines.Add("PositionY=$($py + $off[1])")
-            $shadowLines.Add("ExtentX=$ex")
-            $shadowLines.Add("ExtentY=$ey")
-            $shadowLines.Add("ExtentOrigin=$origin")
+            $shadowLines.Add("Text=$shadowPos$text")
+            $shadowLines.Add("PositionX=0")
+            $shadowLines.Add("PositionY=0")
+            $shadowLines.Add("ExtentX=0")
+            $shadowLines.Add("ExtentY=0")
+            $shadowLines.Add("ExtentOrigin=0")
             if ($size -ne 100) { $shadowLines.Add("Size=$size") }
             $shadowLines.Add('TextColor=000000')
             $shadowLines.Add("RefreshPeriod=$refresh")
@@ -528,15 +554,16 @@ function Add-TextLayer(
         }
     }
 
+    $pos = Format-DynamicPos $usedX $usedY $list.Count $dx $dy $ex $ey $origin
     $mainLines = [System.Collections.Generic.List[string]]::new()
     $mainLines.Add("Name=$name")
     $mainLines.Add("VisibilitySource=$vis")
-    $mainLines.Add("Text=$text")
-    $mainLines.Add("PositionX=$px")
-    $mainLines.Add("PositionY=$py")
-    $mainLines.Add("ExtentX=$ex")
-    $mainLines.Add("ExtentY=$ey")
-    $mainLines.Add("ExtentOrigin=$origin")
+    $mainLines.Add("Text=$pos$text")
+    $mainLines.Add("PositionX=0")
+    $mainLines.Add("PositionY=0")
+    $mainLines.Add("ExtentX=0")
+    $mainLines.Add("ExtentY=0")
+    $mainLines.Add("ExtentOrigin=0")
     if ($size -ne 100) { $mainLines.Add("Size=$size") }
     $mainLines.Add("TextColor=$color")
     $mainLines.Add("RefreshPeriod=$refresh")
@@ -669,9 +696,9 @@ foreach ($theme in $themes) {
     }
 
     # Live rolling 1% low and 0.1% low from RTSS's always-active 1024-frame Frametime ring buffer,
-    # so they stay populated in-game without starting an RTSS benchmark recording.
-    $sources.Add((New-SourceLines 'Framerate 1% Low'   'FPS' '%.0f' '1000 / percentile("Frametime", 99)'   'HAL' 'Stub'))
-    $sources.Add((New-SourceLines 'Framerate 0.1% Low' 'FPS' '%.0f' '1000 / percentile("Frametime", 99.9)' 'HAL' 'Stub'))
+    # refreshed every 1 s on the source itself so the layers stay on $baseRefresh and move in lockstep.
+    $sources.Add((New-SourceLines 'Framerate 1% Low'   'FPS' '%.0f' '1000 / percentile("Frametime", 99)'   'HAL' 'Stub' 1000))
+    $sources.Add((New-SourceLines 'Framerate 0.1% Low' 'FPS' '%.0f' '1000 / percentile("Frametime", 99.9)' 'HAL' 'Stub' 1000))
 
     # Smooth 60 FPS resource ring sources (two-stage critically damped EMA on HAL/Timer).
     $sources.Add((New-SourceLines 'CPU usage stage1'  '%' '' "if(validate(`"CPU usage stage1`"), `"CPU usage stage1`" + (`"CPU usage`" - `"CPU usage stage1`") * $ringAlpha, `"CPU usage`")"          'HAL' 'Timer'))
@@ -679,117 +706,130 @@ foreach ($theme in $themes) {
     $sources.Add((New-SourceLines 'GPU1 usage stage1' '%' '' "if(validate(`"GPU1 usage stage1`"), `"GPU1 usage stage1`" + (`"GPU1 usage`" - `"GPU1 usage stage1`") * $ringAlpha, `"GPU1 usage`")"     'HAL' 'Timer'))
     $sources.Add((New-SourceLines 'GPU1 usage smooth' '%' '' "if(validate(`"GPU1 usage smooth`"), `"GPU1 usage smooth`" + (`"GPU1 usage stage1`" - `"GPU1 usage smooth`") * $ringAlpha, `"GPU1 usage`")" 'HAL' 'Timer'))
 
-    # 3. Build layers for all four levels.
+    # 3. Build layers for all four levels using relative offsets from TSUME_POS_X / TSUME_POS_Y so
+    #    alignment presets and touchscreen dragging move every overlay live with zero RTSS restart.
     $mergedLayers = [System.Collections.Generic.List[string[]]]::new()
+    $usedRelX     = [System.Collections.Generic.HashSet[int]]::new()
+    $usedRelY     = [System.Collections.Generic.HashSet[int]]::new()
 
-    # ── Level 1: Compact FPS square (72x72, centered at x=960) ────────────────────────────────────
+    # ── Level 1: Compact FPS square (72x72) ───────────────────────────────────────────────────────
     $vis1 = 'Tsume level 1 visible'
-    Add-SpriteLayer $mergedLayers $vis1 'Panel' 924 24 $fpsPanelX $fpsPanelY $fpsPanelW $fpsPanelH $totalWidth $totalHeight
-    Add-TextLayer   $mergedLayers $theme $vis1 'FPS label' 'FPS'         924 32 72 19 4 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis1 'FPS'       '%Framerate%' 924 50 72 36 4 200 $theme.ValueHex
+    Add-SpriteLayer $mergedLayers $usedRelX $usedRelY $vis1 'Panel' 0 0 $fpsPanelX $fpsPanelY $fpsPanelW $fpsPanelH $totalWidth $totalHeight
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis1 'FPS label' 'FPS'         0 8  72 19 4 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis1 'FPS'       '%Framerate%' 0 26 72 36 4 200 $theme.ValueHex
 
-    # ── Level 2: Bar (452x72, centered at x=960) ──────────────────────────────────────────────────
+    # ── Level 2: Bar (452x72) ─────────────────────────────────────────────────────────────────────
     #    [CPU Ring] CPU / Power  |  FPS + 1% / Temp  |  GPU / Power [GPU Ring]
     $vis2 = 'Tsume level 2 visible'
-    Add-SpriteLayer $mergedLayers $vis2 'Panel' 734 24 $sleekPanelX $sleekPanelY $sleekPanelW $sleekPanelH $totalWidth $totalHeight
-    Add-RingLayer   $mergedLayers $vis2 'CPU ring' $sleekCpuRing 745 29 $totalWidth $totalHeight
-    Add-TextLayer   $mergedLayers $theme $vis2 'CPU usage'    '%CPU usage%'           745  50 62 20 4 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis2 'CPU label'    'CPU'                   809  39 66 19 4 100 $theme.CpuHex
-    Add-TextLayer   $mergedLayers $theme $vis2 'CPU power'    '%CPU power% W'         809  61 66 19 4 100 $theme.ValueHex
+    Add-SpriteLayer $mergedLayers $usedRelX $usedRelY $vis2 'Panel' 0 0 $sleekPanelX $sleekPanelY $sleekPanelW $sleekPanelH $totalWidth $totalHeight
+    Add-RingLayer   $mergedLayers $usedRelX $usedRelY $vis2 'CPU ring' $sleekCpuRing 11 5 $totalWidth $totalHeight
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 'CPU usage'    '%CPU usage%'           11  26 62 20 4 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 'CPU label'    'CPU'                   75  15 66 19 4 100 $theme.CpuHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 'CPU power'    '%CPU power% W'         75  37 66 19 4 100 $theme.ValueHex
 
-    Add-TextLayer   $mergedLayers $theme $vis2 'FPS label'    'FPS'                   891  37 0  0  0 100 $theme.FpsHex
-    Add-TextLayer   $mergedLayers $theme $vis2 'FPS'          '%Framerate%'           890  48 0  0  0 200 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis2 '1% low label' '1%'                    954  41 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis2 '1% low'       '%Framerate 1% Low%'    954  41 72 19 2 100 $theme.ValueHex 1000
-    Add-TextLayer   $mergedLayers $theme $vis2 'Temp label'   'Temp'                  954  63 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis2 'Temperature'  "%CPU temperature%$deg" 954  63 77 19 2 100 $theme.TempColor
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 'FPS label'    'FPS'                   157 13 0  0  0 100 $theme.FpsHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 'FPS'          '%Framerate%'           156 24 0  0  0 200 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 '1% low label' '1%'                    220 17 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 '1% low'       '%Framerate 1% Low%'    220 17 72 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 'Temp label'   'Temp'                  220 39 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 'Temperature'  "%CPU temperature%$deg" 220 39 77 19 2 100 $theme.TempColor
 
-    Add-TextLayer   $mergedLayers $theme $vis2 'GPU label'    'GPU'                   1045 39 66 19 4 100 $theme.GpuHex
-    Add-TextLayer   $mergedLayers $theme $vis2 'GPU power'    '%GPU1 power% W'        1045 61 66 19 4 100 $theme.ValueHex
-    Add-RingLayer   $mergedLayers $vis2 'GPU ring' $sleekGpuRing 1113 29 $totalWidth $totalHeight
-    Add-TextLayer   $mergedLayers $theme $vis2 'GPU usage'    '%GPU1 usage%'          1113 50 62 20 4 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 'GPU label'    'GPU'                   311 15 66 19 4 100 $theme.GpuHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 'GPU power'    '%GPU1 power% W'        311 37 66 19 4 100 $theme.ValueHex
+    Add-RingLayer   $mergedLayers $usedRelX $usedRelY $vis2 'GPU ring' $sleekGpuRing 379 5 $totalWidth $totalHeight
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 'GPU usage'    '%GPU1 usage%'          379 26 62 20 4 100 $theme.ValueHex
 
-    # ── Level 3: Detail (686x93, centered at x=960) ───────────────────────────────────────────────
+    # ── Level 3: Detail (686x93) ──────────────────────────────────────────────────────────────────
     #    [CPU Ring] CPU + Power/Clock/RAM | [GPU Ring] GPU + Power/Clock/VRAM | FPS/Temp + lows + graph
     $vis3 = 'Tsume level 3 visible'
-    Add-SpriteLayer $mergedLayers $vis3 'Panel' 617 24 $compactPanelX $compactPanelY $compactPanelW $compactPanelH $totalWidth $totalHeight
+    Add-SpriteLayer $mergedLayers $usedRelX $usedRelY $vis3 'Panel' 0 0 $compactPanelX $compactPanelY $compactPanelW $compactPanelH $totalWidth $totalHeight
 
-    Add-RingLayer   $mergedLayers $vis3 'CPU ring' $compactCpuRing 629 37 $totalWidth $totalHeight
-    Add-TextLayer   $mergedLayers $theme $vis3 'CPU usage'       '%CPU usage%'         629 60 67  20 4 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'CPU label'       'CPU'                 708 32 0   0  0 100 $theme.CpuHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'CPU Power label' 'Power'               708 51 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'CPU Power'       '%CPU power% W'       708 51 127 19 2 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'CPU Clock label' 'Clock'               708 70 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'CPU Clock'       '%CPU clock% GHz'     708 70 127 19 2 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'CPU RAM label'   'RAM'                 708 89 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'CPU RAM'         '%RAM usage% GB'      708 89 127 19 2 100 $theme.ValueHex
+    Add-RingLayer   $mergedLayers $usedRelX $usedRelY $vis3 'CPU ring' $compactCpuRing 12 13 $totalWidth $totalHeight
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'CPU usage'       '%CPU usage%'         12  36 67  20 4 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'CPU label'       'CPU'                 91  8  0   0  0 100 $theme.CpuHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'CPU Power label' 'Power'               91  27 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'CPU Power'       '%CPU power% W'       91  27 127 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'CPU Clock label' 'Clock'               91  46 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'CPU Clock'       '%CPU clock% GHz'     91  46 127 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'CPU RAM label'   'RAM'                 91  65 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'CPU RAM'         '%RAM usage% GB'      91  65 127 19 2 100 $theme.ValueHex
 
-    Add-RingLayer   $mergedLayers $vis3 'GPU ring' $compactGpuRing 863 37 $totalWidth $totalHeight
-    Add-TextLayer   $mergedLayers $theme $vis3 'GPU usage'       '%GPU1 usage%'        863 60 67  20 4 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'GPU label'       'GPU'                 942 32 0   0  0 100 $theme.GpuHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'GPU Power label' 'Power'               942 51 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'GPU Power'       '%GPU1 power% W'      942 51 127 19 2 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'GPU Clock label' 'Clock'               942 70 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'GPU Clock'       '%GPU clock% GHz'     942 70 127 19 2 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'GPU VRAM label'  'VRAM'                942 89 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'GPU VRAM'        '%GPU1 memory usage% GB' 942 89 127 19 2 100 $theme.ValueHex
+    Add-RingLayer   $mergedLayers $usedRelX $usedRelY $vis3 'GPU ring' $compactGpuRing 246 13 $totalWidth $totalHeight
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'GPU usage'       '%GPU1 usage%'        246 36 67  20 4 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'GPU label'       'GPU'                 325 8  0   0  0 100 $theme.GpuHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'GPU Power label' 'Power'               325 27 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'GPU Power'       '%GPU1 power% W'      325 27 127 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'GPU Clock label' 'Clock'               325 46 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'GPU Clock'       '%GPU clock% GHz'     325 46 127 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'GPU VRAM label'  'VRAM'                325 65 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'GPU VRAM'        '%GPU1 memory usage% GB' 325 65 127 19 2 100 $theme.ValueHex
 
-    Add-TextLayer   $mergedLayers $theme $vis3 'FPS label'       'FPS'                  1095 32 0   0  0 100 $theme.FpsHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'FPS'             '%Framerate%'          1094 42 0   0  0 200 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'Temp label'      'Temp'                 1095 74 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'Temperature'     "%CPU temperature%$deg" 1138 74 0  0  0 100 $theme.TempColor
-    Add-TextLayer   $mergedLayers $theme $vis3 '1% label'        '1%'                   1180 32 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 '1%'              '%Framerate 1% Low%'   1209 32 80  19 2 100 $theme.ValueHex 1000
-    Add-TextLayer   $mergedLayers $theme $vis3 '0.1% label'      '0.1%'                 1180 53 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 '0.1%'            '%Framerate 0.1% Low%' 1209 53 80  19 2 100 $theme.ValueHex 1000
-    Add-TextLayer   $mergedLayers $theme $vis3 'FT label'        'FT'                   1180 74 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis3 'FT'              '<FT> ms'              1209 74 80  19 2 100 $theme.ValueHex
-    Add-GraphLayer  $mergedLayers $vis3 'Frametime graph' '<G=Frametime,0,0,1,0,40,0>'  1095 97 194 12 $theme.FpsHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'FPS label'       'FPS'                  478 8  0   0  0 100 $theme.FpsHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'FPS'             '%Framerate%'          477 18 0   0  0 200 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'Temp label'      'Temp'                 478 50 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'Temperature'     "%CPU temperature%$deg" 521 50 0  0  0 100 $theme.TempColor
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 '1% label'        '1%'                   563 8  0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 '1%'              '%Framerate 1% Low%'   592 8  80  19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 '0.1% label'      '0.1%'                 563 29 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 '0.1%'            '%Framerate 0.1% Low%' 592 29 80  19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'FT label'        'FT'                   563 50 0   0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'FT'              '<FT> ms'              592 50 80  19 2 100 $theme.ValueHex
+    Add-GraphLayer  $mergedLayers $usedRelX $usedRelY $vis3 'Frametime graph' '<G=Frametime,0,0,1,0,40,0>'  478 73 194 12 $theme.FpsHex
 
-    # ── Level 4: Full side panel (225x504, top-right at x=1671, y=160) ────────────────────────────
+    # ── Level 4: Full side panel (225x504) ────────────────────────────────────────────────────────
     #    Header: FPS, Temp, 1% low, 0.1% low, Frametime, graph
     #    CPU: Load, Power, Clock, RAM, graph
     #    GPU: Load, Power, Clock, Voltage, Fan, VRAM, graph
     $vis4 = 'Tsume level 4 visible'
-    Add-SpriteLayer $mergedLayers $vis4 'Panel' 1671 160 $perfPanelX $perfPanelY $perfPanelW $perfPanelH $totalWidth $totalHeight
+    Add-SpriteLayer $mergedLayers $usedRelX $usedRelY $vis4 'Panel' 0 0 $perfPanelX $perfPanelY $perfPanelW $perfPanelH $totalWidth $totalHeight
 
-    Add-TextLayer   $mergedLayers $theme $vis4 'FPS label'        'FPS'                  1687 171 0  0  0 100 $theme.FpsHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'FPS'              '%Framerate%'          1686 181 0  0  0 200 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'Temp label'       'Temp'                 1687 216 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'Temperature'      "%CPU temperature%$deg" 1786 216 98 19 2 100 $theme.TempColor
-    Add-TextLayer   $mergedLayers $theme $vis4 '1% low label'     '1% low'               1687 236 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 '1% low'           '%Framerate 1% Low%'   1789 236 90 19 2 100 $theme.ValueHex 1000
-    Add-TextLayer   $mergedLayers $theme $vis4 '0.1% low label'   '0.1% low'             1687 256 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 '0.1% low'         '%Framerate 0.1% Low%' 1789 256 90 19 2 100 $theme.ValueHex 1000
-    Add-TextLayer   $mergedLayers $theme $vis4 'Frametime label'  'Frametime'            1687 276 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'Frametime'        '<FT> ms'              1789 276 90 19 2 100 $theme.ValueHex
-    Add-GraphLayer  $mergedLayers $vis4 'Frametime graph' '<G=Frametime,0,0,1,0,40,10>'  1687 299 192 19 $theme.FpsHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'FPS label'        'FPS'                  16  11  0  0  0 100 $theme.FpsHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'FPS'              '%Framerate%'          15  21  0  0  0 200 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'Temp label'       'Temp'                 16  56  0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'Temperature'      "%CPU temperature%$deg" 115 56 98 19 2 100 $theme.TempColor
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 '1% low label'     '1% low'               16  76  0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 '1% low'           '%Framerate 1% Low%'   118 76  90 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 '0.1% low label'   '0.1% low'             16  96  0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 '0.1% low'         '%Framerate 0.1% Low%' 118 96  90 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'Frametime label'  'Frametime'            16  116 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'Frametime'        '<FT> ms'              118 116 90 19 2 100 $theme.ValueHex
+    Add-GraphLayer  $mergedLayers $usedRelX $usedRelY $vis4 'Frametime graph' '<G=Frametime,0,0,1,0,40,10>'  16  139 192 19 $theme.FpsHex
 
-    Add-TextLayer   $mergedLayers $theme $vis4 'CPU label'        'CPU'                  1687 338 0  0  0 100 $theme.CpuHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'CPU Load label'   'Load'                 1687 359 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'CPU Load'         '%CPU usage%%'         1781 359 98 19 2 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'CPU Power label'  'Power'                1687 379 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'CPU Power'        '%CPU power% W'        1781 379 98 19 2 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'CPU Clock label'  'Clock'                1687 399 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'CPU Clock'        '%CPU clock% GHz'      1781 399 98 19 2 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'CPU RAM label'    'RAM'                  1687 419 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'CPU RAM'          '%RAM usage% GB'       1781 419 98 19 2 100 $theme.ValueHex
-    Add-GraphLayer  $mergedLayers $vis4 'CPU usage graph' '<G=CPU usage,0,0,1,0,100,10>' 1687 441 192 16 $theme.CpuHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'CPU label'        'CPU'                  16  178 0  0  0 100 $theme.CpuHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'CPU Load label'   'Load'                 16  199 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'CPU Load'         '%CPU usage%%'         110 199 98 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'CPU Power label'  'Power'                16  219 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'CPU Power'        '%CPU power% W'        110 219 98 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'CPU Clock label'  'Clock'                16  239 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'CPU Clock'        '%CPU clock% GHz'      110 239 98 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'CPU RAM label'    'RAM'                  16  259 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'CPU RAM'          '%RAM usage% GB'       110 259 98 19 2 100 $theme.ValueHex
+    Add-GraphLayer  $mergedLayers $usedRelX $usedRelY $vis4 'CPU usage graph' '<G=CPU usage,0,0,1,0,100,10>' 16  281 192 16 $theme.CpuHex
 
-    Add-TextLayer   $mergedLayers $theme $vis4 'GPU label'        'GPU'                  1687 476 0  0  0 100 $theme.GpuHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'GPU Load label'   'Load'                 1687 497 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'GPU Load'         '%GPU1 usage%%'        1781 497 98 19 2 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'GPU Power label'  'Power'                1687 517 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'GPU Power'        '%GPU1 power% W'       1781 517 98 19 2 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'GPU Clock label'  'Clock'                1687 537 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'GPU Clock'        '%GPU clock% GHz'      1781 537 98 19 2 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'GPU Voltage label' 'Voltage'             1687 557 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'GPU Voltage'      '%GPU core voltage% V' 1781 557 98 19 2 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'GPU Fan label'    'Fan'                  1687 577 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'GPU Fan'          '%GPU fan% rpm'        1781 577 98 19 2 100 $theme.ValueHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'GPU VRAM label'   'VRAM'                 1687 597 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $theme $vis4 'GPU VRAM'         '%GPU1 memory usage% GB' 1781 597 98 19 2 100 $theme.ValueHex
-    Add-GraphLayer  $mergedLayers $vis4 'GPU usage graph' '<G=GPU1 usage,0,0,1,0,100,10>' 1687 620 192 16 $theme.GpuHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'GPU label'        'GPU'                  16  316 0  0  0 100 $theme.GpuHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'GPU Load label'   'Load'                 16  337 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'GPU Load'         '%GPU1 usage%%'        110 337 98 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'GPU Power label'  'Power'                16  357 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'GPU Power'        '%GPU1 power% W'       110 357 98 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'GPU Clock label'  'Clock'                16  377 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'GPU Clock'        '%GPU clock% GHz'      110 377 98 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'GPU Voltage label' 'Voltage'             16  397 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'GPU Voltage'      '%GPU core voltage% V' 110 397 98 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'GPU Fan label'    'Fan'                  16  417 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'GPU Fan'          '%GPU fan% rpm'        110 417 98 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'GPU VRAM label'   'VRAM'                 16  437 0  0  0 100 $theme.MutedHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'GPU VRAM'         '%GPU1 memory usage% GB' 110 437 98 19 2 100 $theme.ValueHex
+    Add-GraphLayer  $mergedLayers $usedRelX $usedRelY $vis4 'GPU usage graph' '<G=GPU1 usage,0,0,1,0,100,10>' 16  460 192 16 $theme.GpuHex
+
+    # Dynamic position offset sources backed by TSUME_POS_X / TSUME_POS_Y in AIDA64_SensorValues.
+    foreach ($dx in ($usedRelX | Sort-Object)) {
+        $formula = if ($dx -eq 0) { 'validate(x) ? x : 24' } else { "(validate(x) ? x : 24) + $dx" }
+        $sources.Add((New-SourceLines "PX_$dx" '' '%.0f' $formula 'AIDA' 'TSUME_POS_X'))
+    }
+    foreach ($dy in ($usedRelY | Sort-Object)) {
+        $formula = if ($dy -eq 0) { 'validate(x) ? x : 24' } else { "(validate(x) ? x : 24) + $dy" }
+        $sources.Add((New-SourceLines "PY_$dy" '' '%.0f' $formula 'AIDA' 'TSUME_POS_Y'))
+    }
 
     if ($mergedLayers.Count -gt $maxLayers) {
         throw "$($theme.Folder): merged layer count $($mergedLayers.Count) exceeds MAX_LAYERS ($maxLayers)"

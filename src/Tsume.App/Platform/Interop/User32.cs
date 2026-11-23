@@ -8,6 +8,7 @@ internal static partial class User32
     public const int GWL_EXSTYLE = -20;
     public const int WS_EX_TOOLWINDOW = 0x0000_0080;
     public const int WS_EX_TOPMOST = 0x0000_0008;
+    public const int WS_EX_NOACTIVATE = 0x0800_0000;
 
     [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
     public static partial nint GetWindowLongPtr(nint window, int index);

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using Microsoft.Win32;
+using Tsume.App.Platform.Interop;
 using Tsume.Core.Devices;
 using Tsume.Core.Diagnostics;
 using Tsume.Core.Ipc;
@@ -41,6 +42,7 @@ public sealed class RtssOverlayService : IDisposable
     private double? _lastGpuWatts;
     private double? _lastCpuClockMhz;
     private double? _lastGpuVramMb;
+    private (int X, int Y)? _dragOverridePos;
     private bool _disposed;
 
     public RtssOverlayService(HelperClient helper, SavedState state)
@@ -56,6 +58,9 @@ public sealed class RtssOverlayService : IDisposable
     /// <summary>Raised (off the UI thread) when <see cref="SharedMemoryConflict"/> changes.</summary>
     public event Action? ConflictChanged;
 
+    /// <summary>Raised whenever overlay visibility, level, placement, or touch-drag preference changes.</summary>
+    public event Action? OverlayStateChanged;
+
     public RtssSettings Settings => _settings;
 
     public RtssInstallInfo? Install => _install;
@@ -67,6 +72,80 @@ public sealed class RtssOverlayService : IDisposable
 
     private bool IsOverlayVisibleWanted => IsOverlayPluginWanted && _settings.Level != RtssOverlayLevel.Off;
 
+    /// <summary>True when Tsume's own overlay is enabled and a non-Off level is selected.</summary>
+    public bool IsTsumeOverlayActive => IsOverlayVisibleWanted;
+
+    /// <summary>Primary display dimensions in physical pixels (matching RTSS's 1:1 coordinate space).</summary>
+    public static (int Width, int Height) GetScreenPixels()
+    {
+        var w = User32.GetSystemMetrics(User32.SM_CXSCREEN);
+        var h = User32.GetSystemMetrics(User32.SM_CYSCREEN);
+        return w > 0 && h > 0 ? (w, h) : (1920, 1200);
+    }
+
+    /// <summary>
+    /// Current screen-pixel bounding box of the active Tsume overlay, or null when no Tsume overlay is shown.
+    /// </summary>
+    public (RtssOverlayLevel Level, int X, int Y, int Width, int Height, int ScreenWidth, int ScreenHeight)? GetActiveOverlayRect()
+    {
+        if (!IsOverlayVisibleWanted) return null;
+        var level = _settings.Level;
+        var (w, h) = RtssOverlayMetrics.GetSize(level);
+        if (w <= 0 || h <= 0) return null;
+
+        var (sw, sh) = GetScreenPixels();
+        var (x, y) = ResolveActivePosition(level, sw, sh);
+        return (level, x, y, w, h, sw, sh);
+    }
+
+    /// <summary>Streams a live pixel position to RTSS while the user is actively dragging the overlay.</summary>
+    public void SetLiveDragPosition(int x, int y)
+    {
+        if (_disposed || !IsOverlayVisibleWanted) return;
+
+        var (w, h) = RtssOverlayMetrics.GetSize(_settings.Level);
+        var (sw, sh) = GetScreenPixels();
+        var cx = Math.Clamp(x, 0, Math.Max(0, sw - w));
+        var cy = Math.Clamp(y, 0, Math.Max(0, sh - h));
+
+        lock (_gate) _dragOverridePos = (cx, cy);
+        ApplyLiveLevelState();
+    }
+
+    /// <summary>Saves the final dragged placement for <paramref name="level"/> and publishes it immediately.</summary>
+    public void CommitDragPlacement(RtssOverlayLevel level, RtssOverlayPlacement placement)
+    {
+        lock (_gate) _dragOverridePos = null;
+        if (level == RtssOverlayLevel.Off) return;
+
+        ApplySettings(_settings.WithPlacement(level, placement));
+    }
+
+    /// <summary>Clears any in-flight live drag override and restores the saved placement.</summary>
+    public void CancelDrag()
+    {
+        bool hadOverride;
+        lock (_gate)
+        {
+            hadOverride = _dragOverridePos is not null;
+            _dragOverridePos = null;
+        }
+
+        if (hadOverride) ApplyLiveLevelState();
+    }
+
+    private (int X, int Y) ResolveActivePosition(RtssOverlayLevel level, int screenWidth, int screenHeight)
+    {
+        lock (_gate)
+        {
+            if (_dragOverridePos is { } live)
+                return live;
+        }
+
+        var placement = _settings.GetPlacement(level);
+        return RtssOverlayMetrics.ResolvePosition(level, placement, screenWidth, screenHeight);
+    }
+
     /// <summary>Checks the overlay setup once at start-up (and clears any slot left by older Tsume versions).</summary>
     public void StartIfEnabled()
     {
@@ -77,6 +156,7 @@ public sealed class RtssOverlayService : IDisposable
             _ = Task.Run(() => SyncAntiCheatExclusionsAsync());
 
         ApplyLiveLevelState();
+        OverlayStateChanged?.Invoke();
 
         if (install is not null) _ = Task.Run(() => SyncOverlayPluginAsync(autoStartIfWanted: true));
     }
@@ -86,6 +166,7 @@ public sealed class RtssOverlayService : IDisposable
     {
         CancelThemeDebounce();
         ApplyLiveLevelState();
+        OverlayStateChanged?.Invoke();
         _ = Task.Run(() => SyncOverlayPluginAsync());
     }
 
@@ -341,8 +422,10 @@ public sealed class RtssOverlayService : IDisposable
         var pluginChanged = previous.UseTsumeOverlay != next.UseTsumeOverlay;
         var themeChanged = previous.Theme != next.Theme;
         var levelChanged = previous.Level != next.Level;
+        var touchDragChanged = previous.TouchDragEnabled != next.TouchDragEnabled;
+        var placementChanged = !Equals(previous.GetPlacement(next.Level), next.GetPlacement(next.Level));
 
-        if (pluginChanged || levelChanged)
+        if (pluginChanged || levelChanged || placementChanged)
             ApplyLiveLevelState(ensureOsdVisible: levelChanged && next.Level != RtssOverlayLevel.Off);
 
         if (pluginChanged)
@@ -354,6 +437,9 @@ public sealed class RtssOverlayService : IDisposable
         {
             ScheduleDebouncedPluginSync();
         }
+
+        if (pluginChanged || levelChanged || placementChanged || touchDragChanged)
+            OverlayStateChanged?.Invoke();
     }
 
     private void ApplyLiveLevelState(bool ensureOsdVisible = false)
@@ -385,8 +471,10 @@ public sealed class RtssOverlayService : IDisposable
         }
 
         var (tempWarnC, tempHotC) = CurrentTempThresholds();
+        var (sw, sh) = GetScreenPixels();
+        var (posX, posY) = ResolveActivePosition(level, sw, sh);
         var published = _aida.TryPublish(
-            new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb, tempWarnC, tempHotC),
+            new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb, tempWarnC, tempHotC, posX, posY),
             _install?.Folder);
         CheckConflictChanged();
 
@@ -458,7 +546,11 @@ public sealed class RtssOverlayService : IDisposable
                     if (level < RtssOverlayLevel.Bar)
                     {
                         // FPS-only mode needs no sensor polling; just retry claiming AIDA64_SensorValues until owned.
-                        var claimed = _aida.TryPublish(new AidaSensorSnapshot((int)level), _install?.Folder);
+                        var (fpsSw, fpsSh) = GetScreenPixels();
+                        var (fpsPosX, fpsPosY) = ResolveActivePosition(level, fpsSw, fpsSh);
+                        var claimed = _aida.TryPublish(
+                            new AidaSensorSnapshot((int)level, PosX: fpsPosX, PosY: fpsPosY),
+                            _install?.Folder);
                         CheckConflictChanged();
                         if (claimed) break;
 
@@ -498,8 +590,10 @@ public sealed class RtssOverlayService : IDisposable
                     if (level == RtssOverlayLevel.Off) break;
 
                     var (tempWarnC, tempHotC) = CurrentTempThresholds();
+                    var (sw, sh) = GetScreenPixels();
+                    var (posX, posY) = ResolveActivePosition(level, sw, sh);
                     var ok = _aida.TryPublish(
-                        new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb, tempWarnC, tempHotC),
+                        new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb, tempWarnC, tempHotC, posX, posY),
                         _install?.Folder);
                     CheckConflictChanged();
 

@@ -52,6 +52,8 @@ public static class Glyphs
     public const string Plugin      = "\uEA86";   // puzzle piece (ASI plugin)
     public const string Counter     = "";   // heartbeat line
     public const string Overlay     = "\uE9D2";   // vertical metric bars (performance overlay)
+    public const string Move        = "\uE7C2";   // four-way arrows (drag / position)
+    public const string Touch       = "\uE815";   // touch pointer
     public const string Shield      = "\uEA18";   // shield (anti-cheat protection)
     public const string Warning     = "\uE7BA";   // warning triangle
     public const string Info        = "\uE946";   // circled info i

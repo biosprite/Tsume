@@ -1,0 +1,152 @@
+<Window x:Class="Tsume.App.Shell.RtssOverlayDragWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:theme="clr-namespace:Tsume.App.Theme"
+        xmlns:lang="clr-namespace:Tsume.App.Language"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        ResizeMode="NoResize"
+        Focusable="False">
+
+  <Grid x:Name="Root">
+
+    <!-- Subtle backdrop shown only in interactive "Drag on screen" mode; tapping it finishes positioning. -->
+    <Border x:Name="Scrim"
+            Background="#33000000"
+            Opacity="0"
+            Visibility="Collapsed"
+            IsHitTestVisible="True" />
+
+    <!-- Full-screen canvas holding the 9 alignment anchor dots and the smooth GPU-translated overlay frame. -->
+    <Canvas x:Name="DragCanvas" ClipToBounds="False">
+
+      <!-- 9 subtle snap anchor indicators (populated in code-behind for the active overlay size). -->
+      <Canvas x:Name="SnapDotsLayer" IsHitTestVisible="True" Opacity="0" />
+
+      <!-- Hit-testable overlay frame: invisible (#01000000) in standby mode, crisp glass+accent while dragging. -->
+      <Border x:Name="OverlayBox"
+              Background="#01000000"
+              CornerRadius="10"
+              BorderThickness="2"
+              BorderBrush="Transparent"
+              Cursor="SizeAll"
+              IsManipulationEnabled="False">
+        <Border.RenderTransform>
+          <TranslateTransform x:Name="BoxTranslate" X="0" Y="0" />
+        </Border.RenderTransform>
+
+        <Grid x:Name="BoxChrome" Opacity="0" IsHitTestVisible="False">
+          <Border CornerRadius="8" Background="{x:Static theme:Accent.Tint}" />
+
+          <!-- Subtle center move icon when interactive or dragging. -->
+          <Border Width="28" Height="28" CornerRadius="14"
+                  Background="#B0141418"
+                  HorizontalAlignment="Center" VerticalAlignment="Center">
+            <TextBlock Style="{StaticResource Text.Icon}"
+                       FontSize="13"
+                       Foreground="{x:Static theme:Accent.Brush}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Text="{x:Static theme:Glyphs.Move}" />
+          </Border>
+        </Grid>
+      </Border>
+
+      <!-- Live alignment / coordinate pill that tracks beside the dragged overlay. -->
+      <Border x:Name="PositionBadge"
+              Background="#D916161C"
+              BorderBrush="{x:Static theme:Accent.Brush}"
+              BorderThickness="1"
+              CornerRadius="12"
+              Padding="10,4"
+              Opacity="0"
+              IsHitTestVisible="False">
+        <Border.RenderTransform>
+          <TranslateTransform x:Name="BadgeTranslate" X="0" Y="0" />
+        </Border.RenderTransform>
+        <TextBlock x:Name="BadgeText"
+                   Style="{StaticResource Text.Caption}"
+                   Foreground="#F5F5F7"
+                   FontWeight="SemiBold" />
+      </Border>
+
+    </Canvas>
+
+    <!-- Bottom floating toolbar shown only during explicit "Drag on screen" mode. -->
+    <Border x:Name="ActionBar"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            Margin="0,0,0,28"
+            Background="#E616161C"
+            BorderBrush="{DynamicResource Panel.Edge}"
+            BorderThickness="1"
+            CornerRadius="22"
+            Padding="16,8,10,8"
+            Opacity="0"
+            Visibility="Collapsed">
+      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <TextBlock Style="{StaticResource Text.Caption}"
+                   Foreground="#E5E5EA"
+                   VerticalAlignment="Center"
+                   Margin="0,0,14,0"
+                   Text="{x:Static lang:Strings.RtssDragHint}" />
+
+        <Button x:Name="ResetButton"
+                Content="{x:Static lang:Strings.RtssDragReset}"
+                Margin="0,0,8,0"
+                Padding="14,6"
+                Cursor="Hand"
+                FocusVisualStyle="{x:Null}"
+                Foreground="#F5F5F7"
+                Background="#28FFFFFF"
+                BorderThickness="0"
+                FontFamily="Segoe UI Variable Text, Segoe UI"
+                FontSize="13"
+                FontWeight="SemiBold">
+          <Button.Template>
+            <ControlTemplate TargetType="Button">
+              <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="14" Padding="{TemplateBinding Padding}">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter TargetName="Bg" Property="Background" Value="#3DFFFFFF" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Button.Template>
+        </Button>
+
+        <Button x:Name="DoneButton"
+                Content="{x:Static lang:Strings.RtssDragDone}"
+                Padding="16,6"
+                Cursor="Hand"
+                FocusVisualStyle="{x:Null}"
+                Foreground="#FFFFFF"
+                Background="{x:Static theme:Accent.Brush}"
+                BorderThickness="0"
+                FontFamily="Segoe UI Variable Text, Segoe UI"
+                FontSize="13"
+                FontWeight="SemiBold">
+          <Button.Template>
+            <ControlTemplate TargetType="Button">
+              <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="14" Padding="{TemplateBinding Padding}">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter TargetName="Bg" Property="Opacity" Value="0.88" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Button.Template>
+        </Button>
+      </StackPanel>
+    </Border>
+
+  </Grid>
+
+</Window>

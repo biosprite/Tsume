@@ -56,6 +56,7 @@ public sealed class PanelViewModel : IDisposable
     public PadModeViewModel PadMode { get; }
     public UpscalingViewModel Upscaling { get; }
     public RtssViewModel Rtss { get; }
+    public RtssOverlayService RtssService => _rtssService;
 
     public QuitViewModel Quit { get; }
 

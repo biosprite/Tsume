@@ -44,6 +44,7 @@ public sealed class RtssViewModel : LayerViewModel
         // Tsume restarts RTSS when the overlay theme changes or Tsume's overlay is toggled; show the new state once it is back.
         _service.Restarted += () => Application.Current?.Dispatcher.InvokeAsync(RefreshState);
         _service.ConflictChanged += () => Application.Current?.Dispatcher.InvokeAsync(NotifyConflict);
+        _service.OverlayStateChanged += () => Application.Current?.Dispatcher.InvokeAsync(SyncPlacementState);
 
         _capSettle.Tick += (_, _) => { _capSettle.Stop(); ApplyFrameRateLimit(CustomCap); };
 
@@ -122,11 +123,41 @@ public sealed class RtssViewModel : LayerViewModel
         ToggleStartWithWindows = new Command(async () => await ToggleStartWithWindowsAsync());
         ToggleSkipAntiCheat = new Command(async () => await ToggleSkipAntiCheatAsync());
 
+        MoveOverlay = new Command(async () =>
+        {
+            if (!IsTsumeOverlayShown) return;
+            await _dismiss();
+            MoveOverlayRequested?.Invoke();
+        });
+
+        ToggleTouchDrag = new Command(() =>
+        {
+            var next = _service.Settings with { TouchDragEnabled = !TouchDragEnabled };
+            _service.ApplySettings(next);
+            SyncPlacementState();
+        });
+
+        AlignmentOptions =
+        [
+            new(RtssOverlayAlignment.TopLeft,      Strings.RtssAlignTopLeft,      HorizontalAlignment.Left,   VerticalAlignment.Top,    SelectAlignment),
+            new(RtssOverlayAlignment.TopCenter,    Strings.RtssAlignTopCenter,    HorizontalAlignment.Center, VerticalAlignment.Top,    SelectAlignment),
+            new(RtssOverlayAlignment.TopRight,     Strings.RtssAlignTopRight,     HorizontalAlignment.Right,  VerticalAlignment.Top,    SelectAlignment),
+            new(RtssOverlayAlignment.MiddleLeft,   Strings.RtssAlignMiddleLeft,   HorizontalAlignment.Left,   VerticalAlignment.Center, SelectAlignment),
+            new(RtssOverlayAlignment.Center,       Strings.RtssAlignCenter,       HorizontalAlignment.Center, VerticalAlignment.Center, SelectAlignment),
+            new(RtssOverlayAlignment.MiddleRight,  Strings.RtssAlignMiddleRight,  HorizontalAlignment.Right,  VerticalAlignment.Center, SelectAlignment),
+            new(RtssOverlayAlignment.BottomLeft,   Strings.RtssAlignBottomLeft,   HorizontalAlignment.Left,   VerticalAlignment.Bottom, SelectAlignment),
+            new(RtssOverlayAlignment.BottomCenter, Strings.RtssAlignBottomCenter, HorizontalAlignment.Center, VerticalAlignment.Bottom, SelectAlignment),
+            new(RtssOverlayAlignment.BottomRight,  Strings.RtssAlignBottomRight,  HorizontalAlignment.Right,  VerticalAlignment.Bottom, SelectAlignment),
+        ];
+
         SyncFromService();
     }
 
     /// <summary>Raised when sections appear or disappear, so the screen can keep focus valid.</summary>
     public event Action? Settled;
+
+    /// <summary>Raised when the user clicks "Drag on screen" to position the active FPS overlay interactively.</summary>
+    public event Action? MoveOverlayRequested;
 
     public ICommand OpenDownloadPage { get; }
     public ICommand InstallAutomatically { get; }
@@ -144,6 +175,10 @@ public sealed class RtssViewModel : LayerViewModel
     public ICommand CloseRtss { get; }
     public ICommand ToggleStartWithWindows { get; }
     public ICommand ToggleSkipAntiCheat { get; }
+    public ICommand MoveOverlay { get; }
+    public ICommand ToggleTouchDrag { get; }
+
+    public IReadOnlyList<OverlayAlignmentOption> AlignmentOptions { get; }
 
     public IReadOnlyList<string> Levels { get; } =
     [
@@ -465,17 +500,71 @@ public sealed class RtssViewModel : LayerViewModel
 
             Notify(nameof(LevelDetail));
             Notify(nameof(IsTsumeOverlayShown));
+            Notify(nameof(PositionHeading));
+            Notify(nameof(MoveOverlayDetail));
             NotifyTile();
 
-            if (_absorbing) return;
+            if (!_absorbing)
+            {
+                _service.ApplySettings(_service.Settings with { Level = (RtssOverlayLevel)clamped });
+                if (clamped > 0 && IsInstalled && !IsRunning) _ = StartRtssAsync();
+                Status = DefaultStatus();
+            }
 
-            _service.ApplySettings(_service.Settings with { Level = (RtssOverlayLevel)clamped });
-            if (clamped > 0 && IsInstalled && !IsRunning) _ = StartRtssAsync();
-            Status = DefaultStatus();
+            SyncPlacementState();
         }
     }
 
     public bool IsTsumeOverlayShown => UseTsumeOverlay && LevelIndex > 0;
+
+    public string PositionHeading =>
+        LevelIndex > 0 && LevelIndex < Levels.Count ? Strings.RtssPositionHeading(Levels[LevelIndex]) : "";
+
+    public string MoveOverlayDetail =>
+        LevelIndex > 0 && LevelIndex < Levels.Count ? Strings.RtssMoveOverlayDetail(Levels[LevelIndex]) : "";
+
+    public string ActiveAlignmentLabel { get; private set => Set(ref field, value); } = "";
+
+    public bool TouchDragEnabled { get; private set => Set(ref field, value); } = true;
+
+    private void SelectAlignment(RtssOverlayAlignment alignment)
+    {
+        var level = (RtssOverlayLevel)LevelIndex;
+        if (level == RtssOverlayLevel.Off) return;
+
+        var next = _service.Settings.WithPlacement(level, new RtssOverlayPlacement(alignment));
+        _service.ApplySettings(next);
+        SyncPlacementState();
+    }
+
+    private void SyncPlacementState()
+    {
+        var settings = _service.Settings;
+        TouchDragEnabled = settings.TouchDragEnabled;
+
+        var level = (RtssOverlayLevel)LevelIndex;
+        var alignment = level == RtssOverlayLevel.Off
+            ? RtssOverlayAlignment.TopCenter
+            : settings.GetPlacement(level).Alignment;
+
+        ActiveAlignmentLabel = FormatAlignment(alignment);
+        foreach (var option in AlignmentOptions)
+            option.IsSelected = option.Alignment == alignment;
+    }
+
+    public static string FormatAlignment(RtssOverlayAlignment alignment) => alignment switch
+    {
+        RtssOverlayAlignment.TopLeft      => Strings.RtssAlignTopLeft,
+        RtssOverlayAlignment.TopCenter    => Strings.RtssAlignTopCenter,
+        RtssOverlayAlignment.TopRight     => Strings.RtssAlignTopRight,
+        RtssOverlayAlignment.MiddleLeft   => Strings.RtssAlignMiddleLeft,
+        RtssOverlayAlignment.Center       => Strings.RtssAlignCenter,
+        RtssOverlayAlignment.MiddleRight  => Strings.RtssAlignMiddleRight,
+        RtssOverlayAlignment.BottomLeft   => Strings.RtssAlignBottomLeft,
+        RtssOverlayAlignment.BottomCenter => Strings.RtssAlignBottomCenter,
+        RtssOverlayAlignment.BottomRight  => Strings.RtssAlignBottomRight,
+        _                                 => Strings.RtssAlignCustom,
+    };
 
     public bool HasSharedMemoryConflict => UseTsumeOverlay && _service.SharedMemoryConflict != AidaConflictKind.None;
 
@@ -708,6 +797,7 @@ public sealed class RtssViewModel : LayerViewModel
         }
         _absorbing = false;
 
+        SyncPlacementState();
         NotifyTile();
     }
 
@@ -722,6 +812,7 @@ public sealed class RtssViewModel : LayerViewModel
         CustomCap = Math.Clamp(settings.CustomFrameRateLimit, RtssSettings.MinCustomFps, RtssSettings.MaxCustomFps);
         _absorbing = false;
 
+        SyncPlacementState();
         NotifyTile();
     }
 
@@ -1188,6 +1279,33 @@ public sealed class RtssViewModel : LayerViewModel
 
         Status = DefaultStatus();
         _absorbing = false;
+        SyncPlacementState();
         NotifyTile();
     }
+}
+
+/// <summary>One anchor cell inside the 3×3 screen alignment grid on the RTSS settings page.</summary>
+public sealed class OverlayAlignmentOption : Observable
+{
+    public OverlayAlignmentOption(
+        RtssOverlayAlignment alignment,
+        string label,
+        HorizontalAlignment horizontal,
+        VerticalAlignment vertical,
+        Action<RtssOverlayAlignment> select)
+    {
+        Alignment = alignment;
+        Label = label;
+        Horizontal = horizontal;
+        Vertical = vertical;
+        Select = new Command(() => select(alignment));
+    }
+
+    public RtssOverlayAlignment Alignment { get; }
+    public string Label { get; }
+    public HorizontalAlignment Horizontal { get; }
+    public VerticalAlignment Vertical { get; }
+    public ICommand Select { get; }
+
+    public bool IsSelected { get; set => Set(ref field, value); }
 }

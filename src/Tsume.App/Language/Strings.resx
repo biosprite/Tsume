@@ -734,7 +734,25 @@
   <data name="RtssThemeSmoke" xml:space="preserve"><value>Smoke</value></data>
   <data name="RtssThemeWhite" xml:space="preserve"><value>White</value></data>
   <data name="RtssThemeFloat" xml:space="preserve"><value>Float</value></data>
-  <data name="RtssOverlayCredit" xml:space="preserve"><value>Essential overlays by realHfde (MIT). Drawn by RTSS's OverlayEditor. Level changes apply live; changing theme restarts RTSS.</value></data>
+  <data name="RtssPositionHeading" xml:space="preserve"><value>{0} position</value></data>
+  <data name="RtssAlignTopLeft" xml:space="preserve"><value>Top left</value></data>
+  <data name="RtssAlignTopCenter" xml:space="preserve"><value>Top center</value></data>
+  <data name="RtssAlignTopRight" xml:space="preserve"><value>Top right</value></data>
+  <data name="RtssAlignMiddleLeft" xml:space="preserve"><value>Middle left</value></data>
+  <data name="RtssAlignCenter" xml:space="preserve"><value>Center</value></data>
+  <data name="RtssAlignMiddleRight" xml:space="preserve"><value>Middle right</value></data>
+  <data name="RtssAlignBottomLeft" xml:space="preserve"><value>Bottom left</value></data>
+  <data name="RtssAlignBottomCenter" xml:space="preserve"><value>Bottom center</value></data>
+  <data name="RtssAlignBottomRight" xml:space="preserve"><value>Bottom right</value></data>
+  <data name="RtssAlignCustom" xml:space="preserve"><value>Custom</value></data>
+  <data name="RtssMoveOverlay" xml:space="preserve"><value>Drag on screen</value></data>
+  <data name="RtssMoveOverlayDetail" xml:space="preserve"><value>Slide the {0} overlay anywhere with touch or pointer</value></data>
+  <data name="RtssTouchDrag" xml:space="preserve"><value>Touch to drag overlay</value></data>
+  <data name="RtssTouchDragDetail" xml:space="preserve"><value>Drag any active FPS overlay directly on screen without opening Tsume</value></data>
+  <data name="RtssDragDone" xml:space="preserve"><value>Done</value></data>
+  <data name="RtssDragReset" xml:space="preserve"><value>Reset</value></data>
+  <data name="RtssDragHint" xml:space="preserve"><value>Drag to move · snaps near edges &amp; corners</value></data>
+  <data name="RtssOverlayCredit" xml:space="preserve"><value>Essential overlays by realHfde (MIT). Drawn by RTSS's OverlayEditor. Level and position changes apply live; changing theme restarts RTSS.</value></data>
   <data name="RtssAidaConflictAida64" xml:space="preserve"><value>AIDA64 is already using RTSS's sensor channel. Turn off AIDA64's shared memory or switch off FPS Overlay to keep your own setup.</value></data>
   <data name="RtssAidaConflictWinhanced" xml:space="preserve"><value>Winhanced is already using RTSS's sensor channel. Close Winhanced or disable WinhancedOverlayBridge.dll in RTSS to use Tsume's overlay.</value></data>
   <data name="RtssAidaConflictOther" xml:space="preserve"><value>Another app is already using RTSS's AIDA64 sensor channel. Close it or switch off FPS Overlay to keep your own setup.</value></data>

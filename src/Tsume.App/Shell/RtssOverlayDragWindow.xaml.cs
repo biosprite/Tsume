@@ -1,0 +1,530 @@
+using System.Diagnostics;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Shapes;
+using Tsume.App.Language;
+using Tsume.App.Platform.Interop;
+using Tsume.App.Platform.Rtss;
+using Tsume.App.Theme;
+using Tsume.App.ViewModels;
+using static Tsume.App.Platform.Interop.User32;
+
+namespace Tsume.App.Shell;
+
+/// <summary>
+/// Lightweight, no-activate UIAccess overlay window that makes Tsume's RTSS FPS overlays smoothly draggable
+/// on touchscreens (and pointers). Operates in two seamless modes:
+/// 1. Standby hit-target: invisible window tightly bounded to the active FPS overlay; dragging it expands
+///    to full screen without stealing focus from the game, shows a 60–120 FPS glass frame + alignment snap
+///    guides, streams live coordinates to RTSS, and commits the new position on release.
+/// 2. Interactive "Drag on screen" mode: full-screen positioning with clickable 9-point anchors, Reset &amp; Done.
+/// </summary>
+public sealed partial class RtssOverlayDragWindow : Window
+{
+    private const double DragThresholdDip = 6.0;
+    private const double MinStandbyTouchDip = 44.0;
+    private const long LiveStreamIntervalMs = 35;
+
+    private readonly RtssOverlayService _service;
+    private readonly Border[] _snapDots = new Border[9];
+
+    private RtssOverlayLevel _level = RtssOverlayLevel.Off;
+    private int _screenPhysW = 1920;
+    private int _screenPhysH = 1200;
+    private int _overlayPhysW;
+    private int _overlayPhysH;
+    private int _currentPhysX;
+    private int _currentPhysY;
+
+    private double _dpiX = 1.0;
+    private double _dpiY = 1.0;
+
+    private bool _interactive;
+    private bool _expanded;
+    private bool _pointerDown;
+    private bool _dragging;
+    private int? _activeTouchId;
+    private Point _downScreenDip;
+    private int _startPhysX;
+    private int _startPhysY;
+    private long _lastStreamTick;
+
+    public RtssOverlayDragWindow(RtssOverlayService service)
+    {
+        InitializeComponent();
+        _service = service;
+
+        SourceInitialized += (_, _) => ApplyWindowStyles();
+        Loaded += (_, _) => RefreshDpi();
+
+        // Touch handlers (primary path on PC handhelds).
+        OverlayBox.PreviewTouchDown += OnOverlayTouchDown;
+        PreviewTouchMove += OnWindowTouchMove;
+        PreviewTouchUp += OnWindowTouchUp;
+        LostTouchCapture += (_, _) => EndDrag(commit: true);
+
+        // Mouse handlers (ignoring touch-promoted mouse events so touch is never double-handled).
+        OverlayBox.PreviewMouseLeftButtonDown += OnOverlayMouseDown;
+        PreviewMouseMove += OnWindowMouseMove;
+        PreviewMouseLeftButtonUp += OnWindowMouseUp;
+        LostMouseCapture += (_, _) => EndDrag(commit: true);
+
+        Scrim.MouseLeftButtonDown += (_, _) => { if (_interactive) ExitInteractiveMode(); };
+        Scrim.TouchDown += (_, e) => { if (_interactive) { e.Handled = true; ExitInteractiveMode(); } };
+
+        DoneButton.Click += (_, _) => ExitInteractiveMode();
+        ResetButton.Click += (_, _) => ResetCurrentLevel();
+        KeyDown += (_, e) => { if (_interactive && e.Key == Key.Escape) ExitInteractiveMode(); };
+
+        BuildSnapDots();
+    }
+
+    /// <summary>True while in explicit "Drag on screen" mode or mid-touch-drag.</summary>
+    public bool IsActivelyPositioning => _interactive || _dragging;
+
+    /// <summary>Raised when interactive "Drag on screen" mode exits.</summary>
+    public event Action? InteractiveClosed;
+
+    /// <summary>Updates the invisible standby hit-target to match the active FPS overlay's current bounds.</summary>
+    public void SyncStandby(
+        RtssOverlayLevel level, int x, int y, int width, int height, int screenW, int screenH)
+    {
+        if (_interactive || _dragging) return;
+
+        _level = level;
+        _overlayPhysW = width;
+        _overlayPhysH = height;
+        _currentPhysX = x;
+        _currentPhysY = y;
+        _screenPhysW = screenW;
+        _screenPhysH = screenH;
+
+        if (!IsVisible) Show();
+        RefreshDpi();
+        ApplyStandbyWindowBounds();
+        RaiseTopmostNoActivate();
+    }
+
+    /// <summary>Enters full-screen interactive positioning mode (works with touch, stylus, and mouse).</summary>
+    public void EnterInteractiveMode(
+        RtssOverlayLevel level, int x, int y, int width, int height, int screenW, int screenH)
+    {
+        _level = level;
+        _overlayPhysW = width;
+        _overlayPhysH = height;
+        _currentPhysX = x;
+        _currentPhysY = y;
+        _screenPhysW = screenW;
+        _screenPhysH = screenH;
+        _interactive = true;
+
+        if (!IsVisible) Show();
+        RefreshDpi();
+
+        ExpandToFullScreen();
+        UpdateSnapDotsLayout();
+        PositionOverlayBox(_currentPhysX, _currentPhysY, snapped: null);
+
+        Scrim.Visibility = Visibility.Visible;
+        ActionBar.Visibility = Visibility.Visible;
+        FadeElement(Scrim, 1.0, 140);
+        FadeElement(ActionBar, 1.0, 140);
+        FadeElement(SnapDotsLayer, 1.0, 140);
+        ShowDragChrome(visible: true);
+        UpdateBadge(_currentPhysX, _currentPhysY, _service.Settings.GetPlacement(_level).Alignment);
+        FadeElement(PositionBadge, 1.0, 140);
+
+        RaiseTopmostNoActivate();
+    }
+
+    /// <summary>Leaves interactive mode cleanly and notifies the controller to return to standby or hide.</summary>
+    public void ExitInteractiveMode()
+    {
+        if (!_interactive) return;
+        _interactive = false;
+        EndDrag(commit: true);
+
+        Scrim.Visibility = Visibility.Collapsed;
+        Scrim.Opacity = 0;
+        ActionBar.Visibility = Visibility.Collapsed;
+        ActionBar.Opacity = 0;
+        SnapDotsLayer.Opacity = 0;
+        PositionBadge.Opacity = 0;
+        ShowDragChrome(visible: false);
+
+        InteractiveClosed?.Invoke();
+    }
+
+    public void HideQuietly()
+    {
+        _interactive = false;
+        EndDrag(commit: false);
+        Scrim.Visibility = Visibility.Collapsed;
+        ActionBar.Visibility = Visibility.Collapsed;
+        SnapDotsLayer.Opacity = 0;
+        PositionBadge.Opacity = 0;
+        ShowDragChrome(visible: false);
+        if (IsVisible) Hide();
+    }
+
+    private void ResetCurrentLevel()
+    {
+        if (_level == RtssOverlayLevel.Off) return;
+
+        var defaultPlacement = RtssOverlayMetrics.DefaultPlacement(_level);
+        var (ax, ay) = RtssOverlayMetrics.ResolveAnchor(_level, defaultPlacement.Alignment, _screenPhysW, _screenPhysH);
+        _currentPhysX = ax;
+        _currentPhysY = ay;
+        _service.CommitDragPlacement(_level, defaultPlacement);
+        PositionOverlayBox(ax, ay, defaultPlacement.Alignment);
+        UpdateBadge(ax, ay, defaultPlacement.Alignment);
+    }
+
+    private void OnOverlayTouchDown(object? sender, TouchEventArgs e)
+    {
+        if (_level == RtssOverlayLevel.Off || _pointerDown) return;
+
+        e.Handled = true;
+        _activeTouchId = e.TouchDevice.Id;
+        var pt = PointToScreenDip(e.GetTouchPoint(this).Position);
+        BeginPointer(pt);
+        CaptureTouch(e.TouchDevice);
+    }
+
+    private void OnWindowTouchMove(object? sender, TouchEventArgs e)
+    {
+        if (!_pointerDown || _activeTouchId != e.TouchDevice.Id) return;
+
+        e.Handled = true;
+        var pt = PointToScreenDip(e.GetTouchPoint(this).Position);
+        MovePointer(pt);
+    }
+
+    private void OnWindowTouchUp(object? sender, TouchEventArgs e)
+    {
+        if (!_pointerDown || _activeTouchId != e.TouchDevice.Id) return;
+
+        e.Handled = true;
+        ReleaseTouchCapture(e.TouchDevice);
+        _activeTouchId = null;
+        EndDrag(commit: true);
+    }
+
+    private void OnOverlayMouseDown(object? sender, MouseButtonEventArgs e)
+    {
+        if (e.StylusDevice is not null || _level == RtssOverlayLevel.Off || _pointerDown) return;
+
+        e.Handled = true;
+        var pt = PointToScreenDip(e.GetPosition(this));
+        BeginPointer(pt);
+        CaptureMouse();
+    }
+
+    private void OnWindowMouseMove(object? sender, MouseEventArgs e)
+    {
+        if (e.StylusDevice is not null || !_pointerDown || _activeTouchId is not null) return;
+
+        var pt = PointToScreenDip(e.GetPosition(this));
+        MovePointer(pt);
+    }
+
+    private void OnWindowMouseUp(object? sender, MouseButtonEventArgs e)
+    {
+        if (e.StylusDevice is not null || !_pointerDown || _activeTouchId is not null) return;
+
+        e.Handled = true;
+        ReleaseMouseCapture();
+        EndDrag(commit: true);
+    }
+
+    private void BeginPointer(Point screenDip)
+    {
+        RefreshDpi();
+        _pointerDown = true;
+        _dragging = _interactive;
+        _downScreenDip = screenDip;
+        _startPhysX = _currentPhysX;
+        _startPhysY = _currentPhysY;
+        _lastStreamTick = 0;
+
+        if (_interactive)
+            ShowDragChrome(visible: true);
+    }
+
+    private void MovePointer(Point screenDip)
+    {
+        var dxDip = screenDip.X - _downScreenDip.X;
+        var dyDip = screenDip.Y - _downScreenDip.Y;
+
+        if (!_dragging)
+        {
+            if (Math.Sqrt(dxDip * dxDip + dyDip * dyDip) < DragThresholdDip) return;
+
+            _dragging = true;
+            if (!_expanded)
+            {
+                ExpandToFullScreen();
+                UpdateSnapDotsLayout();
+                ShowDragChrome(visible: true);
+                FadeElement(SnapDotsLayer, 0.9, 120);
+                FadeElement(PositionBadge, 1.0, 120);
+            }
+        }
+
+        var rawPhysX = _startPhysX + (int)Math.Round(dxDip * _dpiX);
+        var rawPhysY = _startPhysY + (int)Math.Round(dyDip * _dpiY);
+        var maxX = Math.Max(0, _screenPhysW - _overlayPhysW);
+        var maxY = Math.Max(0, _screenPhysH - _overlayPhysH);
+        var clampedX = Math.Clamp(rawPhysX, 0, maxX);
+        var clampedY = Math.Clamp(rawPhysY, 0, maxY);
+
+        RtssOverlayAlignment? snapped = null;
+        if (RtssOverlayMetrics.TrySnapToAlignment(
+            _level, clampedX, clampedY, _screenPhysW, _screenPhysH,
+            out var snapAlign, out var snapX, out var snapY))
+        {
+            clampedX = snapX;
+            clampedY = snapY;
+            snapped = snapAlign;
+        }
+
+        _currentPhysX = clampedX;
+        _currentPhysY = clampedY;
+
+        PositionOverlayBox(clampedX, clampedY, snapped);
+        UpdateBadge(clampedX, clampedY, snapped ?? RtssOverlayAlignment.Custom);
+
+        // Stream live position to RTSS so the real overlay glides right behind the 120 FPS frame.
+        var now = Environment.TickCount64;
+        if (now - _lastStreamTick >= LiveStreamIntervalMs)
+        {
+            _lastStreamTick = now;
+            _service.SetLiveDragPosition(clampedX, clampedY);
+        }
+    }
+
+    private void EndDrag(bool commit)
+    {
+        var wasDragging = _dragging;
+        _pointerDown = false;
+        _dragging = false;
+        _activeTouchId = null;
+
+        if (!wasDragging) return;
+
+        if (commit && _level != RtssOverlayLevel.Off)
+        {
+            RtssOverlayPlacement placement;
+            if (RtssOverlayMetrics.TrySnapToAlignment(
+                _level, _currentPhysX, _currentPhysY, _screenPhysW, _screenPhysH,
+                out var snapAlign, out var snapX, out var snapY))
+            {
+                _currentPhysX = snapX;
+                _currentPhysY = snapY;
+                placement = new RtssOverlayPlacement(snapAlign);
+            }
+            else
+            {
+                placement = RtssOverlayMetrics.CreateCustomPlacement(
+                    _level, _currentPhysX, _currentPhysY, _screenPhysW, _screenPhysH);
+            }
+
+            _service.CommitDragPlacement(_level, placement);
+            PositionOverlayBox(_currentPhysX, _currentPhysY, placement.Alignment == RtssOverlayAlignment.Custom ? null : placement.Alignment);
+            UpdateBadge(_currentPhysX, _currentPhysY, placement.Alignment);
+        }
+        else
+        {
+            _service.CancelDrag();
+        }
+
+        if (!_interactive)
+        {
+            SnapDotsLayer.Opacity = 0;
+            PositionBadge.Opacity = 0;
+            ShowDragChrome(visible: false);
+            ApplyStandbyWindowBounds();
+        }
+    }
+
+    private void ApplyStandbyWindowBounds()
+    {
+        _expanded = false;
+
+        var boxW = _overlayPhysW / _dpiX;
+        var boxH = _overlayPhysH / _dpiY;
+        var hitW = Math.Max(boxW, MinStandbyTouchDip);
+        var hitH = Math.Max(boxH, MinStandbyTouchDip);
+        var padX = (hitW - boxW) / 2.0;
+        var padY = (hitH - boxH) / 2.0;
+
+        Left = Math.Max(0, _currentPhysX / _dpiX - padX);
+        Top = Math.Max(0, _currentPhysY / _dpiY - padY);
+        Width = hitW;
+        Height = hitH;
+
+        OverlayBox.Width = hitW;
+        OverlayBox.Height = hitH;
+        BoxTranslate.X = 0;
+        BoxTranslate.Y = 0;
+    }
+
+    private void ExpandToFullScreen()
+    {
+        _expanded = true;
+
+        Left = 0;
+        Top = 0;
+        Width = _screenPhysW / _dpiX;
+        Height = _screenPhysH / _dpiY;
+
+        OverlayBox.Width = _overlayPhysW / _dpiX;
+        OverlayBox.Height = _overlayPhysH / _dpiY;
+        BoxTranslate.X = _currentPhysX / _dpiX;
+        BoxTranslate.Y = _currentPhysY / _dpiY;
+    }
+
+    private void PositionOverlayBox(int physX, int physY, RtssOverlayAlignment? snapped)
+    {
+        BoxTranslate.X = physX / _dpiX;
+        BoxTranslate.Y = physY / _dpiY;
+
+        for (var i = 0; i < _snapDots.Length; i++)
+        {
+            var isHit = snapped is { } s && (int)s == i;
+            _snapDots[i].Background = isHit ? Accent.Brush : Brushes.White;
+            _snapDots[i].Opacity = isHit ? 1.0 : 0.35;
+        }
+    }
+
+    private void UpdateBadge(int physX, int physY, RtssOverlayAlignment alignment)
+    {
+        BadgeText.Text = alignment == RtssOverlayAlignment.Custom
+            ? $"{Strings.RtssAlignCustom} · {physX}, {physY}"
+            : RtssViewModel.FormatAlignment(alignment);
+
+        PositionBadge.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var badgeW = PositionBadge.DesiredSize.Width;
+        var badgeH = PositionBadge.DesiredSize.Height;
+
+        var boxX = physX / _dpiX;
+        var boxY = physY / _dpiY;
+        var boxW = _overlayPhysW / _dpiX;
+        var boxH = _overlayPhysH / _dpiY;
+        var screenW = _screenPhysW / _dpiX;
+        var screenH = _screenPhysH / _dpiY;
+
+        var bx = Math.Clamp(boxX + (boxW - badgeW) / 2.0, 12, Math.Max(12, screenW - badgeW - 12));
+        var by = boxY + boxH + 10 + badgeH <= screenH - 72
+            ? boxY + boxH + 10
+            : Math.Max(12, boxY - badgeH - 10);
+
+        BadgeTranslate.X = bx;
+        BadgeTranslate.Y = by;
+    }
+
+    private void ShowDragChrome(bool visible)
+    {
+        OverlayBox.BorderBrush = visible ? Accent.Brush : Brushes.Transparent;
+        FadeElement(BoxChrome, visible ? 1.0 : 0.0, 110);
+    }
+
+    private void BuildSnapDots()
+    {
+        SnapDotsLayer.Children.Clear();
+        for (var i = 0; i < 9; i++)
+        {
+            var alignment = (RtssOverlayAlignment)i;
+            var dot = new Border
+            {
+                Width = 14,
+                Height = 14,
+                CornerRadius = new CornerRadius(7),
+                Background = Brushes.White,
+                Opacity = 0.35,
+                Cursor = Cursors.Hand,
+                Tag = alignment,
+            };
+
+            dot.MouseLeftButtonDown += (_, e) =>
+            {
+                if (!_interactive) return;
+                e.Handled = true;
+                SnapToAnchor(alignment);
+            };
+            dot.TouchDown += (_, e) =>
+            {
+                if (!_interactive) return;
+                e.Handled = true;
+                SnapToAnchor(alignment);
+            };
+
+            _snapDots[i] = dot;
+            SnapDotsLayer.Children.Add(dot);
+        }
+    }
+
+    private void SnapToAnchor(RtssOverlayAlignment alignment)
+    {
+        if (_level == RtssOverlayLevel.Off) return;
+        var (ax, ay) = RtssOverlayMetrics.ResolveAnchor(_level, alignment, _screenPhysW, _screenPhysH);
+        _currentPhysX = ax;
+        _currentPhysY = ay;
+        _service.CommitDragPlacement(_level, new RtssOverlayPlacement(alignment));
+        PositionOverlayBox(ax, ay, alignment);
+        UpdateBadge(ax, ay, alignment);
+    }
+
+    private void UpdateSnapDotsLayout()
+    {
+        if (_level == RtssOverlayLevel.Off) return;
+
+        for (var i = 0; i < 9; i++)
+        {
+            var alignment = (RtssOverlayAlignment)i;
+            var (ax, ay) = RtssOverlayMetrics.ResolveAnchor(_level, alignment, _screenPhysW, _screenPhysH);
+            var centerX = (ax + _overlayPhysW / 2.0) / _dpiX;
+            var centerY = (ay + _overlayPhysH / 2.0) / _dpiY;
+
+            Canvas.SetLeft(_snapDots[i], centerX - 7);
+            Canvas.SetTop(_snapDots[i], centerY - 7);
+        }
+    }
+
+    private Point PointToScreenDip(Point clientDip) => new(Left + clientDip.X, Top + clientDip.Y);
+
+    private void RefreshDpi()
+    {
+        var dpi = VisualTreeHelper.GetDpi(this);
+        _dpiX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+        _dpiY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
+    }
+
+    private void ApplyWindowStyles()
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == 0) return;
+
+        var style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, style | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST);
+    }
+
+    private void RaiseTopmostNoActivate()
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != 0)
+            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+
+    private static void FadeElement(UIElement element, double targetOpacity, int durationMs)
+    {
+        element.BeginAnimation(OpacityProperty, new DoubleAnimation(targetOpacity, TimeSpan.FromMilliseconds(durationMs))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        });
+    }
+}

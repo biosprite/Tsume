@@ -12,7 +12,7 @@ LockUserSettings=1
 EmbeddedImage=essential_tsume_atlas.png
 PingAddr=127.0.0.1
 [General]
-Sources=29
+Sources=90
 Tables=0
 Layers=84
 [Source0]
@@ -183,6 +183,7 @@ Format=%.0f
 Formula=1000 / percentile("Frametime", 99)
 Provider=HAL
 ID=Stub
+RefreshPeriod=1000
 [Source24]
 Name=Framerate 0.1% Low
 Units=FPS
@@ -190,6 +191,7 @@ Format=%.0f
 Formula=1000 / percentile("Frametime", 99.9)
 Provider=HAL
 ID=Stub
+RefreshPeriod=1000
 [Source25]
 Name=CPU usage stage1
 Units=%
@@ -218,98 +220,525 @@ Format=
 Formula=if(validate("GPU1 usage smooth"), "GPU1 usage smooth" + ("GPU1 usage stage1" - "GPU1 usage smooth") * 0.18, "GPU1 usage")
 Provider=HAL
 ID=Timer
+[Source29]
+Name=PX_0
+Units=
+Format=%.0f
+Formula=validate(x) ? x : 24
+Provider=AIDA
+ID=TSUME_POS_X
+[Source30]
+Name=PX_11
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 11
+Provider=AIDA
+ID=TSUME_POS_X
+[Source31]
+Name=PX_12
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 12
+Provider=AIDA
+ID=TSUME_POS_X
+[Source32]
+Name=PX_15
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 15
+Provider=AIDA
+ID=TSUME_POS_X
+[Source33]
+Name=PX_16
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 16
+Provider=AIDA
+ID=TSUME_POS_X
+[Source34]
+Name=PX_75
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 75
+Provider=AIDA
+ID=TSUME_POS_X
+[Source35]
+Name=PX_91
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 91
+Provider=AIDA
+ID=TSUME_POS_X
+[Source36]
+Name=PX_110
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 110
+Provider=AIDA
+ID=TSUME_POS_X
+[Source37]
+Name=PX_115
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 115
+Provider=AIDA
+ID=TSUME_POS_X
+[Source38]
+Name=PX_118
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 118
+Provider=AIDA
+ID=TSUME_POS_X
+[Source39]
+Name=PX_156
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 156
+Provider=AIDA
+ID=TSUME_POS_X
+[Source40]
+Name=PX_157
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 157
+Provider=AIDA
+ID=TSUME_POS_X
+[Source41]
+Name=PX_220
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 220
+Provider=AIDA
+ID=TSUME_POS_X
+[Source42]
+Name=PX_246
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 246
+Provider=AIDA
+ID=TSUME_POS_X
+[Source43]
+Name=PX_311
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 311
+Provider=AIDA
+ID=TSUME_POS_X
+[Source44]
+Name=PX_325
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 325
+Provider=AIDA
+ID=TSUME_POS_X
+[Source45]
+Name=PX_379
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 379
+Provider=AIDA
+ID=TSUME_POS_X
+[Source46]
+Name=PX_477
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 477
+Provider=AIDA
+ID=TSUME_POS_X
+[Source47]
+Name=PX_478
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 478
+Provider=AIDA
+ID=TSUME_POS_X
+[Source48]
+Name=PX_521
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 521
+Provider=AIDA
+ID=TSUME_POS_X
+[Source49]
+Name=PX_563
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 563
+Provider=AIDA
+ID=TSUME_POS_X
+[Source50]
+Name=PX_592
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 592
+Provider=AIDA
+ID=TSUME_POS_X
+[Source51]
+Name=PY_0
+Units=
+Format=%.0f
+Formula=validate(x) ? x : 24
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source52]
+Name=PY_5
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 5
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source53]
+Name=PY_8
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 8
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source54]
+Name=PY_11
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 11
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source55]
+Name=PY_13
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 13
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source56]
+Name=PY_15
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 15
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source57]
+Name=PY_17
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 17
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source58]
+Name=PY_18
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 18
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source59]
+Name=PY_21
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 21
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source60]
+Name=PY_24
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 24
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source61]
+Name=PY_26
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 26
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source62]
+Name=PY_27
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 27
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source63]
+Name=PY_29
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 29
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source64]
+Name=PY_36
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 36
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source65]
+Name=PY_37
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 37
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source66]
+Name=PY_39
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 39
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source67]
+Name=PY_46
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 46
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source68]
+Name=PY_50
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 50
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source69]
+Name=PY_56
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 56
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source70]
+Name=PY_65
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 65
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source71]
+Name=PY_73
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 73
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source72]
+Name=PY_76
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 76
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source73]
+Name=PY_96
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 96
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source74]
+Name=PY_116
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 116
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source75]
+Name=PY_139
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 139
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source76]
+Name=PY_178
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 178
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source77]
+Name=PY_199
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 199
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source78]
+Name=PY_219
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 219
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source79]
+Name=PY_239
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 239
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source80]
+Name=PY_259
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 259
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source81]
+Name=PY_281
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 281
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source82]
+Name=PY_316
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 316
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source83]
+Name=PY_337
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 337
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source84]
+Name=PY_357
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 357
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source85]
+Name=PY_377
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 377
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source86]
+Name=PY_397
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 397
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source87]
+Name=PY_417
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 417
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source88]
+Name=PY_437
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 437
+Provider=AIDA
+ID=TSUME_POS_Y
+[Source89]
+Name=PY_460
+Units=
+Format=%.0f
+Formula=(validate(x) ? x : 24) + 460
+Provider=AIDA
+ID=TSUME_POS_Y
 [Layer0]
 Name=Panel
 VisibilitySource=Tsume level 1 visible
-Text=<I=0,0,1146,0,72,72>
-PositionX=924
-PositionY=24
-ExtentX=72
-ExtentY=72
+Text=<P=%PX_0%,%PY_0%><L0><E=72,72><I=72,72,1146,0,72,72>
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
 ExtentOrigin=0
 RefreshPeriod=250
 [Layer1]
 Name=FPS label
 VisibilitySource=Tsume level 1 visible
-Text=FPS
-PositionX=924
-PositionY=32
-ExtentX=72
-ExtentY=19
-ExtentOrigin=4
+Text=<P=%PX_0%,%PY_8%><L1><E=72,19,4>FPS
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=D1D1D6
 RefreshPeriod=250
 [Layer2]
 Name=FPS
 VisibilitySource=Tsume level 1 visible
-Text=%Framerate%
-PositionX=924
-PositionY=50
-ExtentX=72
-ExtentY=36
-ExtentOrigin=4
+Text=<P=%PX_0%,%PY_26%><L2><E=72,36,4>%Framerate%
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 Size=200
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer3]
 Name=Panel
 VisibilitySource=Tsume level 2 visible
-Text=<I=0,0,0,0,452,72>
-PositionX=734
-PositionY=24
-ExtentX=452
-ExtentY=72
+Text=<P=%PX_0%,%PY_0%><L3><E=452,72><I=452,72,0,0,452,72>
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
 ExtentOrigin=0
 RefreshPeriod=250
 [Layer4]
 Name=CPU ring
 VisibilitySource=Tsume level 2 visible
-Text=<AI=CPU usage smooth,0,0,0,100.6944,0,96,62,62,145,29,0.5>
-PositionX=745
-PositionY=29
-ExtentX=62
-ExtentY=62
+Text=<P=%PX_11%,%PY_5%><L4><E=62,62><AI=CPU usage smooth,62,62,0,100.6944,0,96,62,62,145,29,0.5>
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
 ExtentOrigin=0
 RefreshPeriod=16
 [Layer5]
 Name=CPU usage
 VisibilitySource=Tsume level 2 visible
-Text=%CPU usage%
-PositionX=745
-PositionY=50
-ExtentX=62
-ExtentY=20
-ExtentOrigin=4
+Text=<P=%PX_11%,%PY_26%><L5><E=62,20,4>%CPU usage%
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer6]
 Name=CPU label
 VisibilitySource=Tsume level 2 visible
-Text=CPU
-PositionX=809
-PositionY=39
-ExtentX=66
-ExtentY=19
-ExtentOrigin=4
+Text=<P=%PX_75%,%PY_15%><L6><E=66,19,4>CPU
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=0A84FF
 RefreshPeriod=250
 [Layer7]
 Name=CPU power
 VisibilitySource=Tsume level 2 visible
-Text=%CPU power% W
-PositionX=809
-PositionY=61
-ExtentX=66
-ExtentY=19
-ExtentOrigin=4
+Text=<P=%PX_75%,%PY_37%><L7><E=66,19,4>%CPU power% W
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer8]
 Name=FPS label
 VisibilitySource=Tsume level 2 visible
-Text=FPS
-PositionX=891
-PositionY=37
+Text=<P=%PX_157%,%PY_13%><L8>FPS
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -318,9 +747,9 @@ RefreshPeriod=250
 [Layer9]
 Name=FPS
 VisibilitySource=Tsume level 2 visible
-Text=%Framerate%
-PositionX=890
-PositionY=48
+Text=<P=%PX_156%,%PY_24%><L9>%Framerate%
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -330,9 +759,9 @@ RefreshPeriod=250
 [Layer10]
 Name=1% low label
 VisibilitySource=Tsume level 2 visible
-Text=1%
-PositionX=954
-PositionY=41
+Text=<P=%PX_220%,%PY_17%><L10>1%
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -341,20 +770,20 @@ RefreshPeriod=250
 [Layer11]
 Name=1% low
 VisibilitySource=Tsume level 2 visible
-Text=%Framerate 1% Low%
-PositionX=954
-PositionY=41
-ExtentX=72
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_220%,%PY_17%><L11><E=72,19,2>%Framerate 1% Low%
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
-RefreshPeriod=1000
+RefreshPeriod=250
 [Layer12]
 Name=Temp label
 VisibilitySource=Tsume level 2 visible
-Text=Temp
-PositionX=954
-PositionY=63
+Text=<P=%PX_220%,%PY_39%><L12>Temp
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -363,94 +792,94 @@ RefreshPeriod=250
 [Layer13]
 Name=Temperature
 VisibilitySource=Tsume level 2 visible
-Text=%CPU temperature%°
-PositionX=954
-PositionY=63
-ExtentX=77
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_220%,%PY_39%><L13><E=77,19,2>%CPU temperature%°
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF,,1,FF9F0A,1,2,FF453A,2,(Temperature tier,1)
 RefreshPeriod=250
 [Layer14]
 Name=GPU label
 VisibilitySource=Tsume level 2 visible
-Text=GPU
-PositionX=1045
-PositionY=39
-ExtentX=66
-ExtentY=19
-ExtentOrigin=4
+Text=<P=%PX_311%,%PY_15%><L14><E=66,19,4>GPU
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=BF5AF2
 RefreshPeriod=250
 [Layer15]
 Name=GPU power
 VisibilitySource=Tsume level 2 visible
-Text=%GPU1 power% W
-PositionX=1045
-PositionY=61
-ExtentX=66
-ExtentY=19
-ExtentOrigin=4
+Text=<P=%PX_311%,%PY_37%><L15><E=66,19,4>%GPU1 power% W
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer16]
 Name=GPU ring
 VisibilitySource=Tsume level 2 visible
-Text=<AI=GPU1 usage smooth,0,0,0,100.6944,0,408,62,62,145,29,0.5>
-PositionX=1113
-PositionY=29
-ExtentX=62
-ExtentY=62
+Text=<P=%PX_379%,%PY_5%><L16><E=62,62><AI=GPU1 usage smooth,62,62,0,100.6944,0,408,62,62,145,29,0.5>
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
 ExtentOrigin=0
 RefreshPeriod=16
 [Layer17]
 Name=GPU usage
 VisibilitySource=Tsume level 2 visible
-Text=%GPU1 usage%
-PositionX=1113
-PositionY=50
-ExtentX=62
-ExtentY=20
-ExtentOrigin=4
+Text=<P=%PX_379%,%PY_26%><L17><E=62,20,4>%GPU1 usage%
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer18]
 Name=Panel
 VisibilitySource=Tsume level 3 visible
-Text=<I=0,0,456,0,686,93>
-PositionX=617
-PositionY=24
-ExtentX=686
-ExtentY=93
+Text=<P=%PX_0%,%PY_0%><L18><E=686,93><I=686,93,456,0,686,93>
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
 ExtentOrigin=0
 RefreshPeriod=250
 [Layer19]
 Name=CPU ring
 VisibilitySource=Tsume level 3 visible
-Text=<AI=CPU usage smooth,0,0,0,100.6944,0,720,67,67,145,29,0.5>
-PositionX=629
-PositionY=37
-ExtentX=67
-ExtentY=67
+Text=<P=%PX_12%,%PY_13%><L19><E=67,67><AI=CPU usage smooth,67,67,0,100.6944,0,720,67,67,145,29,0.5>
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
 ExtentOrigin=0
 RefreshPeriod=16
 [Layer20]
 Name=CPU usage
 VisibilitySource=Tsume level 3 visible
-Text=%CPU usage%
-PositionX=629
-PositionY=60
-ExtentX=67
-ExtentY=20
-ExtentOrigin=4
+Text=<P=%PX_12%,%PY_36%><L20><E=67,20,4>%CPU usage%
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer21]
 Name=CPU label
 VisibilitySource=Tsume level 3 visible
-Text=CPU
-PositionX=708
-PositionY=32
+Text=<P=%PX_91%,%PY_8%><L21>CPU
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -459,9 +888,9 @@ RefreshPeriod=250
 [Layer22]
 Name=CPU Power label
 VisibilitySource=Tsume level 3 visible
-Text=Power
-PositionX=708
-PositionY=51
+Text=<P=%PX_91%,%PY_27%><L22>Power
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -470,20 +899,20 @@ RefreshPeriod=250
 [Layer23]
 Name=CPU Power
 VisibilitySource=Tsume level 3 visible
-Text=%CPU power% W
-PositionX=708
-PositionY=51
-ExtentX=127
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_91%,%PY_27%><L23><E=127,19,2>%CPU power% W
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer24]
 Name=CPU Clock label
 VisibilitySource=Tsume level 3 visible
-Text=Clock
-PositionX=708
-PositionY=70
+Text=<P=%PX_91%,%PY_46%><L24>Clock
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -492,20 +921,20 @@ RefreshPeriod=250
 [Layer25]
 Name=CPU Clock
 VisibilitySource=Tsume level 3 visible
-Text=%CPU clock% GHz
-PositionX=708
-PositionY=70
-ExtentX=127
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_91%,%PY_46%><L25><E=127,19,2>%CPU clock% GHz
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer26]
 Name=CPU RAM label
 VisibilitySource=Tsume level 3 visible
-Text=RAM
-PositionX=708
-PositionY=89
+Text=<P=%PX_91%,%PY_65%><L26>RAM
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -514,41 +943,41 @@ RefreshPeriod=250
 [Layer27]
 Name=CPU RAM
 VisibilitySource=Tsume level 3 visible
-Text=%RAM usage% GB
-PositionX=708
-PositionY=89
-ExtentX=127
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_91%,%PY_65%><L27><E=127,19,2>%RAM usage% GB
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer28]
 Name=GPU ring
 VisibilitySource=Tsume level 3 visible
-Text=<AI=GPU1 usage smooth,0,0,0,100.6944,0,1057,67,67,145,29,0.5>
-PositionX=863
-PositionY=37
-ExtentX=67
-ExtentY=67
+Text=<P=%PX_246%,%PY_13%><L28><E=67,67><AI=GPU1 usage smooth,67,67,0,100.6944,0,1057,67,67,145,29,0.5>
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
 ExtentOrigin=0
 RefreshPeriod=16
 [Layer29]
 Name=GPU usage
 VisibilitySource=Tsume level 3 visible
-Text=%GPU1 usage%
-PositionX=863
-PositionY=60
-ExtentX=67
-ExtentY=20
-ExtentOrigin=4
+Text=<P=%PX_246%,%PY_36%><L29><E=67,20,4>%GPU1 usage%
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer30]
 Name=GPU label
 VisibilitySource=Tsume level 3 visible
-Text=GPU
-PositionX=942
-PositionY=32
+Text=<P=%PX_325%,%PY_8%><L30>GPU
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -557,9 +986,9 @@ RefreshPeriod=250
 [Layer31]
 Name=GPU Power label
 VisibilitySource=Tsume level 3 visible
-Text=Power
-PositionX=942
-PositionY=51
+Text=<P=%PX_325%,%PY_27%><L31>Power
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -568,20 +997,20 @@ RefreshPeriod=250
 [Layer32]
 Name=GPU Power
 VisibilitySource=Tsume level 3 visible
-Text=%GPU1 power% W
-PositionX=942
-PositionY=51
-ExtentX=127
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_325%,%PY_27%><L32><E=127,19,2>%GPU1 power% W
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer33]
 Name=GPU Clock label
 VisibilitySource=Tsume level 3 visible
-Text=Clock
-PositionX=942
-PositionY=70
+Text=<P=%PX_325%,%PY_46%><L33>Clock
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -590,20 +1019,20 @@ RefreshPeriod=250
 [Layer34]
 Name=GPU Clock
 VisibilitySource=Tsume level 3 visible
-Text=%GPU clock% GHz
-PositionX=942
-PositionY=70
-ExtentX=127
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_325%,%PY_46%><L34><E=127,19,2>%GPU clock% GHz
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer35]
 Name=GPU VRAM label
 VisibilitySource=Tsume level 3 visible
-Text=VRAM
-PositionX=942
-PositionY=89
+Text=<P=%PX_325%,%PY_65%><L35>VRAM
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -612,20 +1041,20 @@ RefreshPeriod=250
 [Layer36]
 Name=GPU VRAM
 VisibilitySource=Tsume level 3 visible
-Text=%GPU1 memory usage% GB
-PositionX=942
-PositionY=89
-ExtentX=127
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_325%,%PY_65%><L36><E=127,19,2>%GPU1 memory usage% GB
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer37]
 Name=FPS label
 VisibilitySource=Tsume level 3 visible
-Text=FPS
-PositionX=1095
-PositionY=32
+Text=<P=%PX_478%,%PY_8%><L37>FPS
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -634,9 +1063,9 @@ RefreshPeriod=250
 [Layer38]
 Name=FPS
 VisibilitySource=Tsume level 3 visible
-Text=%Framerate%
-PositionX=1094
-PositionY=42
+Text=<P=%PX_477%,%PY_18%><L38>%Framerate%
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -646,9 +1075,9 @@ RefreshPeriod=250
 [Layer39]
 Name=Temp label
 VisibilitySource=Tsume level 3 visible
-Text=Temp
-PositionX=1095
-PositionY=74
+Text=<P=%PX_478%,%PY_50%><L39>Temp
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -657,9 +1086,9 @@ RefreshPeriod=250
 [Layer40]
 Name=Temperature
 VisibilitySource=Tsume level 3 visible
-Text=%CPU temperature%°
-PositionX=1138
-PositionY=74
+Text=<P=%PX_521%,%PY_50%><L40>%CPU temperature%°
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -668,9 +1097,9 @@ RefreshPeriod=250
 [Layer41]
 Name=1% label
 VisibilitySource=Tsume level 3 visible
-Text=1%
-PositionX=1180
-PositionY=32
+Text=<P=%PX_563%,%PY_8%><L41>1%
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -679,20 +1108,20 @@ RefreshPeriod=250
 [Layer42]
 Name=1%
 VisibilitySource=Tsume level 3 visible
-Text=%Framerate 1% Low%
-PositionX=1209
-PositionY=32
-ExtentX=80
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_592%,%PY_8%><L42><E=80,19,2>%Framerate 1% Low%
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
-RefreshPeriod=1000
+RefreshPeriod=250
 [Layer43]
 Name=0.1% label
 VisibilitySource=Tsume level 3 visible
-Text=0.1%
-PositionX=1180
-PositionY=53
+Text=<P=%PX_563%,%PY_29%><L43>0.1%
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -701,20 +1130,20 @@ RefreshPeriod=250
 [Layer44]
 Name=0.1%
 VisibilitySource=Tsume level 3 visible
-Text=%Framerate 0.1% Low%
-PositionX=1209
-PositionY=53
-ExtentX=80
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_592%,%PY_29%><L44><E=80,19,2>%Framerate 0.1% Low%
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
-RefreshPeriod=1000
+RefreshPeriod=250
 [Layer45]
 Name=FT label
 VisibilitySource=Tsume level 3 visible
-Text=FT
-PositionX=1180
-PositionY=74
+Text=<P=%PX_563%,%PY_50%><L45>FT
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -723,41 +1152,41 @@ RefreshPeriod=250
 [Layer46]
 Name=FT
 VisibilitySource=Tsume level 3 visible
-Text=<FT> ms
-PositionX=1209
-PositionY=74
-ExtentX=80
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_592%,%PY_50%><L46><E=80,19,2><FT> ms
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer47]
 Name=Frametime graph
 VisibilitySource=Tsume level 3 visible
-Text=<G=Frametime,0,0,1,0,40,0>
-PositionX=1095
-PositionY=97
-ExtentX=194
-ExtentY=12
+Text=<P=%PX_478%,%PY_73%><L47><E=194,12><G=Frametime,0,0,1,0,40,0>
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
 ExtentOrigin=0
 TextColor=30D158
 RefreshPeriod=250
 [Layer48]
 Name=Panel
 VisibilitySource=Tsume level 4 visible
-Text=<I=0,0,0,1396,225,504>
-PositionX=1671
-PositionY=160
-ExtentX=225
-ExtentY=504
+Text=<P=%PX_0%,%PY_0%><L48><E=225,504><I=225,504,0,1396,225,504>
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
 ExtentOrigin=0
 RefreshPeriod=250
 [Layer49]
 Name=FPS label
 VisibilitySource=Tsume level 4 visible
-Text=FPS
-PositionX=1687
-PositionY=171
+Text=<P=%PX_16%,%PY_11%><L49>FPS
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -766,9 +1195,9 @@ RefreshPeriod=250
 [Layer50]
 Name=FPS
 VisibilitySource=Tsume level 4 visible
-Text=%Framerate%
-PositionX=1686
-PositionY=181
+Text=<P=%PX_15%,%PY_21%><L50>%Framerate%
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -778,9 +1207,9 @@ RefreshPeriod=250
 [Layer51]
 Name=Temp label
 VisibilitySource=Tsume level 4 visible
-Text=Temp
-PositionX=1687
-PositionY=216
+Text=<P=%PX_16%,%PY_56%><L51>Temp
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -789,20 +1218,20 @@ RefreshPeriod=250
 [Layer52]
 Name=Temperature
 VisibilitySource=Tsume level 4 visible
-Text=%CPU temperature%°
-PositionX=1786
-PositionY=216
-ExtentX=98
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_115%,%PY_56%><L52><E=98,19,2>%CPU temperature%°
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF,,1,FF9F0A,1,2,FF453A,2,(Temperature tier,1)
 RefreshPeriod=250
 [Layer53]
 Name=1% low label
 VisibilitySource=Tsume level 4 visible
-Text=1% low
-PositionX=1687
-PositionY=236
+Text=<P=%PX_16%,%PY_76%><L53>1% low
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -811,20 +1240,20 @@ RefreshPeriod=250
 [Layer54]
 Name=1% low
 VisibilitySource=Tsume level 4 visible
-Text=%Framerate 1% Low%
-PositionX=1789
-PositionY=236
-ExtentX=90
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_118%,%PY_76%><L54><E=90,19,2>%Framerate 1% Low%
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
-RefreshPeriod=1000
+RefreshPeriod=250
 [Layer55]
 Name=0.1% low label
 VisibilitySource=Tsume level 4 visible
-Text=0.1% low
-PositionX=1687
-PositionY=256
+Text=<P=%PX_16%,%PY_96%><L55>0.1% low
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -833,20 +1262,20 @@ RefreshPeriod=250
 [Layer56]
 Name=0.1% low
 VisibilitySource=Tsume level 4 visible
-Text=%Framerate 0.1% Low%
-PositionX=1789
-PositionY=256
-ExtentX=90
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_118%,%PY_96%><L56><E=90,19,2>%Framerate 0.1% Low%
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
-RefreshPeriod=1000
+RefreshPeriod=250
 [Layer57]
 Name=Frametime label
 VisibilitySource=Tsume level 4 visible
-Text=Frametime
-PositionX=1687
-PositionY=276
+Text=<P=%PX_16%,%PY_116%><L57>Frametime
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -855,31 +1284,31 @@ RefreshPeriod=250
 [Layer58]
 Name=Frametime
 VisibilitySource=Tsume level 4 visible
-Text=<FT> ms
-PositionX=1789
-PositionY=276
-ExtentX=90
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_118%,%PY_116%><L58><E=90,19,2><FT> ms
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer59]
 Name=Frametime graph
 VisibilitySource=Tsume level 4 visible
-Text=<G=Frametime,0,0,1,0,40,10>
-PositionX=1687
-PositionY=299
-ExtentX=192
-ExtentY=19
+Text=<P=%PX_16%,%PY_139%><L59><E=192,19><G=Frametime,0,0,1,0,40,10>
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
 ExtentOrigin=0
 TextColor=30D158
 RefreshPeriod=250
 [Layer60]
 Name=CPU label
 VisibilitySource=Tsume level 4 visible
-Text=CPU
-PositionX=1687
-PositionY=338
+Text=<P=%PX_16%,%PY_178%><L60>CPU
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -888,9 +1317,9 @@ RefreshPeriod=250
 [Layer61]
 Name=CPU Load label
 VisibilitySource=Tsume level 4 visible
-Text=Load
-PositionX=1687
-PositionY=359
+Text=<P=%PX_16%,%PY_199%><L61>Load
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -899,20 +1328,20 @@ RefreshPeriod=250
 [Layer62]
 Name=CPU Load
 VisibilitySource=Tsume level 4 visible
-Text=%CPU usage%%
-PositionX=1781
-PositionY=359
-ExtentX=98
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_110%,%PY_199%><L62><E=98,19,2>%CPU usage%%
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer63]
 Name=CPU Power label
 VisibilitySource=Tsume level 4 visible
-Text=Power
-PositionX=1687
-PositionY=379
+Text=<P=%PX_16%,%PY_219%><L63>Power
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -921,20 +1350,20 @@ RefreshPeriod=250
 [Layer64]
 Name=CPU Power
 VisibilitySource=Tsume level 4 visible
-Text=%CPU power% W
-PositionX=1781
-PositionY=379
-ExtentX=98
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_110%,%PY_219%><L64><E=98,19,2>%CPU power% W
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer65]
 Name=CPU Clock label
 VisibilitySource=Tsume level 4 visible
-Text=Clock
-PositionX=1687
-PositionY=399
+Text=<P=%PX_16%,%PY_239%><L65>Clock
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -943,20 +1372,20 @@ RefreshPeriod=250
 [Layer66]
 Name=CPU Clock
 VisibilitySource=Tsume level 4 visible
-Text=%CPU clock% GHz
-PositionX=1781
-PositionY=399
-ExtentX=98
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_110%,%PY_239%><L66><E=98,19,2>%CPU clock% GHz
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer67]
 Name=CPU RAM label
 VisibilitySource=Tsume level 4 visible
-Text=RAM
-PositionX=1687
-PositionY=419
+Text=<P=%PX_16%,%PY_259%><L67>RAM
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -965,31 +1394,31 @@ RefreshPeriod=250
 [Layer68]
 Name=CPU RAM
 VisibilitySource=Tsume level 4 visible
-Text=%RAM usage% GB
-PositionX=1781
-PositionY=419
-ExtentX=98
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_110%,%PY_259%><L68><E=98,19,2>%RAM usage% GB
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer69]
 Name=CPU usage graph
 VisibilitySource=Tsume level 4 visible
-Text=<G=CPU usage,0,0,1,0,100,10>
-PositionX=1687
-PositionY=441
-ExtentX=192
-ExtentY=16
+Text=<P=%PX_16%,%PY_281%><L69><E=192,16><G=CPU usage,0,0,1,0,100,10>
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
 ExtentOrigin=0
 TextColor=0A84FF
 RefreshPeriod=250
 [Layer70]
 Name=GPU label
 VisibilitySource=Tsume level 4 visible
-Text=GPU
-PositionX=1687
-PositionY=476
+Text=<P=%PX_16%,%PY_316%><L70>GPU
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -998,9 +1427,9 @@ RefreshPeriod=250
 [Layer71]
 Name=GPU Load label
 VisibilitySource=Tsume level 4 visible
-Text=Load
-PositionX=1687
-PositionY=497
+Text=<P=%PX_16%,%PY_337%><L71>Load
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -1009,20 +1438,20 @@ RefreshPeriod=250
 [Layer72]
 Name=GPU Load
 VisibilitySource=Tsume level 4 visible
-Text=%GPU1 usage%%
-PositionX=1781
-PositionY=497
-ExtentX=98
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_110%,%PY_337%><L72><E=98,19,2>%GPU1 usage%%
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer73]
 Name=GPU Power label
 VisibilitySource=Tsume level 4 visible
-Text=Power
-PositionX=1687
-PositionY=517
+Text=<P=%PX_16%,%PY_357%><L73>Power
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -1031,20 +1460,20 @@ RefreshPeriod=250
 [Layer74]
 Name=GPU Power
 VisibilitySource=Tsume level 4 visible
-Text=%GPU1 power% W
-PositionX=1781
-PositionY=517
-ExtentX=98
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_110%,%PY_357%><L74><E=98,19,2>%GPU1 power% W
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer75]
 Name=GPU Clock label
 VisibilitySource=Tsume level 4 visible
-Text=Clock
-PositionX=1687
-PositionY=537
+Text=<P=%PX_16%,%PY_377%><L75>Clock
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -1053,20 +1482,20 @@ RefreshPeriod=250
 [Layer76]
 Name=GPU Clock
 VisibilitySource=Tsume level 4 visible
-Text=%GPU clock% GHz
-PositionX=1781
-PositionY=537
-ExtentX=98
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_110%,%PY_377%><L76><E=98,19,2>%GPU clock% GHz
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer77]
 Name=GPU Voltage label
 VisibilitySource=Tsume level 4 visible
-Text=Voltage
-PositionX=1687
-PositionY=557
+Text=<P=%PX_16%,%PY_397%><L77>Voltage
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -1075,20 +1504,20 @@ RefreshPeriod=250
 [Layer78]
 Name=GPU Voltage
 VisibilitySource=Tsume level 4 visible
-Text=%GPU core voltage% V
-PositionX=1781
-PositionY=557
-ExtentX=98
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_110%,%PY_397%><L78><E=98,19,2>%GPU core voltage% V
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer79]
 Name=GPU Fan label
 VisibilitySource=Tsume level 4 visible
-Text=Fan
-PositionX=1687
-PositionY=577
+Text=<P=%PX_16%,%PY_417%><L79>Fan
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -1097,20 +1526,20 @@ RefreshPeriod=250
 [Layer80]
 Name=GPU Fan
 VisibilitySource=Tsume level 4 visible
-Text=%GPU fan% rpm
-PositionX=1781
-PositionY=577
-ExtentX=98
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_110%,%PY_417%><L80><E=98,19,2>%GPU fan% rpm
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer81]
 Name=GPU VRAM label
 VisibilitySource=Tsume level 4 visible
-Text=VRAM
-PositionX=1687
-PositionY=597
+Text=<P=%PX_16%,%PY_437%><L81>VRAM
+PositionX=0
+PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
@@ -1119,22 +1548,22 @@ RefreshPeriod=250
 [Layer82]
 Name=GPU VRAM
 VisibilitySource=Tsume level 4 visible
-Text=%GPU1 memory usage% GB
-PositionX=1781
-PositionY=597
-ExtentX=98
-ExtentY=19
-ExtentOrigin=2
+Text=<P=%PX_110%,%PY_437%><L82><E=98,19,2>%GPU1 memory usage% GB
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
 TextColor=FFFFFF
 RefreshPeriod=250
 [Layer83]
 Name=GPU usage graph
 VisibilitySource=Tsume level 4 visible
-Text=<G=GPU1 usage,0,0,1,0,100,10>
-PositionX=1687
-PositionY=620
-ExtentX=192
-ExtentY=16
+Text=<P=%PX_16%,%PY_460%><L83><E=192,16><G=GPU1 usage,0,0,1,0,100,10>
+PositionX=0
+PositionY=0
+ExtentX=0
+ExtentY=0
 ExtentOrigin=0
 TextColor=BF5AF2
 RefreshPeriod=250
