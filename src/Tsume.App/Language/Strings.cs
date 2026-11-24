@@ -597,6 +597,11 @@ public static class Strings
     public static string BackButtonAddKey => Find();
     public static string BackButtonRemoveKey => Find();
     public static string BackButtonMultiHint(int maxKeys) => Fill(Find(), maxKeys);
+    public static string DedicatedActionsHeading => Find();
+    public static string DedicatedActionFpsOverlay => Find();
+    public static string DedicatedActionFpsOverlayDetail => Find();
+    public static string DedicatedActionOpenTsume => Find();
+    public static string DedicatedActionOpenTsumeDetail => Find();
     public static string ControlsSaved => Find();
     public static string ControlsSavedPanelOnly => Find();
     public static string ControlsMsiCenterRuns => Find();

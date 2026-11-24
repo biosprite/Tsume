@@ -45,6 +45,10 @@ public sealed class SavedState
     public Platform.HardwareButtonAction GameBarButton { get; set; } = Platform.HardwareButtonAction.XboxGameBar;
     public Platform.HardwareButtonAction? OemButton { get; set; }
 
+    /// <summary>Global key/button chords (up to 3 simultaneous <see cref="Core.Controller.BackButtonKey.Code"/> values) for Dedicated Actions.</summary>
+    public List<byte>? FpsOverlayHotkey { get; set; }
+    public List<byte>? OpenTsumeHotkey { get; set; }
+
     /// <summary>Legacy fields kept for migrating earlier state.json files.</summary>
     public int? MButton { get; set; }
     public bool MButtonOpensTsume { get; set; } = true;

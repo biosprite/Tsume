@@ -183,6 +183,19 @@
                         Focusable="False" />
         </StackPanel>
 
+        <!-- Dedicated actions (global keyboard / gamepad shortcuts, up to 3 simultaneous keys each) -->
+        <StackPanel>
+          <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.DedicatedActionsHeading}"
+                     Margin="4,16,0,4" />
+
+          <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+                     Text="{Binding DedicatedActionsMultiHint}" Margin="4,0,4,10" />
+
+          <ItemsControl ItemsSource="{Binding DedicatedActions}"
+                        ItemTemplate="{StaticResource BackButtonCardTemplate}"
+                        Focusable="False" />
+        </StackPanel>
+
       </StackPanel>
     </ScrollViewer>
 

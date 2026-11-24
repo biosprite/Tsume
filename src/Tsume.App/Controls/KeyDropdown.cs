@@ -27,6 +27,8 @@ public sealed class KeyDropdown : ComboBox
         DefaultStyleKeyProperty.OverrideMetadata(typeof(KeyDropdown), new FrameworkPropertyMetadata(typeof(KeyDropdown)));
     }
 
+    public static bool IsAnyOpen => _openDropdown is { IsDropDownOpen: true };
+
     public static bool CloseIfOpen()
     {
         if (_openDropdown is not { IsDropDownOpen: true } open) return false;

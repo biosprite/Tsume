@@ -419,6 +419,7 @@ internal static partial class User32
 
     public const uint LLMHF_INJECTED = 0x0000_0001;
     public const uint LLMHF_LOWER_IL_INJECTED = 0x0000_0002;
+    public const uint LLKHF_EXTENDED = 0x0000_0001;
     public const uint LLKHF_INJECTED = 0x0000_0010;
     public const uint LLKHF_ALTDOWN = 0x0000_0020;
     public const uint LLKHF_LOWER_IL_INJECTED = 0x0000_0002;

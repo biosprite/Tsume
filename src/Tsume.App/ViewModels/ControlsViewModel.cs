@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Input;
+using Tsume.App.Input;
 using Tsume.App.Language;
 using Tsume.App.Mvvm;
 using Tsume.App.Platform;
@@ -37,7 +38,6 @@ public sealed class ControlsViewModel : LayerViewModel, IDisposable
         GameBarOptions =
         [
             new(HardwareButtonAction.XboxGameBar, Strings.GameBarDefault),
-            new(HardwareButtonAction.OpenTsume, Strings.GameBarOpenTsume),
             new(HardwareButtonAction.SteamBigPicture, Strings.GameBarSteam),
             new(HardwareButtonAction.TaskManager, Strings.GameBarTaskManager),
             new(HardwareButtonAction.TouchKeyboard, Strings.GameBarTouchKeyboard),
@@ -48,14 +48,13 @@ public sealed class ControlsViewModel : LayerViewModel, IDisposable
 
         OemButtonOptions =
         [
-            new(HardwareButtonAction.OpenTsume, Strings.MButtonDefault),
+            new(HardwareButtonAction.Disabled, Strings.GameBarDisabled),
             new(HardwareButtonAction.XboxGameBar, Strings.MButtonXboxGameBar),
             new(HardwareButtonAction.SteamBigPicture, Strings.GameBarSteam),
             new(HardwareButtonAction.TaskManager, Strings.GameBarTaskManager),
             new(HardwareButtonAction.TouchKeyboard, Strings.GameBarTouchKeyboard),
             new(HardwareButtonAction.Screenshot, Strings.GameBarScreenshot),
             new(HardwareButtonAction.ShowDesktop, Strings.GameBarShowDesktop),
-            new(HardwareButtonAction.Disabled, Strings.GameBarDisabled),
         ];
 
         ToggleOpenOnRight = new Command(() => OpenOnRight = !OpenOnRight);
@@ -67,6 +66,22 @@ public sealed class ControlsViewModel : LayerViewModel, IDisposable
         SelectedGameBarOption = GameBarOptions.FirstOrDefault(o => o.Action == state.GameBarButton) ?? GameBarOptions[0];
         SelectedOemButtonOption = OemButtonOptions.FirstOrDefault(o => o.Action == initialOem) ?? OemButtonOptions[0];
         _absorbing = false;
+
+        DedicatedActions.Add(new DedicatedActionEditor(
+            DedicatedAction.OpenFpsOverlay,
+            Strings.DedicatedActionFpsOverlay,
+            Strings.DedicatedActionFpsOverlayDetail,
+            DedicatedActionKeys.All,
+            state.FpsOverlayHotkey,
+            OnDedicatedActionChanged));
+
+        DedicatedActions.Add(new DedicatedActionEditor(
+            DedicatedAction.OpenTsume,
+            Strings.DedicatedActionOpenTsume,
+            Strings.DedicatedActionOpenTsumeDetail,
+            DedicatedActionKeys.All,
+            state.OpenTsumeHotkey ?? [DedicatedActionKeys.OemButtonCode],
+            OnDedicatedActionChanged));
 
         performance.PropertyChanged += (_, e) =>
         {
@@ -119,27 +134,7 @@ public sealed class ControlsViewModel : LayerViewModel, IDisposable
 
             if (_absorbing) return;
 
-            var previous = _state.GameBarButton;
             _state.GameBarButton = value.Action;
-
-            // On two-button devices, moving Tsume onto the Game Bar button swaps the OEM button
-            // to Xbox Game Bar by default; restoring Game Bar restores the OEM button to Tsume.
-            if (_controls?.HasOemButton == true)
-            {
-                if (value.Action == HardwareButtonAction.OpenTsume
-                    && previous != HardwareButtonAction.OpenTsume
-                    && OemButtonAction == HardwareButtonAction.OpenTsume)
-                {
-                    SetOemButtonSilently(HardwareButtonAction.XboxGameBar);
-                }
-                else if (value.Action == HardwareButtonAction.XboxGameBar
-                    && previous == HardwareButtonAction.OpenTsume
-                    && OemButtonAction is HardwareButtonAction.XboxGameBar or HardwareButtonAction.Disabled)
-                {
-                    SetOemButtonSilently(HardwareButtonAction.OpenTsume);
-                }
-            }
-
             _state.Save();
         }
     } = null!;
@@ -182,14 +177,6 @@ public sealed class ControlsViewModel : LayerViewModel, IDisposable
             _                              => Strings.MButtonDetailCustom,
         };
 
-    private void SetOemButtonSilently(HardwareButtonAction action)
-    {
-        _absorbing = true;
-        SelectedOemButtonOption = OemButtonOptions.FirstOrDefault(o => o.Action == action) ?? OemButtonOptions[0];
-        _absorbing = false;
-        SaveOemButton(action);
-    }
-
     private void SaveOemButton(HardwareButtonAction action)
     {
         _state.OemButton = action;
@@ -198,6 +185,33 @@ public sealed class ControlsViewModel : LayerViewModel, IDisposable
     }
 
     public ObservableCollection<BackButtonEditor> BackButtons { get; } = [];
+
+    public ObservableCollection<DedicatedActionEditor> DedicatedActions { get; } = [];
+
+    public string DedicatedActionsMultiHint => Strings.BackButtonMultiHint(DedicatedActionKeys.MaxKeys);
+
+    /// <summary>Raised whenever a Dedicated Action key binding changes so global listeners can refresh.</summary>
+    public event Action? DedicatedActionsChanged;
+
+    public IReadOnlyList<DedicatedActionBinding> GetDedicatedActionBindings() =>
+        DedicatedActions.Select(a => new DedicatedActionBinding(a.Action, a.CurrentKeys())).ToList();
+
+    private void OnDedicatedActionChanged(DedicatedAction action, IReadOnlyList<byte> keys)
+    {
+        switch (action)
+        {
+            case DedicatedAction.OpenFpsOverlay:
+                _state.FpsOverlayHotkey = keys.Count > 0 ? [.. keys] : null;
+                break;
+            case DedicatedAction.OpenTsume:
+                // Empty list preserves an explicit Unbound choice; null means "never set" (defaults to Quick Menu / OEM).
+                _state.OpenTsumeHotkey = [.. keys];
+                break;
+        }
+
+        _state.Save();
+        DedicatedActionsChanged?.Invoke();
+    }
 
     public Visibility BackButtonsVisibility =>
         _controls?.BackButtons is { Buttons.Count: > 0 } ? Visibility.Visible : Visibility.Collapsed;
@@ -530,6 +544,128 @@ public sealed class BackButtonEditor : Observable
     }
 
     private void Emit() => _onChanged(Definition, CurrentBinding());
+}
+
+public sealed class DedicatedActionEditor : Observable
+{
+    private readonly Action<DedicatedAction, IReadOnlyList<byte>> _onChanged;
+    private bool _absorbing;
+
+    public DedicatedActionEditor(
+        DedicatedAction action,
+        string title,
+        string subtitle,
+        IReadOnlyList<BackButtonKey> availableKeys,
+        IReadOnlyList<byte>? initialKeys,
+        Action<DedicatedAction, IReadOnlyList<byte>> onChanged)
+    {
+        Action = action;
+        Title = title;
+        Subtitle = subtitle;
+        AvailableKeys = availableKeys;
+        MaxKeys = DedicatedActionKeys.MaxKeys;
+        _onChanged = onChanged;
+
+        AddKey = new Command(AddSlot);
+
+        _absorbing = true;
+        var valid = initialKeys?
+            .Where(code => code is not (0 or BackButtonKey.UnboundCode) && availableKeys.Any(k => k.Code == code))
+            .Take(MaxKeys)
+            .ToList() ?? [];
+
+        if (valid.Count == 0)
+        {
+            Slots.Add(CreateSlot(1, BackButtonKey.Unbound));
+        }
+        else
+        {
+            for (var i = 0; i < valid.Count; i++)
+                Slots.Add(CreateSlot(i + 1, DedicatedActionKeys.FromCode(valid[i])));
+        }
+
+        _absorbing = false;
+        SyncMeta();
+    }
+
+    public DedicatedAction Action { get; }
+    public string Title { get; }
+    public string Subtitle { get; }
+    public IReadOnlyList<BackButtonKey> AvailableKeys { get; }
+    public int MaxKeys { get; }
+
+    public ObservableCollection<KeySlotViewModel> Slots { get; } = [];
+
+    public ICommand AddKey { get; }
+
+    public string Summary { get; private set => Set(ref field, value); } = Strings.BackButtonUnbound;
+
+    public Visibility AddKeyVisibility { get; private set => Set(ref field, value); } = Visibility.Collapsed;
+
+    public IReadOnlyList<byte> CurrentKeys() =>
+        Slots
+            .Select(slot => slot.SelectedKey.Code)
+            .Where(code => code is not (0 or BackButtonKey.UnboundCode))
+            .Take(MaxKeys)
+            .ToList();
+
+    private KeySlotViewModel CreateSlot(int number, BackButtonKey key) =>
+        new(number, key, AvailableKeys, OnSlotChanged, RemoveSlot);
+
+    private void AddSlot()
+    {
+        if (Slots.Count >= MaxKeys) return;
+
+        _absorbing = true;
+        Slots.Add(CreateSlot(Slots.Count + 1, BackButtonKey.Unbound));
+        _absorbing = false;
+
+        SyncMeta();
+    }
+
+    private void RemoveSlot(KeySlotViewModel slot)
+    {
+        if (Slots.Count <= 1)
+        {
+            var hadBinding = slot.SelectedKey.Code != BackButtonKey.UnboundCode;
+
+            _absorbing = true;
+            slot.SelectedKey = BackButtonKey.Unbound;
+            _absorbing = false;
+
+            SyncMeta();
+            if (hadBinding) Emit();
+            return;
+        }
+
+        Slots.Remove(slot);
+        SyncMeta();
+        Emit();
+    }
+
+    private void OnSlotChanged()
+    {
+        if (_absorbing) return;
+        SyncMeta();
+        Emit();
+    }
+
+    private void SyncMeta()
+    {
+        for (var i = 0; i < Slots.Count; i++)
+            Slots[i].Number = i + 1;
+
+        var keys = CurrentKeys();
+        Summary = keys.Count > 0
+            ? string.Join(" + ", keys.Select(code => DedicatedActionKeys.FromCode(code).Name))
+            : Strings.BackButtonUnbound;
+
+        AddKeyVisibility = Slots.Count < MaxKeys && keys.Count > 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void Emit() => _onChanged(Action, CurrentKeys());
 }
 
 public sealed class KeySlotViewModel : Observable

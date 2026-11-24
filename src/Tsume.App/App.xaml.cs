@@ -52,14 +52,20 @@ public partial class App
     private PadIsolation? _padIsolation;
     private ClawButtons? _buttons;
     private GameBarButtonHook? _gameBarHook;
+    private DedicatedActionHook? _dedicatedActions;
     private PanelViewModel? _panel;
     private OverlayWindow? _window;
     private RtssOverlayDragController? _rtssDrag;
     private DateTime _lastButtonPress;
     private DateTime _lastGameBarPress;
+    private DateTime _lastFpsOverlayAction;
+    private DateTime _lastOpenTsumeAction;
 
     /// <summary>Latest controls profile for lock-free reads from the WMI button thread.</summary>
     private ControlsProfile? _activeControls;
+
+    /// <summary>Latest Dedicated Action bindings for lock-free reads from the WMI button thread.</summary>
+    private IReadOnlyList<DedicatedActionBinding> _dedicatedActionBindings = [];
 
     /// <summary>Whether MSI Center M was running when last looked at. Read on the button listener's thread.</summary>
     private volatile bool _msiCenterRuns;
@@ -242,6 +248,22 @@ public partial class App
         _gamepad = new Gamepad();
         _gamepad.Summoned += () => Dispatcher.BeginInvoke(window.Toggle);
         _gamepad.Pressed += button => Dispatcher.BeginInvoke(() => window.Press(button));
+        _gamepad.ActionTriggered += action => Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnDedicatedAction(action, window, panel));
+
+        _dedicatedActions = new DedicatedActionHook(Dispatcher);
+        _dedicatedActions.Triggered += action => OnDedicatedAction(action, window, panel);
+
+        void SyncDedicatedActions()
+        {
+            var bindings = panel.Settings.Controls.GetDedicatedActionBindings();
+            Volatile.Write(ref _dedicatedActionBindings, bindings);
+            _dedicatedActions.SetBindings(bindings);
+            _gamepad.SetActionBindings(bindings);
+            SyncHardwareButtons(window, panel);
+        }
+
+        panel.Settings.Controls.DedicatedActionsChanged += SyncDedicatedActions;
+        SyncDedicatedActions();
 
         _padIsolation!.Pressed += window.Press;
 
@@ -296,8 +318,10 @@ public partial class App
             _gameBarHook.SetTriggers(controls?.GameBarTriggers ?? []);
 
             var action = panel.Settings.Controls.GameBarAction;
+            var xboxBound = DedicatedActionKeys.UsesCode(
+                Volatile.Read(ref _dedicatedActionBindings), DedicatedActionKeys.XboxButtonCode);
             _gameBarHook.IsEnabled = controls is { HasGameBarButton: true, GameBarTriggers.Count: > 0 }
-                && (action != HardwareButtonAction.XboxGameBar || !controls.GameBarNativeWinG);
+                && (xboxBound || action != HardwareButtonAction.XboxGameBar || !controls.GameBarNativeWinG);
         }
 
         if (_buttons is null && controls is { OemButtonWmiCode: not null } or { GameBarWmiCode: not null })
@@ -314,13 +338,22 @@ public partial class App
 
         if (controls.HasOemButton && controls.OemButtonWmiCode == code)
         {
-            var action = panel.Settings.Controls.OemButtonAction;
             var blockedByMsi = controls.HasMsiCenterConflict && _msiCenterRuns;
+            var bindings = Volatile.Read(ref _dedicatedActionBindings);
 
-            if (action != HardwareButtonAction.Disabled && !blockedByMsi)
+            if (!blockedByMsi && DedicatedActionKeys.TryMatchHardwareButton(bindings, DedicatedActionKeys.OemButtonCode, out var dedicated))
             {
-                if (action == HardwareButtonAction.OpenTsume) OpenTrace.Summoned();
-                Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnOemButton(window, panel));
+                if (dedicated == DedicatedAction.OpenTsume) OpenTrace.Summoned();
+                Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnDedicatedAction(dedicated, window, panel));
+            }
+            else
+            {
+                var action = panel.Settings.Controls.OemButtonAction;
+                if (action != HardwareButtonAction.Disabled && !blockedByMsi)
+                {
+                    if (action == HardwareButtonAction.OpenTsume) OpenTrace.Summoned();
+                    Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnOemButton(window, panel));
+                }
             }
 
             if (controls.HasMsiCenterConflict)
@@ -328,6 +361,14 @@ public partial class App
         }
         else if (controls.HasGameBarButton && controls.GameBarWmiCode == code)
         {
+            var bindings = Volatile.Read(ref _dedicatedActionBindings);
+            if (DedicatedActionKeys.TryMatchHardwareButton(bindings, DedicatedActionKeys.XboxButtonCode, out var dedicated))
+            {
+                if (dedicated == DedicatedAction.OpenTsume) OpenTrace.Summoned();
+                Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnDedicatedAction(dedicated, window, panel));
+                return;
+            }
+
             var action = panel.Settings.Controls.GameBarAction;
             var handleDefault = !controls.GameBarNativeWinG && (!controls.HasMsiCenterConflict || !_msiCenterRuns);
 
@@ -351,10 +392,37 @@ public partial class App
         if (now - _lastGameBarPress < ButtonEcho) return;
         _lastGameBarPress = now;
 
+        var bindings = Volatile.Read(ref _dedicatedActionBindings);
+        if (DedicatedActionKeys.TryMatchHardwareButton(bindings, DedicatedActionKeys.XboxButtonCode, out var dedicated))
+        {
+            OnDedicatedAction(dedicated, window, panel);
+            return;
+        }
+
         var action = panel.Settings.Controls.GameBarAction;
         if (action == HardwareButtonAction.OpenTsume) OpenTrace.Summoned();
 
         QuickActions.Run(action, window.Toggle);
+    }
+
+    private void OnDedicatedAction(DedicatedAction action, OverlayWindow window, PanelViewModel panel)
+    {
+        var now = DateTime.UtcNow;
+        switch (action)
+        {
+            case DedicatedAction.OpenFpsOverlay:
+                if (now - _lastFpsOverlayAction < ButtonEcho) return;
+                _lastFpsOverlayAction = now;
+                panel.Rtss.ToggleOverlay();
+                break;
+
+            case DedicatedAction.OpenTsume:
+                if (now - _lastOpenTsumeAction < ButtonEcho) return;
+                _lastOpenTsumeAction = now;
+                OpenTrace.Summoned();
+                window.Toggle();
+                break;
+        }
     }
 
     /// <summary>Trims memory once the panel has been closed for the idle interval.</summary>
@@ -400,6 +468,7 @@ public partial class App
         _rtssDrag?.Dispose();
         _padIsolation?.Dispose();
         _panel?.Dispose();
+        _dedicatedActions?.Dispose();
         _gameBarHook?.Dispose();
         _buttons?.Dispose();
         _gamepad?.Dispose();

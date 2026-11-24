@@ -847,6 +847,11 @@
     <value>Pressed together at the same time (up to {0} keys)</value>
     <comment>{0} = maximum simultaneous keys supported by this controller</comment>
   </data>
+  <data name="DedicatedActionsHeading" xml:space="preserve"><value>DEDICATED ACTIONS</value></data>
+  <data name="DedicatedActionFpsOverlay" xml:space="preserve"><value>Open FPS overlay</value></data>
+  <data name="DedicatedActionFpsOverlayDetail" xml:space="preserve"><value>Toggle the FPS overlay on or off</value></data>
+  <data name="DedicatedActionOpenTsume" xml:space="preserve"><value>Open Tsume</value></data>
+  <data name="DedicatedActionOpenTsumeDetail" xml:space="preserve"><value>Open or close the Tsume panel</value></data>
   <data name="ControlsSaved" xml:space="preserve"><value>Panel &amp; button settings save immediately; back buttons save to the controller when you leave.</value></data>
   <data name="ControlsSavedPanelOnly" xml:space="preserve"><value>Panel &amp; button settings save immediately.</value></data>
   <data name="ControlsMsiCenterRuns" xml:space="preserve"><value>MSI Center M is running and may undo back-button bindings.</value></data>

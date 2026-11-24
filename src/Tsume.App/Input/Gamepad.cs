@@ -1,4 +1,6 @@
+using Tsume.App.Controls;
 using Tsume.App.Platform.Interop;
+using Tsume.Core.Controller;
 
 namespace Tsume.App.Input;
 
@@ -28,8 +30,15 @@ public sealed class Gamepad : IDisposable
     private static readonly TimeSpan IdlePoll = TimeSpan.FromMilliseconds(60);
     private static readonly TimeSpan ActivePoll = TimeSpan.FromMilliseconds(16);
 
+    private sealed record PadActionBinding(
+        DedicatedAction Action,
+        DedicatedActionKeys.GamepadInput GamepadMask,
+        byte[] KeyboardCodes);
+
     private readonly CancellationTokenSource _stop = new();
     private readonly Thread _thread;
+    private readonly HashSet<DedicatedAction> _latchedActions = [];
+    private volatile PadActionBinding[] _actionBindings = [];
 
     /// <summary>Raised on a background thread when the summon chord is pressed.</summary>
     public event Action? Summoned;
@@ -37,8 +46,39 @@ public sealed class Gamepad : IDisposable
     /// <summary>Raised on a background thread for each press (and repeat) while <see cref="IsNavigating"/>.</summary>
     public event Action<PadButton>? Pressed;
 
+    /// <summary>Raised on a background thread when a Dedicated Action gamepad chord is pressed.</summary>
+    public event Action<DedicatedAction>? ActionTriggered;
+
     /// <summary>True while the panel is open and wants button presses.</summary>
     public volatile bool IsNavigating;
+
+    public void SetActionBindings(IReadOnlyList<DedicatedActionBinding> bindings)
+    {
+        var list = new List<PadActionBinding>(bindings.Count);
+        foreach (var binding in bindings)
+        {
+            var pad = DedicatedActionKeys.GamepadInput.None;
+            var kb = new List<byte>(DedicatedActionKeys.MaxKeys);
+            var hasOemButton = false;
+
+            foreach (var code in binding.Keys)
+            {
+                if (code is 0 or BackButtonKey.UnboundCode) continue;
+
+                if (code == DedicatedActionKeys.OemButtonCode)
+                    hasOemButton = true;
+                else if (DedicatedActionKeys.TryGetGamepad(code, out var input))
+                    pad |= input;
+                else if (DedicatedActionKeys.TryGetKeyboard(code, out _) && !kb.Contains(code))
+                    kb.Add(code);
+            }
+
+            if (!hasOemButton && pad != DedicatedActionKeys.GamepadInput.None)
+                list.Add(new PadActionBinding(binding.Action, pad, [.. kb]));
+        }
+
+        _actionBindings = [.. list];
+    }
 
     public Gamepad()
     {
@@ -57,7 +97,56 @@ public sealed class Gamepad : IDisposable
             if (summoned) Summoned?.Invoke();
             foreach (var button in Each(pressed)) Pressed?.Invoke(button);
 
+            PollDedicatedActions();
+
             _stop.Token.WaitHandle.WaitOne(IsNavigating ? ActivePoll : IdlePoll);
+        }
+    }
+
+    private void PollDedicatedActions()
+    {
+        var bindings = _actionBindings;
+        if (bindings.Length == 0)
+        {
+            _latchedActions.Clear();
+            return;
+        }
+
+        var wantsBack = false;
+        foreach (var binding in bindings)
+        {
+            if ((binding.GamepadMask & (DedicatedActionKeys.GamepadInput.BackLeft | DedicatedActionKeys.GamepadInput.BackRight)) != 0)
+            {
+                wantsBack = true;
+                break;
+            }
+        }
+
+        var pad = DedicatedActionKeys.ReadGamepadInputs(includeBackButtons: wantsBack);
+        foreach (var binding in bindings)
+        {
+            var allDown = (pad & binding.GamepadMask) == binding.GamepadMask;
+            if (allDown && binding.KeyboardCodes.Length > 0)
+            {
+                foreach (var k in binding.KeyboardCodes)
+                {
+                    if (!DedicatedActionKeys.IsKeyboardCodeDown(k))
+                    {
+                        allDown = false;
+                        break;
+                    }
+                }
+            }
+
+            if (allDown)
+            {
+                if (_latchedActions.Add(binding.Action) && !KeyDropdown.IsAnyOpen)
+                    ActionTriggered?.Invoke(binding.Action);
+            }
+            else
+            {
+                _latchedActions.Remove(binding.Action);
+            }
         }
     }
 

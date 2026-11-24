@@ -176,6 +176,9 @@ public sealed record RtssSettings
 
     public RtssOverlayLevel Level { get; init; } = RtssOverlayLevel.Off;
 
+    /// <summary>Last non-Off level shown, restored when toggling the FPS overlay back on via a shortcut.</summary>
+    public RtssOverlayLevel LastActiveLevel { get; init; } = RtssOverlayLevel.Fps;
+
     /// <summary>
     /// True once a non-Off level has been picked. Until then Tsume leaves RTSS's OverlayEditor plugin and the
     /// user's own layout alone, even though <see cref="UseTsumeOverlay"/> defaults to on.

@@ -82,6 +82,9 @@ public sealed class RtssOverlayService : IDisposable
     /// <summary>Non-None when AIDA64, Winhanced, or another app already owns <c>AIDA64_SensorValues</c>.</summary>
     public AidaConflictKind SharedMemoryConflict => _aida.Conflict;
 
+    /// <summary>True when the FPS Overlay feature is enabled in Settings.</summary>
+    public bool IsFeatureEnabled => _state.ShowRtss;
+
     private bool IsOverlayPluginWanted => _state.ShowRtss && _settings.UseTsumeOverlay && _settings.OverlayClaimed;
 
     private bool IsOverlayVisibleWanted => IsOverlayPluginWanted && _settings.Level != RtssOverlayLevel.Off;
@@ -574,8 +577,9 @@ public sealed class RtssOverlayService : IDisposable
     public void ApplySettings(RtssSettings next)
     {
         // The first non-Off level is what hands OverlayEditor to Tsume; it stays claimed from then on.
-        if (next.Level != RtssOverlayLevel.Off && !next.OverlayClaimed)
-            next = next with { OverlayClaimed = true };
+        // Also remember the active level so a global toggle shortcut can restore it.
+        if (next.Level != RtssOverlayLevel.Off)
+            next = next with { OverlayClaimed = true, LastActiveLevel = next.Level };
 
         var previous = _settings;
         _settings = next;

@@ -44,7 +44,7 @@ public sealed class RtssViewModel : LayerViewModel
         // Tsume restarts RTSS when Tsume's overlay is toggled or upgraded; show the new state once it is back.
         _service.Restarted += () => Application.Current?.Dispatcher.InvokeAsync(RefreshState);
         _service.ConflictChanged += () => Application.Current?.Dispatcher.InvokeAsync(NotifyConflict);
-        _service.OverlayStateChanged += () => Application.Current?.Dispatcher.InvokeAsync(SyncPlacementState);
+        _service.OverlayStateChanged += () => Application.Current?.Dispatcher.InvokeAsync(SyncFromService);
 
         _capSettle.Tick += (_, _) => { _capSettle.Stop(); ApplyFrameRateLimit(CustomCap); };
 
@@ -649,6 +649,48 @@ public sealed class RtssViewModel : LayerViewModel
                 (null, { } c)  => c,
                 _              => "",
             };
+        }
+    }
+
+    /// <summary>
+    /// Toggles the FPS overlay on or off from a global shortcut. When using Tsume's overlay, turns it off if shown
+    /// or restores the last active level (starting RTSS if installed and not yet running). When using the user's own
+    /// RTSS overlay, toggles RTSS's global OSD visibility.
+    /// </summary>
+    public void ToggleOverlay()
+    {
+        if (IsBusy || !_service.IsFeatureEnabled) return;
+
+        var settings = _service.Settings;
+        if (settings.UseTsumeOverlay)
+        {
+            if (settings.Level != RtssOverlayLevel.Off)
+            {
+                _service.ApplySettings(settings with { Level = RtssOverlayLevel.Off });
+                Status = DefaultStatus();
+                return;
+            }
+
+            var install = _service.Install ?? _service.RefreshInstallation();
+            if (install is null) return;
+
+            var target = settings.LastActiveLevel != RtssOverlayLevel.Off
+                ? settings.LastActiveLevel
+                : RtssOverlayLevel.Fps;
+
+            _service.ApplySettings(settings with { Level = target });
+            if (!_service.IsRunning) _ = StartRtssAsync();
+            Status = DefaultStatus();
+            return;
+        }
+
+        if (!_service.IsRunning) return;
+        var current = _service.IsOsdVisible() ?? IsOsdVisible;
+        var nextVisible = !current;
+        if (_service.SetOsdVisible(nextVisible))
+        {
+            IsOsdVisible = nextVisible;
+            NotifyTile();
         }
     }
 
