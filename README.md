@@ -50,14 +50,14 @@ yet, the panel runs but leaves the firmware alone.
   a frame-rate counter. Single-player games only: in an online game it can get
   an account banned, and it is not offered where an anti-cheat is found.
 - **RTSS overlay (experimental):** optional performance overlay using
-  [realHfde's Essential overlays](https://github.com/realHfde/Huffdee-RTSS-Overlays-and-Rainmeter-Skins)
-  (MIT): an FPS pill, Sleek, Sleek Compact or the full Performance panel, in
-  Dark, Smoke, White or Float. RTSS's own OverlayEditor plugin draws a combined
-  per-theme layout, so MSI Afterburner isn't needed, level changes (and Off)
-  apply live in-game without restarting RTSS, and the overlay disappears when
-  Tsume exits. Also sets a global frame-rate cap through RivaTuner Statistics
-  Server. Can be switched off to give your own RTSS overlay back. RTSS itself
-  isn't bundled; Tsume links to Guru3D's official RTSS 7.3.7 download.
+  [realHfde's Essential Dark overlays](https://github.com/realHfde/Huffdee-RTSS-Overlays-and-Rainmeter-Skins)
+  (MIT): an FPS square, Bar, Detail or Full side panel. RTSS's own
+  OverlayEditor plugin draws a single combined layout, so MSI Afterburner isn't
+  needed, level changes (and Off) apply live in-game without restarting RTSS,
+  and the overlay disappears when Tsume exits. Also sets a global frame-rate
+  cap through RivaTuner Statistics Server. Can be switched off to give your own
+  RTSS overlay back. RTSS itself isn't bundled; Tsume links to Guru3D's
+  official RTSS 7.3.7 download.
 - **Themes:** eight colour schemes, or your own accent, background and text
   colours.
 - **Controller, touch and mouse:** the whole panel works with any of the
