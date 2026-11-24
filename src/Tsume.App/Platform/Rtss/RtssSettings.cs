@@ -186,6 +186,12 @@ public sealed record RtssSettings
 
     public RtssOverlayLevel Level { get; init; } = RtssOverlayLevel.Off;
 
+    /// <summary>
+    /// True once a non-Off level has been picked. Until then Tsume leaves RTSS's OverlayEditor plugin and the
+    /// user's own layout alone, even though <see cref="UseTsumeOverlay"/> defaults to on.
+    /// </summary>
+    public bool OverlayClaimed { get; init; }
+
     public RtssOverlayTheme Theme { get; init; } = RtssOverlayTheme.Dark;
 
     /// <summary>Last custom frame-rate limit chosen with the slider (FPS).</summary>
@@ -205,9 +211,10 @@ public sealed record RtssSettings
 
     /// <summary>
     /// True to keep an invisible touch-drag handle over the active FPS overlay so it can be dragged directly
-    /// on touchscreen handhelds without opening Tsume.
+    /// on touchscreen handhelds without opening Tsume. Off unless chosen: the handle takes every tap and click
+    /// that lands on the overlay, so the game under it gets none of them.
     /// </summary>
-    public bool TouchDragEnabled { get; init; } = true;
+    public bool TouchDragEnabled { get; init; }
 
     public RtssOverlayPlacement GetPlacement(RtssOverlayLevel level) =>
         Placements is not null && Placements.TryGetValue(level, out var saved)

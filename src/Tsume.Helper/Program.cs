@@ -53,6 +53,11 @@ switch (args)
         MsiCenterControl.Resume();
         return 0;
 
+    // Run by the uninstaller: gives RTSS's OverlayEditor back the layout and plugin state the user had.
+    case ["--rtss-overlay", "restore"]:
+        RtssOverlayWriter.Apply(new Tsume.Core.Ipc.SetRtssOverlay(null, null));
+        return 0;
+
     case ["--hardware-inventory", var outputFile]:
         File.WriteAllText(outputFile, JsonSerializer.Serialize(
             HardwareDiscoveryCollector.CollectInventory(includeTimedLoad: true), DiscoveryJson.Indented));
@@ -69,7 +74,7 @@ switch (args)
         return 0;
 
     default:
-        Console.Error.WriteLine("Usage: Tsume.Helper [--serve-for <seconds> | --probe <file> | --write-check <file> | --mode-check <file> | --hardware-inventory <file> | --hardware-state <file> | --msi-center pause|resume]");
+        Console.Error.WriteLine("Usage: Tsume.Helper [--serve-for <seconds> | --probe <file> | --write-check <file> | --mode-check <file> | --hardware-inventory <file> | --hardware-state <file> | --msi-center pause|resume | --rtss-overlay restore]");
         return 64;
 }
 

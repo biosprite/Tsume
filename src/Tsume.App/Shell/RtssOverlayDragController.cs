@@ -30,7 +30,8 @@ public sealed class RtssOverlayDragController : IDisposable
         _dispatcher = dispatcher;
         _winEventCallback = OnWinEvent;
 
-        // Lightweight periodic check so if RTSS starts, exits, or unhooks an app, the touch handle follows.
+        // Lightweight periodic check so if RTSS starts, exits, unhooks an app, or a game's frame size changes,
+        // the overlay position (in FPS-only mode) and touch handle follow.
         _syncTimer = new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, (_, _) => Refresh(), dispatcher);
 
         _foregroundHook = User32.SetWinEventHook(
@@ -66,7 +67,9 @@ public sealed class RtssOverlayDragController : IDisposable
             _interactiveTargetHwnd = User32.GetForegroundWindow();
             var window = EnsureWindow();
             window.EnterInteractiveMode(
-                rect.Level, rect.X, rect.Y, rect.Width, rect.Height, rect.ScreenWidth, rect.ScreenHeight);
+                rect.Level, rect.X, rect.Y, rect.Width, rect.Height,
+                rect.FrameWidth, rect.FrameHeight,
+                rect.ViewportX, rect.ViewportY, rect.ViewportWidth, rect.ViewportHeight);
         });
     }
 
@@ -118,8 +121,9 @@ public sealed class RtssOverlayDragController : IDisposable
         if (_disposed) return;
         _dispatcher.BeginInvoke(() =>
         {
-            // Republish clamped coordinates for the new screen size and re-sync the touch handle.
-            _service.ApplySettings(_service.Settings);
+            if (_disposed) return;
+            // Republish clamped coordinates for the new screen/frame size and re-sync the touch handle.
+            _service.RepublishPosition();
             Refresh();
         });
     }
@@ -128,8 +132,12 @@ public sealed class RtssOverlayDragController : IDisposable
     {
         if (_disposed) return;
 
-        var featureEnabled = _service.Settings.TouchDragEnabled && _service.IsTsumeOverlayActive;
-        if (featureEnabled && !_panelOpen)
+        // Keep the 2s sync timer active while touch-drag is enabled, or in FPS-only mode (which has no
+        // telemetry loop) so slow-starting games and in-game borderless resolution changes still update.
+        var needSyncTimer = _service.IsTsumeOverlayActive
+            && !_panelOpen
+            && (_service.Settings.TouchDragEnabled || _service.Settings.Level == RtssOverlayLevel.Fps);
+        if (needSyncTimer)
         {
             if (!_syncTimer.IsEnabled) _syncTimer.Start();
         }
@@ -139,6 +147,11 @@ public sealed class RtssOverlayDragController : IDisposable
         }
 
         if (_window is { IsActivelyPositioning: true }) return;
+
+        // The overlay is placed in the focused game's frame, which need not be the size of the screen.
+        _service.SyncFrameSize();
+
+        var featureEnabled = _service.Settings.TouchDragEnabled && _service.IsTsumeOverlayActive;
 
         // Check foreground window against RTSS shared memory BEFORE _service.IsRunning so we never take
         // a full OS process snapshot when no RTSS-hooked 3D window is focused.
@@ -155,7 +168,10 @@ public sealed class RtssOverlayDragController : IDisposable
         }
 
         var window = EnsureWindow();
-        window.SyncStandby(rect.Level, rect.X, rect.Y, rect.Width, rect.Height, rect.ScreenWidth, rect.ScreenHeight);
+        window.SyncStandby(
+            rect.Level, rect.X, rect.Y, rect.Width, rect.Height,
+            rect.FrameWidth, rect.FrameHeight,
+            rect.ViewportX, rect.ViewportY, rect.ViewportWidth, rect.ViewportHeight);
     }
 
     private static bool IsForegroundWindowHookedByRtss()

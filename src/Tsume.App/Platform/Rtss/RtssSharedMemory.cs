@@ -4,6 +4,17 @@ using System.Text;
 
 namespace Tsume.App.Platform.Rtss;
 
+/// <summary>Snapshot of the foreground window's RTSS hook / frame state and whether a previously cached PID is still hooked.</summary>
+public readonly record struct RtssFrameQueryResult(
+    bool ForegroundIsHooked,
+    uint ForegroundPid,
+    int FrameWidth,
+    int FrameHeight,
+    bool CachedPidStillHooked)
+{
+    public bool HasFrame => FrameWidth > 0 && FrameHeight > 0;
+}
+
 /// <summary>
 /// Minimal access to <c>RTSSSharedMemoryV2</c>: checks RTSS is up, requests immediate live profile reloads
 /// (<c>APPFLAG_PROFILE_UPDATE_REQUESTED</c>) across hooked 3D applications, and clears the <c>"Tsume"</c> OSD slot
@@ -19,6 +30,7 @@ public static class RtssSharedMemory
     private const uint VersionApiFlags = 0x0002000A;    // 2.10+: APPFLAG_API_USAGE_MASK
     private const uint VersionBuffer = 0x0002000C;      // 2.12+: buffer[262144]
     private const uint VersionBusy = 0x0002000E;        // 2.14+: dwBusy spinlock
+    private const uint VersionResolution = 0x00020014;  // 2.20+: dwResolutionX / dwResolutionY
 
     // Header field byte offsets in RTSS_SHARED_MEMORY
     private const int OffSignature = 0;
@@ -42,6 +54,10 @@ public static class RtssSharedMemory
     // App entry field byte offsets in RTSS_SHARED_MEMORY_APP_ENTRY
     private const int AppPidOffset = 0;
     private const int AppFlagsOffset = 264;
+    private const int AppResolutionXOffset = 9224;
+    private const int AppResolutionYOffset = 9228;
+    public const int MinFrameSide = 240;
+    private const uint MaxFrameSide = 16384;
 
     private const uint AppFlagApiUsageMask = 0x0000FFFF;
     private const uint AppFlagProfileUpdateRequested = 0x10000000;
@@ -146,6 +162,93 @@ public static class RtssSharedMemory
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Inspects <c>RTSSSharedMemoryV2</c> in a single pass to find the rendered frame size for any PID in
+    /// <paramref name="foregroundPids"/> (ignoring tiny helper swapchains below <see cref="MinFrameSide"/>)
+    /// and to check whether <paramref name="cachedPid"/> is still hooked by RTSS.
+    /// </summary>
+    public static RtssFrameQueryResult QueryFrameState(ReadOnlySpan<uint> foregroundPids, uint cachedPid)
+    {
+        if (foregroundPids.IsEmpty && cachedPid == 0) return default;
+        try
+        {
+            using var mmf = MemoryMappedFile.OpenExisting(MapName, MemoryMappedFileRights.Read);
+            using var view = mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+
+            if (view.ReadUInt32(OffSignature) != RtssSignature) return default;
+            var version = view.ReadUInt32(OffVersion);
+            if (version < 0x00020000) return default;
+
+            var appEntrySize = view.ReadUInt32(OffAppEntrySize);
+            var appArrOffset = view.ReadUInt32(OffAppArrOffset);
+            var appArrSize = view.ReadUInt32(OffAppArrSize);
+            var capacity = view.Capacity;
+
+            if (appEntrySize < 284 || appArrOffset == 0 || appArrSize == 0) return default;
+
+            var canReadResolution = version >= VersionResolution && appEntrySize >= AppResolutionYOffset + 4;
+            var fgHooked = false;
+            var matchedFgPid = 0u;
+            var frameW = 0;
+            var frameH = 0;
+            var cachedStillHooked = false;
+
+            var limit = Math.Min(appArrSize, 256u);
+            for (uint i = 0; i < limit; i++)
+            {
+                var offset = appArrOffset + (long)i * appEntrySize;
+                if (offset + AppFlagsOffset + 4 > capacity) break;
+
+                var pid = view.ReadUInt32(offset + AppPidOffset);
+                if (pid == 0) continue;
+
+                var flags = view.ReadUInt32(offset + AppFlagsOffset);
+                var hasApi = version >= VersionApiFlags ? (flags & AppFlagApiUsageMask) != 0 : flags != 0;
+                if (!hasApi) continue;
+
+                if (cachedPid != 0 && pid == cachedPid)
+                    cachedStillHooked = true;
+
+                if (!foregroundPids.IsEmpty && foregroundPids.Contains(pid))
+                {
+                    fgHooked = true;
+                    if (matchedFgPid == 0) matchedFgPid = pid;
+
+                    if (frameW == 0 && canReadResolution && offset + AppResolutionYOffset + 4 <= capacity)
+                    {
+                        var width = view.ReadUInt32(offset + AppResolutionXOffset);
+                        var height = view.ReadUInt32(offset + AppResolutionYOffset);
+                        if (width is >= MinFrameSide and <= MaxFrameSide && height is >= MinFrameSide and <= MaxFrameSide)
+                        {
+                            matchedFgPid = pid;
+                            frameW = (int)width;
+                            frameH = (int)height;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            return new RtssFrameQueryResult(fgHooked, matchedFgPid, frameW, frameH, cachedStillHooked);
+        }
+        catch (Exception error) when (error is FileNotFoundException or UnauthorizedAccessException or IOException)
+        {
+            return default;
+        }
+    }
+
+    /// <summary>
+    /// Size in pixels of the frame <paramref name="processId"/> renders, as RTSS reports it for a hooked 3D app.
+    /// That is the space RTSS positions the overlay in, and it is smaller than the screen when a borderless game
+    /// renders below native resolution. Null when the process is not hooked or this RTSS does not report it.
+    /// </summary>
+    public static (int Width, int Height)? GetFrameSize(uint processId)
+    {
+        if (processId == 0) return null;
+        var result = QueryFrameState([processId], cachedPid: 0);
+        return result.HasFrame ? (result.FrameWidth, result.FrameHeight) : null;
     }
 
     /// <summary>

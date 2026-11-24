@@ -525,7 +525,7 @@ public sealed class RtssViewModel : LayerViewModel
 
     public string ActiveAlignmentLabel { get; private set => Set(ref field, value); } = "";
 
-    public bool TouchDragEnabled { get; private set => Set(ref field, value); } = true;
+    public bool TouchDragEnabled { get; private set => Set(ref field, value); }
 
     private void SelectAlignment(RtssOverlayAlignment alignment)
     {

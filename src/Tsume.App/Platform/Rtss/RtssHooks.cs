@@ -25,6 +25,9 @@ public sealed class RtssHooks : IDisposable
 
     private static readonly Journal Log = new("rtss");
 
+    // Called from the panel and from background overlay work; unloading must not free the DLL under a call into it.
+    private readonly Lock _gate = new();
+
     private nint _library;
     private string? _loadedPath;
 
@@ -62,6 +65,8 @@ public sealed class RtssHooks : IDisposable
     /// <summary>Loads <c>RTSSHooks64.dll</c> directly from RTSS's install folder if not already loaded.</summary>
     public bool EnsureLoaded(string? hooksDllPath)
     {
+        using var held = _gate.EnterScope();
+
         if (string.IsNullOrWhiteSpace(hooksDllPath)) return false;
         if (_library != 0 && string.Equals(_loadedPath, hooksDllPath, StringComparison.OrdinalIgnoreCase))
             return true;
@@ -90,6 +95,8 @@ public sealed class RtssHooks : IDisposable
 
     public bool? IsOsdVisible()
     {
+        using var held = _gate.EnterScope();
+
         if (_getFlags is null) return null;
         try { return (_getFlags() & FlagOsdVisible) != 0; }
         catch { return null; }
@@ -97,6 +104,8 @@ public sealed class RtssHooks : IDisposable
 
     public bool SetOsdVisible(bool visible)
     {
+        using var held = _gate.EnterScope();
+
         if (_setFlags is null) return false;
         try
         {
@@ -112,6 +121,8 @@ public sealed class RtssHooks : IDisposable
 
     public void EnsureLimiterEnabled()
     {
+        using var held = _gate.EnterScope();
+
         if (_setFlags is null) return;
         try { _setFlags(~FlagLimiterDisabled, 0u); }
         catch (Exception error) { Log.Write($"EnsureLimiterEnabled failed: {error.Message}"); }
@@ -122,6 +133,8 @@ public sealed class RtssHooks : IDisposable
     /// </summary>
     public void NotifyProfilesUpdated()
     {
+        using var held = _gate.EnterScope();
+
         try { _updateProfiles?.Invoke(); }
         catch (Exception error) { Log.Write($"UpdateProfiles failed: {error.Message}"); }
 
@@ -131,6 +144,8 @@ public sealed class RtssHooks : IDisposable
     /// <summary>Reads the effective global frame-rate cap from RTSS's profile file (with DLL fallback).</summary>
     public int? GetFrameRateLimit(string? rtssFolder)
     {
+        using var held = _gate.EnterScope();
+
         if (_getFlags is not null)
         {
             try
@@ -164,6 +179,8 @@ public sealed class RtssHooks : IDisposable
     /// <summary>Direct fallback for writing Global profile properties when the helper service is offline.</summary>
     public bool TryWriteProfileDirect(int? limit = null, int? x = null, int? y = null, int? zoom = null, int? enableFill = null, uint? fillColor = null)
     {
+        using var held = _gate.EnterScope();
+
         if (_loadProfile is null || _setProfileProperty is null || _saveProfile is null) return false;
 
         try
@@ -287,5 +304,9 @@ public sealed class RtssHooks : IDisposable
         }
     }
 
-    public void Dispose() => Unload();
+    public void Dispose()
+    {
+        using var held = _gate.EnterScope();
+        Unload();
+    }
 }

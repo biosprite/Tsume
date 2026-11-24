@@ -45,9 +45,19 @@
     <CustomAction Id="ResumeMsiCenter" FileRef="HelperExe" ExeCommand="--msi-center resume"
                   Execute="deferred" Impersonate="no" Return="ignore" />
 
+    <!--
+      On a real uninstall, RTSS's OverlayEditor gets back the layout and plugin state it had before Tsume's overlay:
+      left alone it would stay switched on, pointing at a layout file this uninstall deletes.
+      Runs elevated, while the helper is still on disk; harmless if Tsume never changed it or RTSS is not installed.
+    -->
+    <CustomAction Id="RestoreRtssOverlay" FileRef="HelperExe" ExeCommand="--rtss-overlay restore"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+
     <InstallExecuteSequence>
       <Custom Action="AskAboutGames" After="InstallInitialize"
               Condition='REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE AND UILevel &gt;= 3' />
+      <Custom Action="RestoreRtssOverlay" Before="ResumeMsiCenter"
+              Condition='REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE' />
       <Custom Action="ResumeMsiCenter" Before="StopServices"
               Condition='REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE' />
     </InstallExecuteSequence>

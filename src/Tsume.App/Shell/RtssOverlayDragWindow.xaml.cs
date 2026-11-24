@@ -34,11 +34,19 @@ public sealed partial class RtssOverlayDragWindow : Window
     private RtssOverlayLevel _level = RtssOverlayLevel.Off;
     private int _screenPhysW = 1920;
     private int _screenPhysH = 1200;
+    private int _viewportX;
+    private int _viewportY;
+    private int _viewportW = 1920;
+    private int _viewportH = 1200;
     private int _overlayPhysW;
     private int _overlayPhysH;
     private int _currentPhysX;
     private int _currentPhysY;
 
+    private double _rawDpiX = 1.0;
+    private double _rawDpiY = 1.0;
+    private double _viewLeftDip;
+    private double _viewTopDip;
     private double _dpiX = 1.0;
     private double _dpiY = 1.0;
 
@@ -98,9 +106,14 @@ public sealed partial class RtssOverlayDragWindow : Window
 
     /// <summary>Updates the invisible standby hit-target to match the active FPS overlay's current bounds.</summary>
     public void SyncStandby(
-        RtssOverlayLevel level, int x, int y, int width, int height, int screenW, int screenH)
+        RtssOverlayLevel level, int x, int y, int width, int height,
+        int frameW, int frameH, int viewportX, int viewportY, int viewportW, int viewportH)
     {
         if (_interactive || _dragging) return;
+
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var rawDpiX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+        var rawDpiY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
 
         if (IsVisible && !_expanded
             && _level == level
@@ -108,8 +121,14 @@ public sealed partial class RtssOverlayDragWindow : Window
             && _currentPhysY == y
             && _overlayPhysW == width
             && _overlayPhysH == height
-            && _screenPhysW == screenW
-            && _screenPhysH == screenH)
+            && _screenPhysW == frameW
+            && _screenPhysH == frameH
+            && _viewportX == viewportX
+            && _viewportY == viewportY
+            && _viewportW == viewportW
+            && _viewportH == viewportH
+            && _rawDpiX == rawDpiX
+            && _rawDpiY == rawDpiY)
         {
             return;
         }
@@ -119,8 +138,12 @@ public sealed partial class RtssOverlayDragWindow : Window
         _overlayPhysH = height;
         _currentPhysX = x;
         _currentPhysY = y;
-        _screenPhysW = screenW;
-        _screenPhysH = screenH;
+        _screenPhysW = frameW;
+        _screenPhysH = frameH;
+        _viewportX = viewportX;
+        _viewportY = viewportY;
+        _viewportW = viewportW;
+        _viewportH = viewportH;
 
         if (!IsVisible) Show();
         RefreshDpi();
@@ -130,15 +153,20 @@ public sealed partial class RtssOverlayDragWindow : Window
 
     /// <summary>Enters full-screen interactive positioning mode (works with touch, stylus, and mouse).</summary>
     public void EnterInteractiveMode(
-        RtssOverlayLevel level, int x, int y, int width, int height, int screenW, int screenH)
+        RtssOverlayLevel level, int x, int y, int width, int height,
+        int frameW, int frameH, int viewportX, int viewportY, int viewportW, int viewportH)
     {
         _level = level;
         _overlayPhysW = width;
         _overlayPhysH = height;
         _currentPhysX = x;
         _currentPhysY = y;
-        _screenPhysW = screenW;
-        _screenPhysH = screenH;
+        _screenPhysW = frameW;
+        _screenPhysH = frameH;
+        _viewportX = viewportX;
+        _viewportY = viewportY;
+        _viewportW = viewportW;
+        _viewportH = viewportH;
         _interactive = true;
 
         if (!IsVisible) Show();
@@ -369,8 +397,8 @@ public sealed partial class RtssOverlayDragWindow : Window
         var padX = (hitW - boxW) / 2.0;
         var padY = (hitH - boxH) / 2.0;
 
-        Left = Math.Max(0, _currentPhysX / _dpiX - padX);
-        Top = Math.Max(0, _currentPhysY / _dpiY - padY);
+        Left = Math.Max(_viewLeftDip, _viewLeftDip + _currentPhysX / _dpiX - padX);
+        Top = Math.Max(_viewTopDip, _viewTopDip + _currentPhysY / _dpiY - padY);
         Width = hitW;
         Height = hitH;
 
@@ -384,8 +412,8 @@ public sealed partial class RtssOverlayDragWindow : Window
     {
         _expanded = true;
 
-        Left = 0;
-        Top = 0;
+        Left = _viewLeftDip;
+        Top = _viewTopDip;
         Width = _screenPhysW / _dpiX;
         Height = _screenPhysH / _dpiY;
 
@@ -520,8 +548,26 @@ public sealed partial class RtssOverlayDragWindow : Window
     private void RefreshDpi()
     {
         var dpi = VisualTreeHelper.GetDpi(this);
-        _dpiX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
-        _dpiY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
+        _rawDpiX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+        _rawDpiY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
+
+        _viewLeftDip = _viewportX / _rawDpiX;
+        _viewTopDip = _viewportY / _rawDpiY;
+
+        // Overlay coordinates are in the game's frame pixels, presented into the game's viewport rectangle:
+        // a borderless game rendering 1280 wide into a 1920-wide screen puts 1.5 screen pixels under each frame pixel,
+        // while a 1280-wide windowed game maps 1:1 into its own client area. Folding frame/viewport into the scale
+        // keeps this window over the overlay as it is seen, with every position still in frame pixels.
+        if (_screenPhysW > 0 && _screenPhysH > 0 && _viewportW > 0 && _viewportH > 0)
+        {
+            _dpiX = _rawDpiX * ((double)_screenPhysW / _viewportW);
+            _dpiY = _rawDpiY * ((double)_screenPhysH / _viewportH);
+        }
+        else
+        {
+            _dpiX = _rawDpiX;
+            _dpiY = _rawDpiY;
+        }
     }
 
     private void ApplyWindowStyles()

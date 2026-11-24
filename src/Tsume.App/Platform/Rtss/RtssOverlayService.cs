@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using Tsume.App.Platform.Interop;
 using Tsume.Core.Devices;
@@ -44,6 +45,11 @@ public sealed class RtssOverlayService : IDisposable
     private double? _lastCpuClockMhz;
     private double? _lastGpuVramMb;
     private (int X, int Y)? _dragOverridePos;
+    private (int Width, int Height)? _frame;
+    private uint _framePid;
+    private nint _frameHwnd;
+    private uint _frameHwndPid;
+    private (int Width, int Height) _publishedFrame;
     private bool _disposed;
 
     public RtssOverlayService(HelperClient helper, SavedState state)
@@ -51,6 +57,10 @@ public sealed class RtssOverlayService : IDisposable
         _helper = helper;
         _state = state;
         _settings = state.Rtss ?? new RtssSettings();
+
+        // Settings saved before OverlayClaimed existed: a level already in use counts as having been picked.
+        if (_settings.Level != RtssOverlayLevel.Off && !_settings.OverlayClaimed)
+            _settings = _settings with { OverlayClaimed = true };
     }
 
     /// <summary>Raised (off the UI thread) after Tsume restarted RTSS so it loads a new overlay theme.</summary>
@@ -69,7 +79,7 @@ public sealed class RtssOverlayService : IDisposable
     /// <summary>Non-None when AIDA64, Winhanced, or another app already owns <c>AIDA64_SensorValues</c>.</summary>
     public AidaConflictKind SharedMemoryConflict => _aida.Conflict;
 
-    private bool IsOverlayPluginWanted => _state.ShowRtss && _settings.UseTsumeOverlay;
+    private bool IsOverlayPluginWanted => _state.ShowRtss && _settings.UseTsumeOverlay && _settings.OverlayClaimed;
 
     private bool IsOverlayVisibleWanted => IsOverlayPluginWanted && _settings.Level != RtssOverlayLevel.Off;
 
@@ -85,18 +95,162 @@ public sealed class RtssOverlayService : IDisposable
     }
 
     /// <summary>
-    /// Current screen-pixel bounding box of the active Tsume overlay, or null when no Tsume overlay is shown.
+    /// Size in pixels of the frame RTSS positions the overlay in: the hooked foreground game's own frame, which is
+    /// smaller than the screen when a borderless or windowed game renders below native resolution. Keeps the last
+    /// size seen while that game is still hooked (for example while Tsume's panel has focus), clears it once the
+    /// game exits or another hooked game takes focus, and falls back to the screen size otherwise.
     /// </summary>
-    public (RtssOverlayLevel Level, int X, int Y, int Width, int Height, int ScreenWidth, int ScreenHeight)? GetActiveOverlayRect()
+    private (int Width, int Height) GetFramePixels()
+    {
+        uint cachedPid;
+        lock (_gate) cachedPid = _framePid;
+
+        var fg = User32.GetForegroundWindow();
+        var fgPid = 0u;
+        if (fg != 0 && !User32.IsIconic(fg) && User32.IsWindowVisible(fg))
+        {
+            User32.GetWindowThreadProcessId(fg, out var pid);
+            if (pid != 0 && pid != (uint)Environment.ProcessId)
+                fgPid = pid;
+        }
+
+        var query = RtssSharedMemory.QueryFrameState(fgPid != 0 ? [fgPid] : [], cachedPid);
+        if (!query.ForegroundIsHooked && fgPid != 0 && IsApplicationFrameWindow(fg))
+        {
+            var childPids = CollectUwpChildPids(fg, fgPid);
+            if (childPids.Count > 0)
+                query = RtssSharedMemory.QueryFrameState(CollectionsMarshal.AsSpan(childPids), cachedPid);
+        }
+
+        lock (_gate)
+        {
+            if (query.HasFrame)
+            {
+                _frame = (query.FrameWidth, query.FrameHeight);
+                _framePid = query.ForegroundPid;
+                _frameHwnd = fg;
+                _frameHwndPid = fgPid;
+            }
+            else if (query.ForegroundIsHooked && query.ForegroundPid == _framePid && fgPid != 0)
+            {
+                _frameHwnd = fg;
+                _frameHwndPid = fgPid;
+            }
+            else if ((query.ForegroundIsHooked && query.ForegroundPid != _framePid)
+                || (cachedPid != 0 && _framePid == cachedPid && !query.CachedPidStillHooked))
+            {
+                ClearCachedFrameLocked();
+            }
+
+            return _frame ?? GetScreenPixels();
+        }
+    }
+
+    private void ClearCachedFrameLocked()
+    {
+        _frame = null;
+        _framePid = 0;
+        _frameHwnd = 0;
+        _frameHwndPid = 0;
+    }
+
+    private static bool IsApplicationFrameWindow(nint hwnd)
+    {
+        var className = new char[64];
+        var len = User32.GetClassName(hwnd, className, className.Length);
+        return len > 0 && new ReadOnlySpan<char>(className, 0, len).SequenceEqual("ApplicationFrameWindow");
+    }
+
+    private static List<uint> CollectUwpChildPids(nint frameHwnd, uint framePid)
+    {
+        var pids = new List<uint>(2);
+        User32.EnumChildWindows(frameHwnd, (child, _) =>
+        {
+            User32.GetWindowThreadProcessId(child, out var childPid);
+            if (childPid != 0 && childPid != framePid && !pids.Contains(childPid))
+                pids.Add(childPid);
+            return pids.Count < 8;
+        }, 0);
+        return pids;
+    }
+
+    private static (int X, int Y, int Width, int Height)? TryGetClientViewport(nint hwnd, uint expectedHwndPid)
+    {
+        if (hwnd == 0 || User32.IsIconic(hwnd) || !User32.IsWindowVisible(hwnd))
+            return null;
+
+        User32.GetWindowThreadProcessId(hwnd, out var pid);
+        if (pid == 0 || (expectedHwndPid != 0 && pid != expectedHwndPid))
+            return null;
+
+        if (!User32.GetClientRect(hwnd, out var rect))
+            return null;
+
+        var width = rect.Right - rect.Left;
+        var height = rect.Bottom - rect.Top;
+        if (width < RtssSharedMemory.MinFrameSide || height < RtssSharedMemory.MinFrameSide)
+            return null;
+
+        var origin = new User32.POINT { X = rect.Left, Y = rect.Top };
+        if (!User32.ClientToScreen(hwnd, ref origin))
+            return null;
+
+        var vx = User32.GetSystemMetrics(User32.SM_XVIRTUALSCREEN);
+        var vy = User32.GetSystemMetrics(User32.SM_YVIRTUALSCREEN);
+        var vw = User32.GetSystemMetrics(User32.SM_CXVIRTUALSCREEN);
+        var vh = User32.GetSystemMetrics(User32.SM_CYVIRTUALSCREEN);
+        if (vw > 0 && vh > 0
+            && (origin.X + width <= vx || origin.X >= vx + vw || origin.Y + height <= vy || origin.Y >= vy + vh))
+        {
+            return null;
+        }
+
+        return (origin.X, origin.Y, width, height);
+    }
+
+    /// <summary>
+    /// Publishes the overlay position again when the foreground game's frame is no longer the size it was last
+    /// worked out for (another game took focus, this one changed resolution, or the last game exited).
+    /// </summary>
+    public void SyncFrameSize()
+    {
+        if (_disposed || !IsOverlayVisibleWanted) return;
+
+        var frame = GetFramePixels();
+        bool changed;
+        lock (_gate) changed = frame != _publishedFrame;
+
+        if (changed) ApplyLiveLevelState();
+    }
+
+    /// <summary>Publishes the overlay position again, worked out afresh for the current frame or screen size.</summary>
+    public void RepublishPosition() => ApplyLiveLevelState();
+
+    /// <summary>
+    /// Bounding box of the active Tsume overlay in the game's frame pixels, together with that frame's size and
+    /// the physical screen rectangle the frame is presented into, or null when no Tsume overlay is shown.
+    /// </summary>
+    public (RtssOverlayLevel Level, int X, int Y, int Width, int Height, int FrameWidth, int FrameHeight, int ViewportX, int ViewportY, int ViewportWidth, int ViewportHeight)? GetActiveOverlayRect()
     {
         if (!IsOverlayVisibleWanted) return null;
         var level = _settings.Level;
         var (w, h) = RtssOverlayMetrics.GetSize(level);
         if (w <= 0 || h <= 0) return null;
 
-        var (sw, sh) = GetScreenPixels();
-        var (x, y) = ResolveActivePosition(level, sw, sh);
-        return (level, x, y, w, h, sw, sh);
+        var (fw, fh) = GetFramePixels();
+        var (x, y) = ResolveActivePosition(level, fw, fh);
+
+        nint frameHwnd;
+        uint frameHwndPid;
+        lock (_gate)
+        {
+            frameHwnd = _frameHwnd;
+            frameHwndPid = _frameHwndPid;
+        }
+
+        var (screenW, screenH) = GetScreenPixels();
+        var (vx, vy, vw, vh) = TryGetClientViewport(frameHwnd, frameHwndPid) ?? (0, 0, screenW, screenH);
+        return (level, x, y, w, h, fw, fh, vx, vy, vw, vh);
     }
 
     /// <summary>Streams a live pixel position to RTSS while the user is actively dragging the overlay.</summary>
@@ -105,7 +259,7 @@ public sealed class RtssOverlayService : IDisposable
         if (_disposed || !IsOverlayVisibleWanted) return;
 
         var (w, h) = RtssOverlayMetrics.GetSize(_settings.Level);
-        var (sw, sh) = GetScreenPixels();
+        var (sw, sh) = GetFramePixels();
         var cx = Math.Clamp(x, 0, Math.Max(0, sw - w));
         var cy = Math.Clamp(y, 0, Math.Max(0, sh - h));
 
@@ -416,11 +570,16 @@ public sealed class RtssOverlayService : IDisposable
     /// </summary>
     public void ApplySettings(RtssSettings next)
     {
+        // The first non-Off level is what hands OverlayEditor to Tsume; it stays claimed from then on.
+        if (next.Level != RtssOverlayLevel.Off && !next.OverlayClaimed)
+            next = next with { OverlayClaimed = true };
+
         var previous = _settings;
         _settings = next;
         SaveSettings();
 
-        var pluginChanged = previous.UseTsumeOverlay != next.UseTsumeOverlay;
+        var pluginChanged = previous.UseTsumeOverlay != next.UseTsumeOverlay
+            || previous.OverlayClaimed != next.OverlayClaimed;
         var themeChanged = previous.Theme != next.Theme;
         var levelChanged = previous.Level != next.Level;
         var touchDragChanged = previous.TouchDragEnabled != next.TouchDragEnabled;
@@ -472,11 +631,12 @@ public sealed class RtssOverlayService : IDisposable
         }
 
         var (tempWarnC, tempHotC) = CurrentTempThresholds();
-        var (sw, sh) = GetScreenPixels();
+        var (sw, sh) = GetFramePixels();
         var (posX, posY) = ResolveActivePosition(level, sw, sh);
         var published = _aida.TryPublish(
             new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb, tempWarnC, tempHotC, posX, posY),
             _install?.Folder);
+        if (published) lock (_gate) _publishedFrame = (sw, sh);
         CheckConflictChanged();
 
         if (ensureOsdVisible && IsRunning)
@@ -547,11 +707,12 @@ public sealed class RtssOverlayService : IDisposable
                     if (level < RtssOverlayLevel.Bar)
                     {
                         // FPS-only mode needs no sensor polling; just retry claiming AIDA64_SensorValues until owned.
-                        var (fpsSw, fpsSh) = GetScreenPixels();
+                        var (fpsSw, fpsSh) = GetFramePixels();
                         var (fpsPosX, fpsPosY) = ResolveActivePosition(level, fpsSw, fpsSh);
                         var claimed = _aida.TryPublish(
                             new AidaSensorSnapshot((int)level, PosX: fpsPosX, PosY: fpsPosY),
                             _install?.Folder);
+                        if (claimed) lock (_gate) _publishedFrame = (fpsSw, fpsSh);
                         CheckConflictChanged();
                         if (claimed) break;
 
@@ -563,13 +724,17 @@ public sealed class RtssOverlayService : IDisposable
                     if (!RtssSharedMemory.HasHookedApps())
                     {
                         _energy.Reset();
+                        lock (_gate) ClearCachedFrameLocked();
                         if (!_aida.IsOwned)
                         {
                             var (idleSw, idleSh) = GetScreenPixels();
                             var (idlePosX, idlePosY) = ResolveActivePosition(level, idleSw, idleSh);
-                            _aida.TryPublish(
+                            if (_aida.TryPublish(
                                 new AidaSensorSnapshot((int)level, PosX: idlePosX, PosY: idlePosY),
-                                _install?.Folder);
+                                _install?.Folder))
+                            {
+                                lock (_gate) _publishedFrame = (idleSw, idleSh);
+                            }
                             CheckConflictChanged();
                         }
 
@@ -609,11 +774,12 @@ public sealed class RtssOverlayService : IDisposable
                     if (level == RtssOverlayLevel.Off) break;
 
                     var (tempWarnC, tempHotC) = CurrentTempThresholds();
-                    var (sw, sh) = GetScreenPixels();
+                    var (sw, sh) = GetFramePixels();
                     var (posX, posY) = ResolveActivePosition(level, sw, sh);
                     var ok = _aida.TryPublish(
                         new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb, tempWarnC, tempHotC, posX, posY),
                         _install?.Folder);
+                    if (ok) lock (_gate) _publishedFrame = (sw, sh);
                     CheckConflictChanged();
 
                     await Task.Delay(ok ? TelemetryInterval : ConflictRetryInterval, cancel).ConfigureAwait(false);
@@ -632,12 +798,28 @@ public sealed class RtssOverlayService : IDisposable
         }
         finally
         {
+            var endedItself = false;
             lock (_gate)
             {
                 if (ReferenceEquals(_telemetryCts, cts))
+                {
                     _telemetryCts = null;
+                    endedItself = true;
+                }
+
+                // A sample still in flight when the loop was stopped can reopen the counters after the caller's
+                // reset; with no loop left to use them, close them here.
+                if (_telemetryCts is null) _energy.Reset();
             }
             cts.Dispose();
+
+            // A level change that arrived while this loop was on its way out found it still registered and
+            // started nothing, so start the loop it wanted.
+            if (endedItself && IsOverlayVisibleWanted
+                && (_settings.Level >= RtssOverlayLevel.Bar || !_aida.IsOwned))
+            {
+                StartTelemetryLoop();
+            }
         }
     }
 

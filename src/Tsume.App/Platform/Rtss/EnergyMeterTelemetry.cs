@@ -21,6 +21,9 @@ public sealed class EnergyMeterTelemetry : IDisposable
     private const double BytesPerMiB = 1024.0 * 1024.0;
     private const double MaxSaneGpuBytes = 1024.0 * 1024.0 * 1024.0 * 1024.0; // 1 TiB
 
+    // Sampled on the telemetry thread, reset from whichever thread changes the overlay.
+    private readonly Lock _gate = new();
+
     private nint _query;
     private nint _powerCounter;
     private nint _cpuPerfCounter;
@@ -37,6 +40,8 @@ public sealed class EnergyMeterTelemetry : IDisposable
     /// </summary>
     public (double? CpuWatts, double? GpuWatts, double? CpuClockMhz, double? GpuVramMb) Sample()
     {
+        using var held = _gate.EnterScope();
+
         EnsureOpen();
         if (_query == 0) return (null, null, null, null);
 
@@ -96,6 +101,8 @@ public sealed class EnergyMeterTelemetry : IDisposable
 
     private void Close()
     {
+        using var held = _gate.EnterScope();
+
         if (_query != 0)
         {
             PdhCloseQuery(_query);
