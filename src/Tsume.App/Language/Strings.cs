@@ -521,14 +521,8 @@ public static class Strings
     public static string RtssAlignBottomCenter => Find();
     public static string RtssAlignBottomRight => Find();
     public static string RtssAlignCustom => Find();
-    public static string RtssMoveOverlay => Find();
-    public static string RtssMoveOverlayDetail(string levelName) => Fill(Find(), levelName);
     public static string RtssTouchDrag => Find();
     public static string RtssTouchDragDetail => Find();
-    public static string RtssDragDone => Find();
-    public static string RtssDragReset => Find();
-    public static string RtssDragHint => Find();
-    public static string RtssOverlayCredit => Find();
     public static string RtssAidaConflictAida64 => Find();
     public static string RtssAidaConflictWinhanced => Find();
     public static string RtssAidaConflictOther => Find();

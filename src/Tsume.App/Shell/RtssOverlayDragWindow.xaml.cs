@@ -1,14 +1,11 @@
-using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using System.Windows.Shapes;
 using System.Windows.Threading;
 using Tsume.App.Language;
-using Tsume.App.Platform.Interop;
 using Tsume.App.Platform.Rtss;
 using Tsume.App.Theme;
 using Tsume.App.ViewModels;
@@ -18,11 +15,9 @@ namespace Tsume.App.Shell;
 
 /// <summary>
 /// Lightweight, no-activate UIAccess overlay window that makes Tsume's RTSS FPS overlays smoothly draggable
-/// on touchscreens (and pointers). Operates in two seamless modes:
-/// 1. Standby hit-target: invisible window tightly bounded to the active FPS overlay; dragging it expands
-///    to full screen without stealing focus from the game, shows a 60–120 FPS glass frame + alignment snap
-///    guides, and commits the new position to RTSS on release.
-/// 2. Interactive "Drag on screen" mode: full-screen positioning with clickable 9-point anchors, Reset &amp; Done.
+/// on touchscreens (and pointers). Stays invisible and tightly bounded to the active FPS overlay in standby;
+/// dragging expands to full screen without stealing focus from the game, shows a 60–120 FPS glass frame +
+/// alignment snap guides, and commits the new position to RTSS on release.
 /// </summary>
 public sealed partial class RtssOverlayDragWindow : Window
 {
@@ -53,7 +48,6 @@ public sealed partial class RtssOverlayDragWindow : Window
     private double _dpiX = 1.0;
     private double _dpiY = 1.0;
 
-    private bool _interactive;
     private bool _expanded;
     private bool _showing;
     private bool _pointerDown;
@@ -100,24 +94,11 @@ public sealed partial class RtssOverlayDragWindow : Window
         PreviewMouseLeftButtonUp += OnWindowMouseUp;
         LostMouseCapture += (_, _) => EndDrag(commit: true);
 
-        Scrim.MouseLeftButtonDown += (_, _) => { if (_interactive) ExitInteractiveMode(); };
-        Scrim.TouchDown += (_, e) => { if (_interactive) { e.Handled = true; ExitInteractiveMode(); } };
-
-        DoneButton.Click += (_, _) => ExitInteractiveMode();
-        ResetButton.Click += (_, _) => ResetCurrentLevel();
-        KeyDown += (_, e) => { if (_interactive && e.Key == Key.Escape) ExitInteractiveMode(); };
-
         BuildSnapDots();
     }
 
-    /// <summary>True while in explicit "Drag on screen" mode, mid-touch-drag, or handing off to RTSS after a drop.</summary>
-    public bool IsActivelyPositioning => _interactive || _dragging || _awaitingHandoff;
-
-    /// <summary>True while in explicit full-screen "Drag on screen" mode.</summary>
-    public bool IsInteractive => _interactive;
-
-    /// <summary>Raised when interactive "Drag on screen" mode exits.</summary>
-    public event Action? InteractiveClosed;
+    /// <summary>True while mid-touch-drag or handing off to RTSS after a drop.</summary>
+    public bool IsActivelyPositioning => _dragging || _awaitingHandoff;
 
     /// <summary>Raised when a standby touch/mouse drag finishes.</summary>
     public event Action? DragEnded;
@@ -127,7 +108,7 @@ public sealed partial class RtssOverlayDragWindow : Window
         RtssOverlayLevel level, int x, int y, int width, int height,
         int frameW, int frameH, int viewportX, int viewportY, int viewportW, int viewportH)
     {
-        if (_interactive || _dragging || _awaitingHandoff || _showing) return;
+        if (_dragging || _awaitingHandoff || _showing) return;
 
         if (IsVisible && !_expanded)
         {
@@ -171,48 +152,6 @@ public sealed partial class RtssOverlayDragWindow : Window
         RaiseTopmostNoActivate();
     }
 
-    /// <summary>Enters full-screen interactive positioning mode (works with touch, stylus, and mouse).</summary>
-    public void EnterInteractiveMode(
-        RtssOverlayLevel level, int x, int y, int width, int height,
-        int frameW, int frameH, int viewportX, int viewportY, int viewportW, int viewportH)
-    {
-        if (_showing) return;
-
-        CancelHandoff();
-        _level = level;
-        _overlayPhysW = width;
-        _overlayPhysH = height;
-        _currentPhysX = x;
-        _currentPhysY = y;
-        _screenPhysW = frameW;
-        _screenPhysH = frameH;
-        _viewportX = viewportX;
-        _viewportY = viewportY;
-        _viewportW = viewportW;
-        _viewportH = viewportH;
-        _interactive = true;
-
-        if (!EnsureShown())
-        {
-            _interactive = false;
-            return;
-        }
-        RefreshDpi();
-
-        ExpandToFullScreen();
-        UpdateSnapDotsLayout();
-        PositionOverlayBox(_currentPhysX, _currentPhysY, snapped: null);
-
-        FadeInElement(Scrim, 1.0, 140);
-        FadeInElement(ActionBar, 1.0, 140);
-        FadeInElement(SnapDotsLayer, 1.0, 140);
-        ShowDragChrome(visible: true);
-        UpdateBadge(_currentPhysX, _currentPhysY, _service.Settings.GetPlacement(_level).Alignment);
-        FadeInElement(PositionBadge, 1.0, 140);
-
-        RaiseTopmostNoActivate();
-    }
-
     private bool EnsureShown()
     {
         if (IsVisible) return true;
@@ -230,47 +169,14 @@ public sealed partial class RtssOverlayDragWindow : Window
         }
     }
 
-    /// <summary>Leaves interactive mode cleanly and notifies the controller to return to standby or hide.</summary>
-    public void ExitInteractiveMode()
-    {
-        if (!_interactive) return;
-        EndDrag(commit: true);
-        _interactive = false;
-        CancelHandoff();
-
-        HideElementImmediate(Scrim);
-        HideElementImmediate(ActionBar);
-        HideElementImmediate(SnapDotsLayer);
-        HideElementImmediate(PositionBadge);
-        ShowDragChrome(visible: false, immediate: true);
-
-        InteractiveClosed?.Invoke();
-    }
-
     public void HideQuietly()
     {
         CancelHandoff();
-        _interactive = false;
         EndDrag(commit: false);
-        HideElementImmediate(Scrim);
-        HideElementImmediate(ActionBar);
         HideElementImmediate(SnapDotsLayer);
         HideElementImmediate(PositionBadge);
         ShowDragChrome(visible: false, immediate: true);
         if (IsVisible) Hide();
-    }
-
-    private void ResetCurrentLevel()
-    {
-        if (_level == RtssOverlayLevel.Off) return;
-
-        var defaultPlacement = RtssOverlayMetrics.DefaultPlacement(_level);
-        var (ax, ay) = RtssOverlayMetrics.ResolveAnchor(_level, defaultPlacement.Alignment, _screenPhysW, _screenPhysH);
-        _currentPhysX = ax;
-        _currentPhysY = ay;
-        _service.CommitDragPlacement(_level, defaultPlacement);
-        PositionOverlayBox(ax, ay, defaultPlacement.Alignment);
-        UpdateBadge(ax, ay, defaultPlacement.Alignment);
     }
 
     private void OnOverlayTouchDown(object? sender, TouchEventArgs e)
@@ -335,22 +241,16 @@ public sealed partial class RtssOverlayDragWindow : Window
         if (_awaitingHandoff)
         {
             CancelHandoff();
-            if (!_interactive)
-            {
-                ShowDragChrome(visible: false, immediate: true);
-                ApplyStandbyWindowBounds();
-            }
+            ShowDragChrome(visible: false, immediate: true);
+            ApplyStandbyWindowBounds();
         }
 
         RefreshDpi();
         _pointerDown = true;
-        _dragging = _interactive;
+        _dragging = false;
         _downScreenDip = screenDip;
         _startPhysX = _currentPhysX;
         _startPhysY = _currentPhysY;
-
-        if (_interactive)
-            ShowDragChrome(visible: true);
     }
 
     private void MovePointer(Point screenDip)
@@ -432,22 +332,19 @@ public sealed partial class RtssOverlayDragWindow : Window
             _service.CancelDrag();
         }
 
-        if (!_interactive)
+        HideElementImmediate(SnapDotsLayer);
+        HideElementImmediate(PositionBadge);
+
+        if (commit && _level != RtssOverlayLevel.Off
+            && (_currentPhysX != _startPhysX || _currentPhysY != _startPhysY))
         {
-            HideElementImmediate(SnapDotsLayer);
-            HideElementImmediate(PositionBadge);
-
-            if (commit && _level != RtssOverlayLevel.Off
-                && (_currentPhysX != _startPhysX || _currentPhysY != _startPhysY))
-            {
-                BeginHandoff(_currentPhysX, _currentPhysY, _overlayPhysW, _overlayPhysH);
-                return;
-            }
-
-            ShowDragChrome(visible: false, immediate: true);
-            ApplyStandbyWindowBounds();
-            DragEnded?.Invoke();
+            BeginHandoff(_currentPhysX, _currentPhysY, _overlayPhysW, _overlayPhysH);
+            return;
         }
+
+        ShowDragChrome(visible: false, immediate: true);
+        ApplyStandbyWindowBounds();
+        DragEnded?.Invoke();
     }
 
     private void BeginHandoff(int x, int y, int w, int h)
@@ -498,7 +395,6 @@ public sealed partial class RtssOverlayDragWindow : Window
     private void CompleteHandoff()
     {
         CancelHandoff();
-        if (_interactive) return;
 
         ShowDragChrome(visible: false, immediate: true);
         ApplyStandbyWindowBounds();
@@ -592,7 +488,7 @@ public sealed partial class RtssOverlayDragWindow : Window
         var screenH = _screenPhysH / _dpiY;
 
         var bx = Math.Clamp(boxX + (boxW - badgeW) / 2.0, 12, Math.Max(12, screenW - badgeW - 12));
-        var by = boxY + boxH + 10 + badgeH <= screenH - 72
+        var by = boxY + boxH + 10 + badgeH <= screenH - 12
             ? boxY + boxH + 10
             : Math.Max(12, boxY - badgeH - 10);
 
@@ -616,7 +512,6 @@ public sealed partial class RtssOverlayDragWindow : Window
         SnapDotsLayer.Children.Clear();
         for (var i = 0; i < 9; i++)
         {
-            var alignment = (RtssOverlayAlignment)i;
             var dot = new Border
             {
                 Width = 14,
@@ -624,37 +519,11 @@ public sealed partial class RtssOverlayDragWindow : Window
                 CornerRadius = new CornerRadius(7),
                 Background = Brushes.White,
                 Opacity = 0.35,
-                Cursor = Cursors.Hand,
-                Tag = alignment,
-            };
-
-            dot.MouseLeftButtonDown += (_, e) =>
-            {
-                if (!_interactive) return;
-                e.Handled = true;
-                SnapToAnchor(alignment);
-            };
-            dot.TouchDown += (_, e) =>
-            {
-                if (!_interactive) return;
-                e.Handled = true;
-                SnapToAnchor(alignment);
             };
 
             _snapDots[i] = dot;
             SnapDotsLayer.Children.Add(dot);
         }
-    }
-
-    private void SnapToAnchor(RtssOverlayAlignment alignment)
-    {
-        if (_level == RtssOverlayLevel.Off) return;
-        var (ax, ay) = RtssOverlayMetrics.ResolveAnchor(_level, alignment, _screenPhysW, _screenPhysH);
-        _currentPhysX = ax;
-        _currentPhysY = ay;
-        _service.CommitDragPlacement(_level, new RtssOverlayPlacement(alignment));
-        PositionOverlayBox(ax, ay, alignment);
-        UpdateBadge(ax, ay, alignment);
     }
 
     private void UpdateSnapDotsLayout()

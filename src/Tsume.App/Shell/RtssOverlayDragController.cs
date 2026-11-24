@@ -20,7 +20,6 @@ public sealed class RtssOverlayDragController : IDisposable
     private nint _minimizeHook;
 
     private RtssOverlayDragWindow? _window;
-    private nint _interactiveTargetHwnd;
     private bool _panelOpen;
     private bool _refreshing;
     private int _refreshQueued;
@@ -53,71 +52,19 @@ public sealed class RtssOverlayDragController : IDisposable
     {
         _panelOpen = open;
         if (open)
-        {
-            _window?.ExitInteractiveMode();
             _window?.HideQuietly();
-        }
+
         // Defer Refresh out of OverlayWindow's WM_ACTIVATE / deactivation stack so showing the drag
         // window never re-enters Window.CreateSourceWindow while Win32 is pumping WinEvents.
         ScheduleRefresh();
-    }
-
-    /// <summary>Opens full-screen interactive "Drag on screen" mode for the active FPS overlay.</summary>
-    public void BeginInteractiveMove()
-    {
-        if (_disposed) return;
-
-        _dispatcher.BeginInvoke(() =>
-        {
-            if (_disposed || _panelOpen) return;
-            if (_service.GetActiveOverlayRect() is not { } rect) return;
-
-            _interactiveTargetHwnd = User32.GetForegroundWindow();
-            var window = EnsureWindow();
-            window.EnterInteractiveMode(
-                rect.Level, rect.X, rect.Y, rect.Width, rect.Height,
-                rect.FrameWidth, rect.FrameHeight,
-                rect.ViewportX, rect.ViewportY, rect.ViewportWidth, rect.ViewportHeight);
-        });
     }
 
     private void OnWinEvent(nint hook, uint eventType, nint window, int objectId, int childId, uint thread, uint time)
     {
         if (_disposed) return;
 
-        if (_window is { IsInteractive: true })
-        {
-            if (eventType == User32.EVENT_SYSTEM_MINIMIZESTART)
-            {
-                if (_interactiveTargetHwnd == 0 || window == _interactiveTargetHwnd)
-                    _window.ExitInteractiveMode();
-            }
-            else if (eventType == User32.EVENT_SYSTEM_FOREGROUND)
-            {
-                var fg = window != 0 ? window : User32.GetForegroundWindow();
-                if (fg == 0 || fg == _interactiveTargetHwnd) return;
-
-                // If interactive mode started while Tsume's panel was still handing focus back, adopt the target window.
-                if (_interactiveTargetHwnd == 0 || IsOwnProcessWindow(_interactiveTargetHwnd))
-                {
-                    if (!IsOwnProcessWindow(fg))
-                        _interactiveTargetHwnd = fg;
-                    return;
-                }
-
-                _window.ExitInteractiveMode();
-            }
-            return;
-        }
-
         // Never call Window.Show() synchronously inside a WinEvent callback: Win32 can dispatch
         // WinEvents mid-CreateWindowEx, which would re-enter Window.Show() and corrupt its VisualTarget.
-        ScheduleRefresh();
-    }
-
-    private void OnInteractiveClosed()
-    {
-        _interactiveTargetHwnd = 0;
         ScheduleRefresh();
     }
 
@@ -243,19 +190,11 @@ public sealed class RtssOverlayDragController : IDisposable
         return false;
     }
 
-    private static bool IsOwnProcessWindow(nint hwnd)
-    {
-        if (hwnd == 0) return false;
-        User32.GetWindowThreadProcessId(hwnd, out var pid);
-        return pid == (uint)Environment.ProcessId;
-    }
-
     private RtssOverlayDragWindow EnsureWindow()
     {
         if (_window is not null) return _window;
 
         _window = new RtssOverlayDragWindow(_service);
-        _window.InteractiveClosed += OnInteractiveClosed;
         _window.DragEnded += ScheduleRefresh;
         return _window;
     }
@@ -275,7 +214,6 @@ public sealed class RtssOverlayDragController : IDisposable
 
         if (_window is not null)
         {
-            _window.InteractiveClosed -= OnInteractiveClosed;
             _window.DragEnded -= ScheduleRefresh;
             _window.Close();
             _window = null;

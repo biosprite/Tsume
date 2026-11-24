@@ -162,7 +162,6 @@ public partial class App
         _window = new OverlayWindow(panel, stayOpen: e.Args.Contains(StayOpenSwitch));
         _rtssDrag = new RtssOverlayDragController(panel.RtssService, Dispatcher);
         _window.OpenChanged += open => _rtssDrag.SetPanelOpen(open);
-        panel.Rtss.MoveOverlayRequested += () => _rtssDrag.BeginInteractiveMove();
 
         // Raise scheduling priority so a busy game does not starve the panel.
         RightOfWay.Settle();

@@ -247,7 +247,7 @@
   <data name="ShowOptiScaler" xml:space="preserve"><value>OptiScaler tile</value></data>
   <data name="Experimental" xml:space="preserve"><value>EXPERIMENTAL</value></data>
   <data name="ShowOptiScalerDetail" xml:space="preserve"><value>Better upscaling in your games. Nothing is downloaded until you ask.</value></data>
-  <data name="ShowRtss" xml:space="preserve"><value>RTSS overlay tile</value></data>
+  <data name="ShowRtss" xml:space="preserve"><value>FPS Overlay tile</value></data>
   <data name="ShowRtssDetail" xml:space="preserve"><value>FPS Overlay and frame-rate cap. Installs RTSS via winget.</value></data>
   <data name="GamesWithOptiScaler" xml:space="preserve">
     <value>{0} games</value>
@@ -621,7 +621,7 @@
 
   <!-- RTSS overlay -->
 
-  <data name="Rtss" xml:space="preserve"><value>RTSS</value></data>
+  <data name="Rtss" xml:space="preserve"><value>FPS Overlay</value></data>
   <data name="RtssNotInstalledTitle" xml:space="preserve"><value>RivaTuner Statistics Server is not installed</value></data>
   <data name="RtssNotInstalledExplained" xml:space="preserve"><value>Tsume links to RTSS instead of bundling it to save space. Install it automatically, or download RTSS 7.3.7 from Guru3D and install it yourself.</value></data>
   <data name="RtssDownloadOfficial" xml:space="preserve"><value>Download RTSS 7.3.7</value></data>
@@ -714,7 +714,7 @@
 
   <data name="RtssOverlayHeading" xml:space="preserve"><value>OVERLAY</value></data>
   <data name="RtssUseTsumeOverlay" xml:space="preserve"><value>FPS Overlay</value></data>
-  <data name="RtssUseTsumeOverlayOn" xml:space="preserve"><value>RTSS shows Tsume's pick of the Essential overlays in games</value></data>
+  <data name="RtssUseTsumeOverlayOn" xml:space="preserve"><value>RTSS shows Tsume's performance overlay in games</value></data>
   <data name="RtssUseTsumeOverlayOff" xml:space="preserve"><value>Off. RTSS shows your own overlay setup instead</value></data>
 
   <data name="RtssLevelOff" xml:space="preserve"><value>Off</value></data>
@@ -725,9 +725,9 @@
 
   <data name="RtssLevelOffDetail" xml:space="preserve"><value>Tsume's overlay is hidden.</value></data>
   <data name="RtssLevelFpsDetail" xml:space="preserve"><value>A small pill with the frame rate and 1% low.</value></data>
-  <data name="RtssLevelBarDetail" xml:space="preserve"><value>Essential Sleek: CPU and GPU usage rings, temperature, power, FPS and 1% low.</value></data>
-  <data name="RtssLevelDetailedDetail" xml:space="preserve"><value>Essential Sleek Compact: adds clocks, RAM, VRAM, 0.1% low, frametime and a frametime graph.</value></data>
-  <data name="RtssLevelFullDetail" xml:space="preserve"><value>Essential Performance: a full side panel with CPU, GPU and frametime graphs.</value></data>
+  <data name="RtssLevelBarDetail" xml:space="preserve"><value>CPU and GPU usage rings, temperature, power, FPS and 1% low.</value></data>
+  <data name="RtssLevelDetailedDetail" xml:space="preserve"><value>Adds clocks, RAM, VRAM, 0.1% low, frametime and a frametime graph.</value></data>
+  <data name="RtssLevelFullDetail" xml:space="preserve"><value>A full side panel with CPU, GPU and frametime graphs.</value></data>
 
   <data name="RtssPositionHeading" xml:space="preserve"><value>{0} position</value></data>
   <data name="RtssAlignTopLeft" xml:space="preserve"><value>Top left</value></data>
@@ -740,14 +740,8 @@
   <data name="RtssAlignBottomCenter" xml:space="preserve"><value>Bottom center</value></data>
   <data name="RtssAlignBottomRight" xml:space="preserve"><value>Bottom right</value></data>
   <data name="RtssAlignCustom" xml:space="preserve"><value>Custom</value></data>
-  <data name="RtssMoveOverlay" xml:space="preserve"><value>Drag on screen</value></data>
-  <data name="RtssMoveOverlayDetail" xml:space="preserve"><value>Slide the {0} overlay anywhere with touch or pointer</value></data>
   <data name="RtssTouchDrag" xml:space="preserve"><value>Touch to drag overlay</value></data>
   <data name="RtssTouchDragDetail" xml:space="preserve"><value>Drag any active FPS overlay directly on screen without opening Tsume</value></data>
-  <data name="RtssDragDone" xml:space="preserve"><value>Done</value></data>
-  <data name="RtssDragReset" xml:space="preserve"><value>Reset</value></data>
-  <data name="RtssDragHint" xml:space="preserve"><value>Drag to move · snaps near edges &amp; corners</value></data>
-  <data name="RtssOverlayCredit" xml:space="preserve"><value>Essential overlays by realHfde (MIT). Drawn by RTSS's OverlayEditor. Level and position changes apply live; changing theme restarts RTSS.</value></data>
   <data name="RtssAidaConflictAida64" xml:space="preserve"><value>AIDA64 is already using RTSS's sensor channel. Turn off AIDA64's shared memory or switch off FPS Overlay to keep your own setup.</value></data>
   <data name="RtssAidaConflictWinhanced" xml:space="preserve"><value>Winhanced is already using RTSS's sensor channel. Close Winhanced or disable WinhancedOverlayBridge.dll in RTSS to use Tsume's overlay.</value></data>
   <data name="RtssAidaConflictOther" xml:space="preserve"><value>Another app is already using RTSS's AIDA64 sensor channel. Close it or switch off FPS Overlay to keep your own setup.</value></data>
@@ -781,12 +775,12 @@
   <data name="RtssStartWithWindowsFailed" xml:space="preserve"><value>Could not update RTSS startup. Make sure the helper service is running.</value></data>
   <data name="RtssSkipAntiCheat" xml:space="preserve"><value>Skip anti-cheat games</value></data>
   <data name="RtssSkipAntiCheatOn" xml:space="preserve">
-    <value>On · {0} anti-cheat games excluded from RTSS hooking</value>
+    <value>{0} anti-cheat games excluded from RTSS hooking</value>
     <comment>{0} = number of anti-cheat games excluded</comment>
   </data>
-  <data name="RtssSkipAntiCheatOne" xml:space="preserve"><value>On · 1 anti-cheat game excluded from RTSS hooking</value></data>
-  <data name="RtssSkipAntiCheatNone" xml:space="preserve"><value>On · excludes detected anti-cheat games from hooking</value></data>
-  <data name="RtssSkipAntiCheatOff" xml:space="preserve"><value>Off · RTSS is signed and works in most games (including EAC)</value></data>
+  <data name="RtssSkipAntiCheatOne" xml:space="preserve"><value>1 anti-cheat game excluded from RTSS hooking</value></data>
+  <data name="RtssSkipAntiCheatNone" xml:space="preserve"><value>Excludes detected anti-cheat games from hooking</value></data>
+  <data name="RtssSkipAntiCheatOff" xml:space="preserve"><value>RTSS is signed and works in most games (including EAC)</value></data>
   <data name="RtssSkipAntiCheatBusy" xml:space="preserve"><value>Scanning installed games for anti-cheat…</value></data>
   <data name="RtssStatusRunning" xml:space="preserve">
     <value>RTSS {0} · Running</value>

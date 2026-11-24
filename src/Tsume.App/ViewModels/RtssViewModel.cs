@@ -123,13 +123,6 @@ public sealed class RtssViewModel : LayerViewModel
         ToggleStartWithWindows = new Command(async () => await ToggleStartWithWindowsAsync());
         ToggleSkipAntiCheat = new Command(async () => await ToggleSkipAntiCheatAsync());
 
-        MoveOverlay = new Command(async () =>
-        {
-            if (!IsTsumeOverlayShown) return;
-            await _dismiss();
-            MoveOverlayRequested?.Invoke();
-        });
-
         ToggleTouchDrag = new Command(() =>
         {
             var next = _service.Settings with { TouchDragEnabled = !TouchDragEnabled };
@@ -156,9 +149,6 @@ public sealed class RtssViewModel : LayerViewModel
     /// <summary>Raised when sections appear or disappear, so the screen can keep focus valid.</summary>
     public event Action? Settled;
 
-    /// <summary>Raised when the user clicks "Drag on screen" to position the active FPS overlay interactively.</summary>
-    public event Action? MoveOverlayRequested;
-
     public ICommand OpenDownloadPage { get; }
     public ICommand InstallAutomatically { get; }
     public ICommand Uninstall { get; }
@@ -175,7 +165,6 @@ public sealed class RtssViewModel : LayerViewModel
     public ICommand CloseRtss { get; }
     public ICommand ToggleStartWithWindows { get; }
     public ICommand ToggleSkipAntiCheat { get; }
-    public ICommand MoveOverlay { get; }
     public ICommand ToggleTouchDrag { get; }
 
     public IReadOnlyList<OverlayAlignmentOption> AlignmentOptions { get; }
@@ -493,7 +482,6 @@ public sealed class RtssViewModel : LayerViewModel
             Notify(nameof(LevelDetail));
             Notify(nameof(IsTsumeOverlayShown));
             Notify(nameof(PositionHeading));
-            Notify(nameof(MoveOverlayDetail));
             NotifyTile();
 
             if (!_absorbing)
@@ -511,9 +499,6 @@ public sealed class RtssViewModel : LayerViewModel
 
     public string PositionHeading =>
         LevelIndex > 0 && LevelIndex < Levels.Count ? Strings.RtssPositionHeading(Levels[LevelIndex]) : "";
-
-    public string MoveOverlayDetail =>
-        LevelIndex > 0 && LevelIndex < Levels.Count ? Strings.RtssMoveOverlayDetail(Levels[LevelIndex]) : "";
 
     public string ActiveAlignmentLabel { get; private set => Set(ref field, value); } = "";
 

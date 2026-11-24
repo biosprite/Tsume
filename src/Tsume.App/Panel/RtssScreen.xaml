@@ -218,21 +218,12 @@
                         </StackPanel>
                       </Border>
 
-                      <controls:Tile Style="{StaticResource Tile.Link}" Margin="0,8,0,0"
-                                     Glyph="{x:Static theme:Glyphs.Move}"
-                                     Label="{x:Static lang:Strings.RtssMoveOverlay}"
-                                     Detail="{Binding MoveOverlayDetail}"
-                                     Command="{Binding MoveOverlay}" />
-
                       <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0,8,0,0"
                                      Glyph="{x:Static theme:Glyphs.Touch}"
                                      Label="{x:Static lang:Strings.RtssTouchDrag}"
                                      Detail="{x:Static lang:Strings.RtssTouchDragDetail}"
                                      IsOn="{Binding TouchDragEnabled}"
                                      Command="{Binding ToggleTouchDrag}" />
-
-                      <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
-                                 Text="{x:Static lang:Strings.RtssOverlayCredit}" Margin="6,8,6,0" />
                     </StackPanel>
                   </controls:Reveal>
 
