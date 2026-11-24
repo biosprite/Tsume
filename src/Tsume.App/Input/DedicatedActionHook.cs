@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
 using Tsume.App.Controls;
@@ -248,9 +249,24 @@ public static class DedicatedActionKeys
             if (keys.Count == 0 || !keys.Contains(hardwareCode)) continue;
 
             var allOtherDown = true;
-            foreach (var code in keys)
+            var distinctCount = 1; // hardwareCode itself
+            for (var i = 0; i < keys.Count; i++)
             {
+                var code = keys[i];
                 if (code == hardwareCode || code is 0 or BackButtonKey.UnboundCode) continue;
+
+                var duplicate = false;
+                for (var j = 0; j < i; j++)
+                {
+                    if (keys[j] == code)
+                    {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (duplicate) continue;
+
+                distinctCount++;
 
                 if (KeyboardMap.ContainsKey(code))
                 {
@@ -276,9 +292,9 @@ public static class DedicatedActionKeys
                 }
             }
 
-            if (allOtherDown && keys.Count > bestLength)
+            if (allOtherDown && distinctCount > bestLength)
             {
-                bestLength = keys.Count;
+                bestLength = distinctCount;
                 matched = binding.Action;
             }
         }
@@ -328,15 +344,43 @@ public static class DedicatedActionKeys
             if (state.RightTrigger >= TriggerThreshold) result |= GamepadInput.Rt;
         }
 
-        if (includeBackButtons)
+        // Fall back to WinMM HID buttons/POV when XInput reports nothing (e.g. under Xbox FSE InputHost),
+        // and always read WinMM when back buttons (bits 10/11) are needed.
+        var needWinMmFallback = result == GamepadInput.None;
+        if (includeBackButtons || needWinMmFallback)
         {
             var info = WinMm.JOYINFOEX.Create();
             for (uint id = 0; id < WinMm.MaxControllers; id++)
             {
                 if (WinMm.joyGetPosEx(id, ref info) != WinMm.JOYERR_NOERROR) continue;
 
-                if ((info.Buttons & (1u << 10)) != 0) result |= GamepadInput.BackLeft;
-                if ((info.Buttons & (1u << 11)) != 0) result |= GamepadInput.BackRight;
+                if (includeBackButtons)
+                {
+                    if ((info.Buttons & (1u << 10)) != 0) result |= GamepadInput.BackLeft;
+                    if ((info.Buttons & (1u << 11)) != 0) result |= GamepadInput.BackRight;
+                }
+
+                if (needWinMmFallback)
+                {
+                    if ((info.Buttons & (1u << 0)) != 0) result |= GamepadInput.A;
+                    if ((info.Buttons & (1u << 1)) != 0) result |= GamepadInput.B;
+                    if ((info.Buttons & (1u << 2)) != 0) result |= GamepadInput.X;
+                    if ((info.Buttons & (1u << 3)) != 0) result |= GamepadInput.Y;
+                    if ((info.Buttons & (1u << 4)) != 0) result |= GamepadInput.Lb;
+                    if ((info.Buttons & (1u << 5)) != 0) result |= GamepadInput.Rb;
+                    if ((info.Buttons & (1u << 6)) != 0) result |= GamepadInput.View;
+                    if ((info.Buttons & (1u << 7)) != 0) result |= GamepadInput.Menu;
+                    if ((info.Buttons & (1u << 8)) != 0) result |= GamepadInput.LsClick;
+                    if ((info.Buttons & (1u << 9)) != 0) result |= GamepadInput.RsClick;
+
+                    if (info.Pov < WinMm.JOY_POVCENTERED)
+                    {
+                        if (info.Pov <= 4500 || info.Pov >= 31500) result |= GamepadInput.DPadUp;
+                        if (info.Pov is >= 4500 and <= 13500) result |= GamepadInput.DPadRight;
+                        if (info.Pov is >= 13500 and <= 22500) result |= GamepadInput.DPadDown;
+                        if (info.Pov is >= 22500 and <= 31500) result |= GamepadInput.DPadLeft;
+                    }
+                }
             }
         }
 
@@ -421,7 +465,20 @@ public sealed class DedicatedActionHook : IDisposable
                 list.Add(new CompiledBinding(binding.Action, [.. kb], pad, hasWin));
         }
 
+        // Match longer, more specific chords before shorter subsets.
+        list.Sort((a, b) => ChordLength(b).CompareTo(ChordLength(a)));
         return [.. list];
+    }
+
+    private static int ChordLength(CompiledBinding binding) =>
+        binding.KeyboardCodes.Length + BitOperations.PopCount((uint)binding.GamepadMask);
+
+    private static bool IsSubsetOf(CompiledBinding shorter, CompiledBinding longer)
+    {
+        if ((longer.GamepadMask & shorter.GamepadMask) != shorter.GamepadMask) return false;
+        foreach (var k in shorter.KeyboardCodes)
+            if (Array.IndexOf(longer.KeyboardCodes, k) < 0) return false;
+        return true;
     }
 
     private void ApplyBindings(CompiledBinding[] bindings)
@@ -519,6 +576,13 @@ public sealed class DedicatedActionHook : IDisposable
 
                 _latched.Add(binding.Action);
 
+                // Suppress any shorter subset chords whose keys are also down so they do not fire alongside this chord.
+                foreach (var other in _bindings)
+                {
+                    if (other.Action != binding.Action && IsSubsetOf(other, binding))
+                        _latched.Add(other.Action);
+                }
+
                 if (binding.HasWinKey)
                     User32.SendChord(MaskExtraInfo, User32.VK_MENU_MASK);
 
@@ -530,6 +594,8 @@ public sealed class DedicatedActionHook : IDisposable
                     _swallowingVk = info.VkCode;
                     return 1;
                 }
+
+                break;
             }
         }
 

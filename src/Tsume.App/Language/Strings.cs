@@ -605,8 +605,8 @@ public static class Strings
     public static string DedicatedActionsTabTsume => Find();
     public static string DedicatedActionsTabSystem => Find();
     public static string DedicatedActionsBrowseHint => Find();
+    public static string DedicatedActionsSystemButtonHint => Find();
     public static string DedicatedActionsFooterHint(int maxKeys) => Fill(Find(), maxKeys);
-    public static string DedicatedActionsClear => Find();
     public static string SystemButtonsHeading => Find();
     public static string SystemButtonsTitle => Find();
     public static string SystemButtonsDetailAll => Find();

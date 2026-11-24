@@ -15,8 +15,11 @@ namespace Tsume.App.ViewModels;
 /// </summary>
 public sealed class DedicatedActionsViewModel : LayerViewModel
 {
+    private sealed record DisplacedSingleButton(DedicatedAction ClaimedBy, byte HardwareCode, DedicatedAction PreviousAction);
+
     private readonly SavedState _state;
     private readonly List<DedicatedActionEditor> _all = [];
+    private DisplacedSingleButton? _displaced;
 
     public DedicatedActionsViewModel(SavedState state)
     {
@@ -140,6 +143,7 @@ public sealed class DedicatedActionsViewModel : LayerViewModel
     /// </summary>
     public void AssignSingleHardwareButton(byte hardwareCode, DedicatedAction? targetAction)
     {
+        _displaced = null;
         var changed = false;
 
         foreach (var editor in _all)
@@ -179,6 +183,7 @@ public sealed class DedicatedActionsViewModel : LayerViewModel
         var expanded = _all.FirstOrDefault(a => a.IsExpanded);
         if (expanded is null) return false;
 
+        _displaced = null;
         expanded.IsExpanded = false;
         if (SelectedTabIndex == 0 && !expanded.IsEssential && !expanded.IsBound)
             RebuildVisible();
@@ -238,8 +243,26 @@ public sealed class DedicatedActionsViewModel : LayerViewModel
 
     private void OnActionChanged(DedicatedAction action, IReadOnlyList<byte> keys)
     {
+        // If this action temporarily displaced another action's single hardware button while the user was
+        // building a multi-key chord (e.g. picking OEM first, then adding D-Pad Left), restore the original
+        // single-button action once this action is no longer bound solely to that hardware button.
+        if (_displaced is { } prev && prev.ClaimedBy == action
+            && !(keys.Count == 1 && keys[0] == prev.HardwareCode))
+        {
+            _displaced = null;
+            var owner = _all.FirstOrDefault(a => a.Action == prev.PreviousAction);
+            if (owner is not null && owner.CurrentKeys().Count == 0
+                && FindSingleButtonAction(prev.HardwareCode) is null)
+            {
+                byte[] restored = [prev.HardwareCode];
+                owner.SetKeysSilently(restored);
+                PersistKeys(owner.Action, restored);
+            }
+        }
+
         // If this action just claimed a single hardware button (Quick Menu / OEM or Xbox / Guide),
-        // release it from any other action that previously held that same single button.
+        // release it from any other action that previously held that same single button, remembering it
+        // in case the user is about to add another key to form a chord.
         if (keys.Count == 1 && keys[0] is DedicatedActionKeys.OemButtonCode or DedicatedActionKeys.XboxButtonCode)
         {
             var hwCode = keys[0];
@@ -251,6 +274,7 @@ public sealed class DedicatedActionsViewModel : LayerViewModel
                 {
                     other.SetKeysSilently([]);
                     PersistKeys(other.Action, []);
+                    _displaced = new DisplacedSingleButton(action, hwCode, other.Action);
                 }
             }
         }
@@ -298,6 +322,7 @@ public sealed class DedicatedActionsViewModel : LayerViewModel
 
     private void CollapseAll()
     {
+        _displaced = null;
         foreach (var item in _all)
             item.IsExpanded = false;
     }
@@ -346,7 +371,6 @@ public sealed class DedicatedActionEditor : Observable
         _onChanged = onChanged;
 
         AddKey = new Command(AddSlot);
-        Clear = new Command(ClearAll);
         ToggleExpand = new Command(() => onToggleExpand(this));
 
         _absorbing = true;
@@ -381,7 +405,6 @@ public sealed class DedicatedActionEditor : Observable
     public ObservableCollection<KeySlotViewModel> Slots { get; } = [];
 
     public ICommand AddKey { get; }
-    public ICommand Clear { get; }
     public ICommand ToggleExpand { get; }
 
     public bool IsExpanded
@@ -403,12 +426,11 @@ public sealed class DedicatedActionEditor : Observable
 
     public Visibility AddKeyVisibility { get; private set => Set(ref field, value); } = Visibility.Collapsed;
 
-    public Visibility ClearVisibility { get; private set => Set(ref field, value); } = Visibility.Collapsed;
-
     public IReadOnlyList<byte> CurrentKeys() =>
         Slots
             .Select(slot => slot.SelectedKey.Code)
             .Where(code => code is not (0 or BackButtonKey.UnboundCode))
+            .Distinct()
             .Take(MaxKeys)
             .ToList();
 
@@ -450,19 +472,6 @@ public sealed class DedicatedActionEditor : Observable
         SyncMeta();
     }
 
-    private void ClearAll()
-    {
-        if (!IsBound && Slots.Count <= 1) return;
-
-        _absorbing = true;
-        Slots.Clear();
-        Slots.Add(CreateSlot(1, BackButtonKey.Unbound));
-        _absorbing = false;
-
-        SyncMeta();
-        Emit();
-    }
-
     private void RemoveSlot(KeySlotViewModel slot)
     {
         if (Slots.Count <= 1)
@@ -502,10 +511,6 @@ public sealed class DedicatedActionEditor : Observable
             : Strings.BackButtonUnbound;
 
         AddKeyVisibility = Slots.Count < MaxKeys && IsBound
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-
-        ClearVisibility = IsBound
             ? Visibility.Visible
             : Visibility.Collapsed;
     }

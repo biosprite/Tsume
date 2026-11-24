@@ -33,6 +33,20 @@
                  Margin="16,0,0,0" VerticalAlignment="Center" />
     </DockPanel>
 
+    <Border DockPanel.Dock="Top" Style="{StaticResource Card.Info}"
+            Background="{x:Static theme:Accent.Tint}"
+            BorderBrush="{x:Static theme:Accent.Wash}"
+            Margin="0,0,0,12">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Icon}" FontSize="14"
+                   Foreground="{x:Static theme:Accent.Brush}" VerticalAlignment="Center" Margin="0,0,10,0"
+                   Text="{x:Static theme:Glyphs.Info}" />
+        <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
+                   TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center"
+                   Text="{x:Static lang:Strings.DedicatedActionsSystemButtonHint}" />
+      </DockPanel>
+    </Border>
+
     <controls:SegmentedControl x:Name="CategoryTabs" DockPanel.Dock="Top"
                                Height="40" Margin="0,0,0,12"
                                controls:Screen.TakesFocus="True"
@@ -99,13 +113,6 @@
                                      Visibility="{Binding AddKeyVisibility}"
                                      Click="OnAddKeyClick"
                                      Command="{Binding AddKey}" />
-
-                      <controls:Tile Style="{StaticResource Tile.Mini}" Height="34" Margin="0,8,0,0"
-                                     Glyph="{x:Static theme:Glyphs.Remove}"
-                                     Label="{x:Static lang:Strings.DedicatedActionsClear}"
-                                     Visibility="{Binding ClearVisibility}"
-                                     Click="OnClearClick"
-                                     Command="{Binding Clear}" />
                     </StackPanel>
                   </controls:Reveal>
 

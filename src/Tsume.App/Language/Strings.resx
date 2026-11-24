@@ -855,8 +855,8 @@
   <data name="DedicatedActionsTabTsume" xml:space="preserve"><value>Tsume</value></data>
   <data name="DedicatedActionsTabSystem" xml:space="preserve"><value>System</value></data>
   <data name="DedicatedActionsBrowseHint" xml:space="preserve"><value>Switch to Tsume or System above to bind more actions.</value></data>
+  <data name="DedicatedActionsSystemButtonHint" xml:space="preserve"><value>Binding a system button alone unbinds its previous action. Add another key to keep both.</value></data>
   <data name="DedicatedActionsFooterHint" xml:space="preserve"><value>Hold up to {0} keys or buttons together. Changes save immediately.</value></data>
-  <data name="DedicatedActionsClear" xml:space="preserve"><value>Clear binding</value></data>
   <data name="SystemButtonsHeading" xml:space="preserve"><value>SYSTEM BUTTONS</value></data>
   <data name="SystemButtonsTitle" xml:space="preserve"><value>System buttons</value></data>
   <data name="SystemButtonsDetailAll" xml:space="preserve"><value>Hardware buttons and rear back paddles</value></data>

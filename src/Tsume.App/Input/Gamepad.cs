@@ -1,3 +1,4 @@
+using System.Numerics;
 using Tsume.App.Controls;
 using Tsume.App.Platform.Interop;
 using Tsume.Core.Controller;
@@ -77,7 +78,20 @@ public sealed class Gamepad : IDisposable
                 list.Add(new PadActionBinding(binding.Action, pad, [.. kb]));
         }
 
+        // Match longer, more specific chords before shorter subsets.
+        list.Sort((a, b) => ChordLength(b).CompareTo(ChordLength(a)));
         _actionBindings = [.. list];
+    }
+
+    private static int ChordLength(PadActionBinding binding) =>
+        BitOperations.PopCount((uint)binding.GamepadMask) + binding.KeyboardCodes.Length;
+
+    private static bool IsSubsetOf(PadActionBinding shorter, PadActionBinding longer)
+    {
+        if ((longer.GamepadMask & shorter.GamepadMask) != shorter.GamepadMask) return false;
+        foreach (var k in shorter.KeyboardCodes)
+            if (Array.IndexOf(longer.KeyboardCodes, k) < 0) return false;
+        return true;
     }
 
     public Gamepad()
@@ -123,6 +137,8 @@ public sealed class Gamepad : IDisposable
         }
 
         var pad = DedicatedActionKeys.ReadGamepadInputs(includeBackButtons: wantsBack);
+        List<PadActionBinding>? activeChords = null;
+
         foreach (var binding in bindings)
         {
             var allDown = (pad & binding.GamepadMask) == binding.GamepadMask;
@@ -140,8 +156,28 @@ public sealed class Gamepad : IDisposable
 
             if (allDown)
             {
-                if (_latchedActions.Add(binding.Action) && !KeyDropdown.IsAnyOpen)
+                activeChords ??= [];
+                var suppressedByLonger = false;
+                foreach (var longer in activeChords)
+                {
+                    if (IsSubsetOf(binding, longer))
+                    {
+                        suppressedByLonger = true;
+                        break;
+                    }
+                }
+
+                activeChords.Add(binding);
+
+                if (suppressedByLonger)
+                {
+                    // Latch the shorter subset without firing so releasing the extra key does not fire it.
+                    _latchedActions.Add(binding.Action);
+                }
+                else if (_latchedActions.Add(binding.Action) && !KeyDropdown.IsAnyOpen)
+                {
                     ActionTriggered?.Invoke(binding.Action);
+                }
             }
             else
             {

@@ -75,20 +75,6 @@ public partial class DedicatedActionsScreen
         ScheduleFocusSlot(slotsList, int.MaxValue);
     }
 
-    private void OnClearClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not DependencyObject button) return;
-        var reveal = FindAncestor<Reveal>(button);
-        var card = reveal is null ? null : FindAncestor<StackPanel>(reveal);
-        var header = card is null ? null : FindDescendant<Tile>(card);
-
-        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
-        {
-            if (header is not null && header.Focus()) return;
-            Screen.KeepFocus(this);
-        });
-    }
-
     private void ScheduleFocusSlot(ItemsControl slotsList, int preferredIndex)
     {
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
