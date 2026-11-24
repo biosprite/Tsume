@@ -12,9 +12,9 @@ LockUserSettings=1
 EmbeddedImage=essential_tsume_atlas.png
 PingAddr=127.0.0.1
 [General]
-Sources=90
+Sources=81
 Tables=0
-Layers=84
+Layers=80
 [Source0]
 Name=Tsume level 1 visible
 Units=
@@ -44,605 +44,542 @@ Formula=x == 4
 Provider=AIDA
 ID=TSUME_OVERLAY_LEVEL
 [Source4]
-Name=HAL CPU temperature
-Units=°C
-Format=
-Formula=
-Provider=HAL
-ID=CPU temperature
-[Source5]
-Name=HAL CPU power
-Units=W
-Format=
-Formula=
-Provider=HAL
-ID=CPU power
-[Source6]
-Name=HAL CPU clock
-Units=GHz
-Format=
-Formula=
-Provider=HAL
-ID=CPU clock
-[Source7]
-Name=HAL GPU1 power
-Units=W
-Format=
-Formula=
-Provider=HAL
-ID=GPU1 power
-[Source8]
-Name=HAL GPU1 memory usage
-Units=GB
-Format=
-Formula=
-Provider=HAL
-ID=GPU1 memory usage
-[Source9]
 Name=CPU temperature
 Units=°C
 Format=
-Formula=(validate("HAL CPU temperature") ? "HAL CPU temperature" : x)
+Formula=
 Provider=AIDA
 ID=TSUME_CPU_TEMP
-[Source10]
+[Source5]
 Name=CPU power
 Units=W
 Format=
-Formula=(validate("HAL CPU power") ? "HAL CPU power" : x)
+Formula=
 Provider=AIDA
 ID=TSUME_CPU_POWER
-[Source11]
+[Source6]
 Name=CPU clock
 Units=GHz
 Format=%.2f
-Formula=(validate("HAL CPU clock") ? "HAL CPU clock" : x) / 1000
+Formula=x / 1000
 Provider=AIDA
 ID=TSUME_CPU_CLOCK
-[Source12]
+[Source7]
 Name=GPU1 power
 Units=W
 Format=
-Formula=(validate("HAL GPU1 power") ? "HAL GPU1 power" : x)
+Formula=
 Provider=AIDA
 ID=TSUME_GPU_POWER
-[Source13]
+[Source8]
 Name=GPU1 memory usage
 Units=GB
 Format=%.1f
-Formula=(validate("HAL GPU1 memory usage") ? ("HAL GPU1 memory usage" > 0 ? "HAL GPU1 memory usage" : x) : x) / 1024
+Formula=x / 1024
 Provider=AIDA
 ID=TSUME_GPU_VRAM
-[Source14]
+[Source9]
 Name=Temp warn threshold
 Units=°C
 Format=%.0f
 Formula=validate(x) ? x : 75
 Provider=AIDA
 ID=TSUME_TEMP_WARN
-[Source15]
+[Source10]
 Name=Temp hot threshold
 Units=°C
 Format=%.0f
 Formula=validate(x) ? x : 85
 Provider=AIDA
 ID=TSUME_TEMP_HOT
-[Source16]
+[Source11]
 Name=Temperature tier
 Units=
 Format=%.0f
 Formula=validate("CPU temperature") ? ("CPU temperature" >= "Temp hot threshold" ? 2 : ("CPU temperature" >= "Temp warn threshold" ? 1 : 0)) : 0
 Provider=AIDA
 ID=TSUME_OVERLAY_LEVEL
-[Source17]
+[Source12]
 Name=CPU usage
 Units=%
 Format=
 Formula=
 Provider=HAL
 ID=CPU usage
-[Source18]
+[Source13]
 Name=GPU1 usage
 Units=%
 Format=
 Formula=
 Provider=HAL
 ID=GPU1 usage
-[Source19]
+[Source14]
 Name=GPU clock
 Units=GHz
 Format=%.2f
 Formula=x / 1000
 Provider=HAL
 ID=GPU1 clock
-[Source20]
+[Source15]
 Name=RAM usage
 Units=GB
 Format=%.1f
 Formula=x / 1024
 Provider=HAL
 ID=RAM usage
-[Source21]
-Name=GPU fan
-Units=RPM
-Format=%.0f
-Formula=
-Provider=HAL
-ID=GPU1 fan tachometer
-[Source22]
-Name=GPU core voltage
-Units=V
-Format=%.2f
-Formula=x / 1000
-Provider=HAL
-ID=GPU1 voltage
-[Source23]
+[Source16]
 Name=Framerate 1 Low
 Units=FPS
 Format=%.0f
 Formula=1000 / percentile("Frametime", 99)
 Provider=HAL
 ID=Stub
-[Source24]
+[Source17]
 Name=Framerate 01 Low
 Units=FPS
 Format=%.0f
 Formula=1000 / percentile("Frametime", 99.9)
 Provider=HAL
 ID=Stub
-[Source25]
+[Source18]
 Name=CPU usage stage1
 Units=%
 Format=
-Formula=if(validate("CPU usage stage1"), "CPU usage stage1" + ("CPU usage" - "CPU usage stage1") * 0.28, "CPU usage")
+Formula=if(validate("CPU usage stage1"), "CPU usage stage1" + ("CPU usage" - "CPU usage stage1") * 0.38, "CPU usage")
 Provider=HAL
 ID=Timer
-[Source26]
+[Source19]
 Name=CPU usage smooth
 Units=%
 Format=
-Formula=if(validate("CPU usage smooth"), "CPU usage smooth" + ("CPU usage stage1" - "CPU usage smooth") * 0.28, "CPU usage")
+Formula=if(validate("CPU usage smooth"), "CPU usage smooth" + ("CPU usage stage1" - "CPU usage smooth") * 0.38, "CPU usage")
 Provider=HAL
 ID=Timer
-[Source27]
+[Source20]
 Name=GPU1 usage stage1
 Units=%
 Format=
-Formula=if(validate("GPU1 usage stage1"), "GPU1 usage stage1" + ("GPU1 usage" - "GPU1 usage stage1") * 0.28, "GPU1 usage")
+Formula=if(validate("GPU1 usage stage1"), "GPU1 usage stage1" + ("GPU1 usage" - "GPU1 usage stage1") * 0.38, "GPU1 usage")
 Provider=HAL
 ID=Timer
-[Source28]
+[Source21]
 Name=GPU1 usage smooth
 Units=%
 Format=
-Formula=if(validate("GPU1 usage smooth"), "GPU1 usage smooth" + ("GPU1 usage stage1" - "GPU1 usage smooth") * 0.28, "GPU1 usage")
+Formula=if(validate("GPU1 usage smooth"), "GPU1 usage smooth" + ("GPU1 usage stage1" - "GPU1 usage smooth") * 0.38, "GPU1 usage")
 Provider=HAL
 ID=Timer
-[Source29]
+[Source22]
 Name=PX_0
 Units=
 Format=%.0f
 Formula=validate(x) ? x : 24
 Provider=AIDA
 ID=TSUME_POS_X
-[Source30]
+[Source23]
 Name=PX_11
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 11
 Provider=AIDA
 ID=TSUME_POS_X
-[Source31]
+[Source24]
 Name=PX_12
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 12
 Provider=AIDA
 ID=TSUME_POS_X
-[Source32]
+[Source25]
 Name=PX_15
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 15
 Provider=AIDA
 ID=TSUME_POS_X
-[Source33]
+[Source26]
 Name=PX_16
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 16
 Provider=AIDA
 ID=TSUME_POS_X
-[Source34]
+[Source27]
 Name=PX_75
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 75
 Provider=AIDA
 ID=TSUME_POS_X
-[Source35]
+[Source28]
 Name=PX_91
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 91
 Provider=AIDA
 ID=TSUME_POS_X
-[Source36]
+[Source29]
 Name=PX_110
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 110
 Provider=AIDA
 ID=TSUME_POS_X
-[Source37]
+[Source30]
 Name=PX_115
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 115
 Provider=AIDA
 ID=TSUME_POS_X
-[Source38]
+[Source31]
 Name=PX_118
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 118
 Provider=AIDA
 ID=TSUME_POS_X
-[Source39]
+[Source32]
 Name=PX_156
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 156
 Provider=AIDA
 ID=TSUME_POS_X
-[Source40]
+[Source33]
 Name=PX_157
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 157
 Provider=AIDA
 ID=TSUME_POS_X
-[Source41]
+[Source34]
 Name=PX_220
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 220
 Provider=AIDA
 ID=TSUME_POS_X
-[Source42]
+[Source35]
 Name=PX_246
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 246
 Provider=AIDA
 ID=TSUME_POS_X
-[Source43]
+[Source36]
 Name=PX_311
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 311
 Provider=AIDA
 ID=TSUME_POS_X
-[Source44]
+[Source37]
 Name=PX_325
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 325
 Provider=AIDA
 ID=TSUME_POS_X
-[Source45]
+[Source38]
 Name=PX_379
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 379
 Provider=AIDA
 ID=TSUME_POS_X
-[Source46]
+[Source39]
 Name=PX_477
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 477
 Provider=AIDA
 ID=TSUME_POS_X
-[Source47]
+[Source40]
 Name=PX_478
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 478
 Provider=AIDA
 ID=TSUME_POS_X
-[Source48]
+[Source41]
 Name=PX_521
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 521
 Provider=AIDA
 ID=TSUME_POS_X
-[Source49]
+[Source42]
 Name=PX_563
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 563
 Provider=AIDA
 ID=TSUME_POS_X
-[Source50]
+[Source43]
 Name=PX_592
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 592
 Provider=AIDA
 ID=TSUME_POS_X
-[Source51]
+[Source44]
 Name=PY_0
 Units=
 Format=%.0f
 Formula=validate(x) ? x : 24
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source52]
+[Source45]
 Name=PY_5
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 5
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source53]
+[Source46]
 Name=PY_8
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 8
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source54]
+[Source47]
 Name=PY_11
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 11
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source55]
+[Source48]
 Name=PY_13
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 13
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source56]
+[Source49]
 Name=PY_15
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 15
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source57]
+[Source50]
 Name=PY_17
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 17
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source58]
+[Source51]
 Name=PY_18
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 18
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source59]
+[Source52]
 Name=PY_21
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 21
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source60]
+[Source53]
 Name=PY_24
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 24
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source61]
+[Source54]
 Name=PY_26
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 26
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source62]
+[Source55]
 Name=PY_27
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 27
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source63]
+[Source56]
 Name=PY_29
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 29
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source64]
+[Source57]
 Name=PY_36
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 36
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source65]
+[Source58]
 Name=PY_37
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 37
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source66]
+[Source59]
 Name=PY_39
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 39
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source67]
+[Source60]
 Name=PY_46
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 46
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source68]
+[Source61]
 Name=PY_50
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 50
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source69]
+[Source62]
 Name=PY_56
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 56
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source70]
+[Source63]
 Name=PY_65
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 65
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source71]
+[Source64]
 Name=PY_73
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 73
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source72]
+[Source65]
 Name=PY_76
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 76
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source73]
+[Source66]
 Name=PY_96
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 96
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source74]
+[Source67]
 Name=PY_116
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 116
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source75]
+[Source68]
 Name=PY_139
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 139
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source76]
+[Source69]
 Name=PY_178
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 178
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source77]
+[Source70]
 Name=PY_199
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 199
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source78]
+[Source71]
 Name=PY_219
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 219
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source79]
+[Source72]
 Name=PY_239
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 239
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source80]
+[Source73]
 Name=PY_259
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 259
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source81]
+[Source74]
 Name=PY_281
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 281
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source82]
+[Source75]
 Name=PY_316
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 316
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source83]
+[Source76]
 Name=PY_337
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 337
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source84]
+[Source77]
 Name=PY_357
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 357
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source85]
+[Source78]
 Name=PY_377
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 377
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source86]
+[Source79]
 Name=PY_397
 Units=
 Format=%.0f
 Formula=(validate(x) ? x : 24) + 397
 Provider=AIDA
 ID=TSUME_POS_Y
-[Source87]
-Name=PY_417
+[Source80]
+Name=PY_420
 Units=
 Format=%.0f
-Formula=(validate(x) ? x : 24) + 417
-Provider=AIDA
-ID=TSUME_POS_Y
-[Source88]
-Name=PY_437
-Units=
-Format=%.0f
-Formula=(validate(x) ? x : 24) + 437
-Provider=AIDA
-ID=TSUME_POS_Y
-[Source89]
-Name=PY_460
-Units=
-Format=%.0f
-Formula=(validate(x) ? x : 24) + 460
+Formula=(validate(x) ? x : 24) + 420
 Provider=AIDA
 ID=TSUME_POS_Y
 [Layer0]
@@ -687,13 +624,13 @@ ExtentOrigin=0
 [Layer4]
 Name=CPU ring
 VisibilitySource=Tsume level 2 visible
-Text=<P=%PX_11%,%PY_5%><L4><E=62,62><AI=CPU usage smooth,62,62,0,100.6944,0,508,62,62,145,29,0.5>
+Text=<P=%PX_11%,%PY_5%><L4><E=62,62><AI=CPU usage smooth,62,62,0,100.6944,0,468,62,62,145,29,0.5>
 PositionX=0
 PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
-RefreshPeriod=33
+RefreshPeriod=50
 [Layer5]
 Name=CPU usage
 VisibilitySource=Tsume level 2 visible
@@ -808,13 +745,13 @@ TextColor=FFFFFF
 [Layer16]
 Name=GPU ring
 VisibilitySource=Tsume level 2 visible
-Text=<P=%PX_379%,%PY_5%><L16><E=62,62><AI=GPU1 usage smooth,62,62,0,100.6944,0,820,62,62,145,29,0.5>
+Text=<P=%PX_379%,%PY_5%><L16><E=62,62><AI=GPU1 usage smooth,62,62,0,100.6944,0,780,62,62,145,29,0.5>
 PositionX=0
 PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
-RefreshPeriod=33
+RefreshPeriod=50
 [Layer17]
 Name=GPU usage
 VisibilitySource=Tsume level 2 visible
@@ -837,13 +774,13 @@ ExtentOrigin=0
 [Layer19]
 Name=CPU ring
 VisibilitySource=Tsume level 3 visible
-Text=<P=%PX_12%,%PY_13%><L19><E=67,67><AI=CPU usage smooth,67,67,0,100.6944,0,1132,67,67,145,29,0.5>
+Text=<P=%PX_12%,%PY_13%><L19><E=67,67><AI=CPU usage smooth,67,67,0,100.6944,0,1092,67,67,145,29,0.5>
 PositionX=0
 PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
-RefreshPeriod=33
+RefreshPeriod=50
 [Layer20]
 Name=CPU usage
 VisibilitySource=Tsume level 3 visible
@@ -927,13 +864,13 @@ TextColor=FFFFFF
 [Layer28]
 Name=GPU ring
 VisibilitySource=Tsume level 3 visible
-Text=<P=%PX_246%,%PY_13%><L28><E=67,67><AI=GPU1 usage smooth,67,67,0,100.6944,0,1469,67,67,145,29,0.5>
+Text=<P=%PX_246%,%PY_13%><L28><E=67,67><AI=GPU1 usage smooth,67,67,0,100.6944,0,1429,67,67,145,29,0.5>
 PositionX=0
 PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
-RefreshPeriod=33
+RefreshPeriod=50
 [Layer29]
 Name=GPU usage
 VisibilitySource=Tsume level 3 visible
@@ -1128,7 +1065,7 @@ TextColor=30D158
 [Layer48]
 Name=Panel
 VisibilitySource=Tsume level 4 visible
-Text=<P=%PX_0%,%PY_0%><L48><E=225,504><I=225,504,0,0,225,504>
+Text=<P=%PX_0%,%PY_0%><L48><E=225,464><I=225,464,0,0,225,464>
 PositionX=0
 PositionY=0
 ExtentX=0
@@ -1338,13 +1275,14 @@ TextColor=FFFFFF
 [Layer69]
 Name=CPU usage graph
 VisibilitySource=Tsume level 4 visible
-Text=<P=%PX_16%,%PY_281%><L69><E=192,16><G=CPU usage,0,0,1,0,100,10>
+Text=<P=%PX_16%,%PY_281%><L69><E=192,16><G=CPU usage smooth,0,0,1,0,100,10>
 PositionX=0
 PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
 TextColor=0A84FF
+RefreshPeriod=50
 [Layer70]
 Name=GPU label
 VisibilitySource=Tsume level 4 visible
@@ -1416,9 +1354,9 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=FFFFFF
 [Layer77]
-Name=GPU Voltage label
+Name=GPU VRAM label
 VisibilitySource=Tsume level 4 visible
-Text=<P=%PX_16%,%PY_397%><L77>Voltage
+Text=<P=%PX_16%,%PY_397%><L77>VRAM
 PositionX=0
 PositionY=0
 ExtentX=0
@@ -1426,9 +1364,9 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=D1D1D6
 [Layer78]
-Name=GPU Voltage
+Name=GPU VRAM
 VisibilitySource=Tsume level 4 visible
-Text=<P=%PX_110%,%PY_397%><L78><E=98,19,2>%GPU core voltage% V
+Text=<P=%PX_110%,%PY_397%><L78><E=98,19,2>%GPU1 memory usage% GB
 PositionX=0
 PositionY=0
 ExtentX=0
@@ -1436,52 +1374,13 @@ ExtentY=0
 ExtentOrigin=0
 TextColor=FFFFFF
 [Layer79]
-Name=GPU Fan label
-VisibilitySource=Tsume level 4 visible
-Text=<P=%PX_16%,%PY_417%><L79>Fan
-PositionX=0
-PositionY=0
-ExtentX=0
-ExtentY=0
-ExtentOrigin=0
-TextColor=D1D1D6
-[Layer80]
-Name=GPU Fan
-VisibilitySource=Tsume level 4 visible
-Text=<P=%PX_110%,%PY_417%><L80><E=98,19,2>%GPU fan% rpm
-PositionX=0
-PositionY=0
-ExtentX=0
-ExtentY=0
-ExtentOrigin=0
-TextColor=FFFFFF
-[Layer81]
-Name=GPU VRAM label
-VisibilitySource=Tsume level 4 visible
-Text=<P=%PX_16%,%PY_437%><L81>VRAM
-PositionX=0
-PositionY=0
-ExtentX=0
-ExtentY=0
-ExtentOrigin=0
-TextColor=D1D1D6
-[Layer82]
-Name=GPU VRAM
-VisibilitySource=Tsume level 4 visible
-Text=<P=%PX_110%,%PY_437%><L82><E=98,19,2>%GPU1 memory usage% GB
-PositionX=0
-PositionY=0
-ExtentX=0
-ExtentY=0
-ExtentOrigin=0
-TextColor=FFFFFF
-[Layer83]
 Name=GPU usage graph
 VisibilitySource=Tsume level 4 visible
-Text=<P=%PX_16%,%PY_460%><L83><E=192,16><G=GPU1 usage,0,0,1,0,100,10>
+Text=<P=%PX_16%,%PY_420%><L79><E=192,16><G=GPU1 usage smooth,0,0,1,0,100,10>
 PositionX=0
 PositionY=0
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
 TextColor=BF5AF2
+RefreshPeriod=50

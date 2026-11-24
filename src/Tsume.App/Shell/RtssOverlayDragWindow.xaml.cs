@@ -28,7 +28,7 @@ public sealed partial class RtssOverlayDragWindow : Window
 {
     private const double DragThresholdDip = 6.0;
     private const double MinStandbyTouchDip = 44.0;
-    private const long HandoffTimeoutMs = 220;
+    private const long HandoffTimeoutMs = 1400;
 
     private readonly RtssOverlayService _service;
     private readonly Border[] _snapDots = new Border[9];
@@ -461,20 +461,9 @@ public sealed partial class RtssOverlayDragWindow : Window
         _handoffW = w;
         _handoffH = h;
 
-        // Shrink immediately to the dropped overlay rectangle so the rest of the game screen
-        // receives input right away, while holding the accent frame until RTSS redraws there.
-        _expanded = false;
-        var boxW = w / _dpiX;
-        var boxH = h / _dpiY;
-        Left = _viewLeftDip + x / _dpiX;
-        Top = _viewTopDip + y / _dpiY;
-        Width = boxW;
-        Height = boxH;
-        OverlayBox.Width = boxW;
-        OverlayBox.Height = boxH;
-        BoxTranslate.X = 0;
-        BoxTranslate.Y = 0;
-
+        // Make the window click-through right away so the game receives input immediately, without
+        // moving/resizing the HWND while BoxChrome is still visible (which would glitch for a frame).
+        SetClickThrough(true);
         _handoffTimer.Start();
     }
 
@@ -492,9 +481,8 @@ public sealed partial class RtssOverlayDragWindow : Window
             return;
         }
 
-        // Wait two 16 ms frames (~32 ms) after the new <P=x,y> is confirmed in shared memory so the
-        // game has presented the moved overlay underneath, and re-shift if an in-flight 1000 ms
-        // OverlayEditor tick raced with the drop and restored the old coordinates.
+        // Wait until OverlayEditor's 1 s AIDA64 poll publishes the new <P=x,y> into shared memory,
+        // plus two 16 ms frames (~32 ms) so the game has presented the moved overlay underneath.
         if (RtssSharedMemory.IsOverlayEditorAtPosition(_handoffX, _handoffY, _handoffW, _handoffH))
         {
             _handoffConfirmedTicks++;
@@ -504,7 +492,6 @@ public sealed partial class RtssOverlayDragWindow : Window
         else
         {
             _handoffConfirmedTicks = 0;
-            RtssSharedMemory.TryShiftOverlayEditorPosition(_handoffX, _handoffY, _handoffW, _handoffH);
         }
     }
 
@@ -521,7 +508,11 @@ public sealed partial class RtssOverlayDragWindow : Window
     private void CancelHandoff()
     {
         _handoffTimer.Stop();
-        _awaitingHandoff = false;
+        if (_awaitingHandoff)
+        {
+            _awaitingHandoff = false;
+            SetClickThrough(false);
+        }
         _handoffConfirmedTicks = 0;
     }
 
@@ -716,6 +707,17 @@ public sealed partial class RtssOverlayDragWindow : Window
 
         var style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, style | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST);
+    }
+
+    private void SetClickThrough(bool clickThrough)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == 0) return;
+
+        var style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        var next = clickThrough ? (style | WS_EX_TRANSPARENT) : (style & ~WS_EX_TRANSPARENT);
+        if (next != style)
+            SetWindowLongPtr(hwnd, GWL_EXSTYLE, next);
     }
 
     private void RaiseTopmostNoActivate()

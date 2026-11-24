@@ -49,7 +49,7 @@ public static class RtssOverlayMetrics
         RtssOverlayLevel.Fps      => (72, 72),
         RtssOverlayLevel.Bar      => (452, 72),
         RtssOverlayLevel.Detailed => (686, 93),
-        RtssOverlayLevel.Full     => (225, 504),
+        RtssOverlayLevel.Full     => (225, 464),
         _                         => (0, 0),
     };
 

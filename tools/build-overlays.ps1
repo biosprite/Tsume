@@ -51,22 +51,24 @@ $ringCpuColor = [System.Drawing.Color]::FromArgb(255, 10, 132, 255)
 $ringGpuColor = [System.Drawing.Color]::FromArgb(255, 191, 90, 242)
 
 # High-resolution ring sprites (145 frames = 2.5 deg / ~1.2 px per step; exact 0/25/50/75/100% frames)
-# animated at ~30 FPS (RefreshPeriod=33 on ring layers) via a two-stage critically damped EMA on
-# HAL/Timer, while all hardware sensors stay strictly at RTSS's standard 1-second cadence.
+# animated at ~20 FPS (RefreshPeriod=50 on ring layers) via a two-stage critically damped EMA on
+# HAL/Timer. OverlayEditor runs at 1 second ([Settings] RefreshPeriod=1000) for crisp FPS, frametime,
+# CPU/GPU usage graphs, and drag-drop handoff, while temperature, power, CPU clock, and GPU VRAM come
+# exclusively from Tsume's 2-second AIDA64 feed to minimize hardware sensor polling.
 $ringFrames  = 145
 $ringPerLine = 29
 $ringRows    = [int][Math]::Ceiling($ringFrames / [double]$ringPerLine)
 $ringMax     = '100.6944'
 $ringBias    = '0.5'
-$ringAlpha   = '0.28'
-$ringRefresh = 33
+$ringAlpha   = '0.38'
+$ringRefresh = 50
 $baseRefresh = 1000
 
 # Reworked panel chrome dimensions.
 $fpsPanelW     = 72;  $fpsPanelH     = 72
 $sleekPanelW   = 452; $sleekPanelH   = 72;  $sleekDividers   = @(144, 308)
 $compactPanelW = 686; $compactPanelH = 93;  $compactDividers = @(232, 464)
-$perfPanelW    = 225; $perfPanelH    = 504; $perfDividers    = @(168, 304)
+$perfPanelW    = 225; $perfPanelH    = 464; $perfDividers    = @(168, 304)
 
 # Crisp native Raster 3D master font: Segoe UI is built into every Windows PC with full LCD hinting,
 # and using only Size=100 (default, 14px) and Size=200 (28px) hits RTSS's pre-rasterized 100%/200%
@@ -463,20 +465,22 @@ function Add-GraphLayer(
     [string]$name,
     [string]$graphTag,
     [int]$dx, [int]$dy, [int]$ex, [int]$ey,
-    [string]$color) {
+    [string]$color,
+    [int]$refresh = 0) {
 
     $pos = Format-DynamicPos $usedX $usedY $list.Count $dx $dy $ex $ey 0
-    $list.Add(@(
-        "Name=$name"
-        "VisibilitySource=$vis"
-        "Text=$pos$graphTag"
-        "PositionX=0"
-        "PositionY=0"
-        "ExtentX=0"
-        "ExtentY=0"
-        "ExtentOrigin=0"
-        "TextColor=$color"
-    ))
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add("Name=$name")
+    $lines.Add("VisibilitySource=$vis")
+    $lines.Add("Text=$pos$graphTag")
+    $lines.Add("PositionX=0")
+    $lines.Add("PositionY=0")
+    $lines.Add("ExtentX=0")
+    $lines.Add("ExtentY=0")
+    $lines.Add("ExtentOrigin=0")
+    $lines.Add("TextColor=$color")
+    if ($refresh -gt 0) { $lines.Add("RefreshPeriod=$refresh") }
+    $list.Add($lines.ToArray())
 }
 
 function Add-TextLayer(
@@ -488,7 +492,8 @@ function Add-TextLayer(
     [string]$text,
     [int]$dx, [int]$dy, [int]$ex, [int]$ey, [int]$origin,
     [int]$size,
-    [string]$color) {
+    [string]$color,
+    [int]$refresh = 0) {
 
     $pos = Format-DynamicPos $usedX $usedY $list.Count $dx $dy $ex $ey $origin
     $lines = [System.Collections.Generic.List[string]]::new()
@@ -502,6 +507,7 @@ function Add-TextLayer(
     $lines.Add("ExtentOrigin=0")
     if ($size -ne 100) { $lines.Add("Size=$size") }
     $lines.Add("TextColor=$color")
+    if ($refresh -gt 0) { $lines.Add("RefreshPeriod=$refresh") }
     $list.Add($lines.ToArray())
 }
 
@@ -577,11 +583,10 @@ $compactGpuRing = @{ Source = 'GPU1 usage smooth'; X = 0; Y = $compactGpuRingY; 
 
 $perfSections = Read-IniSections (Join-Path $darkDir 'essential_performance_overlay.ovl')
 
-# 2. Build combined sources (all hardware sensors polled once per second at [Settings] RefreshPeriod=1000):
+# 2. Build combined sources:
 #    - 4 level visibility sources backed by TSUME_OVERLAY_LEVEL
-#    - 5 raw HAL sources (updated BEFORE AIDA in OverlayDataSourcesList::UpdateSources)
-#    - 5 effective AIDA sources that use HAL when valid, falling back to Tsume AIDA values
-#    - remaining HAL sources from essential_performance_overlay (excluding removed GPU/VRAM temps)
+#    - 5 AIDA sources fed by Tsume's 2-second telemetry loop (temp, CPU/GPU power, CPU clock, GPU VRAM)
+#    - remaining lightweight HAL sources (CPU/GPU usage, GPU clock, RAM usage; fan/voltage/temps removed)
 #    - rolling 1% / 0.1% low from RTSS's 1024-frame Frametime ring buffer
 #    - two-stage critically damped EMA sources (HAL/Timer) for smooth 30 FPS ring animation
 $sources = [System.Collections.Generic.List[string[]]]::new()
@@ -590,30 +595,22 @@ for ($lvl = 1; $lvl -le 4; $lvl++) {
     $sources.Add((New-SourceLines "Tsume level $lvl visible" '' '%.0f' "x == $lvl" 'AIDA' 'TSUME_OVERLAY_LEVEL'))
 }
 
-$fallbackSpecs = @(
-    @{ Display = 'CPU temperature';   Raw = 'HAL CPU temperature';   Units = $degC; Format = '';     Scale = '';        HalId = 'CPU temperature';   AidaId = 'TSUME_CPU_TEMP';  RequirePositive = $false }
-    @{ Display = 'CPU power';         Raw = 'HAL CPU power';         Units = 'W';   Format = '';     Scale = '';        HalId = 'CPU power';         AidaId = 'TSUME_CPU_POWER'; RequirePositive = $false }
-    @{ Display = 'CPU clock';         Raw = 'HAL CPU clock';         Units = 'GHz'; Format = '%.2f'; Scale = ' / 1000'; HalId = 'CPU clock';         AidaId = 'TSUME_CPU_CLOCK'; RequirePositive = $false }
-    @{ Display = 'GPU1 power';        Raw = 'HAL GPU1 power';        Units = 'W';   Format = '';     Scale = '';        HalId = 'GPU1 power';        AidaId = 'TSUME_GPU_POWER'; RequirePositive = $false }
-    @{ Display = 'GPU1 memory usage'; Raw = 'HAL GPU1 memory usage'; Units = 'GB';  Format = '%.1f'; Scale = ' / 1024'; HalId = 'GPU1 memory usage'; AidaId = 'TSUME_GPU_VRAM';  RequirePositive = $true  }
+$aidaTelemetrySpecs = @(
+    @{ Display = 'CPU temperature';   Units = $degC; Format = '';     Formula = '';         AidaId = 'TSUME_CPU_TEMP'  }
+    @{ Display = 'CPU power';         Units = 'W';   Format = '';     Formula = '';         AidaId = 'TSUME_CPU_POWER' }
+    @{ Display = 'CPU clock';         Units = 'GHz'; Format = '%.2f'; Formula = 'x / 1000'; AidaId = 'TSUME_CPU_CLOCK' }
+    @{ Display = 'GPU1 power';        Units = 'W';   Format = '';     Formula = '';         AidaId = 'TSUME_GPU_POWER' }
+    @{ Display = 'GPU1 memory usage'; Units = 'GB';  Format = '%.1f'; Formula = 'x / 1024'; AidaId = 'TSUME_GPU_VRAM'  }
 )
 $skipSourceNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-foreach ($spec in $fallbackSpecs) { [void]$skipSourceNames.Add($spec.Display) }
+foreach ($spec in $aidaTelemetrySpecs) { [void]$skipSourceNames.Add($spec.Display) }
 [void]$skipSourceNames.Add('GPU1 temperature')
 [void]$skipSourceNames.Add('GPU mem temp')
+[void]$skipSourceNames.Add('GPU fan')
+[void]$skipSourceNames.Add('GPU core voltage')
 
-foreach ($spec in $fallbackSpecs) {
-    $sources.Add((New-SourceLines $spec.Raw $spec.Units '' '' 'HAL' $spec.HalId))
-}
-foreach ($spec in $fallbackSpecs) {
-    $halRef = "`"$($spec.Raw)`""
-    $expr = if ($spec.RequirePositive) {
-        "validate($halRef) ? ($halRef > 0 ? $halRef : x) : x"
-    } else {
-        "validate($halRef) ? $halRef : x"
-    }
-    $formula = "($expr)$($spec.Scale)"
-    $sources.Add((New-SourceLines $spec.Display $spec.Units $spec.Format $formula 'AIDA' $spec.AidaId))
+foreach ($spec in $aidaTelemetrySpecs) {
+    $sources.Add((New-SourceLines $spec.Display $spec.Units $spec.Format $spec.Formula 'AIDA' $spec.AidaId))
 }
 
 # Per-chip temperature color thresholds published by Tsume (default 75/85 C; Intel handhelds 85/95 C).
@@ -708,10 +705,10 @@ Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis3 'FT label'        'FT'  
 Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis3 'FT'              '<FT> ms'                592 50 80  19 2 100 $valueHex
 Add-GraphLayer  $mergedLayers $usedRelX $usedRelY $vis3 'Frametime graph' '<G=Frametime,0,0,1,0,40,0>' 478 73 194 12 $fpsHex
 
-# ── Level 4: Full side panel (225x504) ────────────────────────────────────────────────────────────
+# ── Level 4: Full side panel (225x464) ────────────────────────────────────────────────────────────
 #    Header: FPS, Temp, 1% low, 0.1% low, Frametime, graph
 #    CPU: Load, Power, Clock, RAM, graph
-#    GPU: Load, Power, Clock, Voltage, Fan, VRAM, graph
+#    GPU: Load, Power, Clock, VRAM, graph
 $vis4 = 'Tsume level 4 visible'
 Add-SpriteLayer $mergedLayers $usedRelX $usedRelY $vis4 'Panel' 0 0 $perfPanelX $perfPanelY $perfPanelW $perfPanelH $totalWidth $totalHeight
 
@@ -736,7 +733,7 @@ Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'CPU Clock label'   'Clo
 Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'CPU Clock'         '%CPU clock% GHz'       110 239 98 19 2 100 $valueHex
 Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'CPU RAM label'     'RAM'                   16  259 0  0  0 100 $mutedHex
 Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'CPU RAM'           '%RAM usage% GB'        110 259 98 19 2 100 $valueHex
-Add-GraphLayer  $mergedLayers $usedRelX $usedRelY $vis4 'CPU usage graph'   '<G=CPU usage,0,0,1,0,100,10>' 16 281 192 16 $cpuHex
+Add-GraphLayer  $mergedLayers $usedRelX $usedRelY $vis4 'CPU usage graph'   '<G=CPU usage smooth,0,0,1,0,100,10>' 16 281 192 16 $cpuHex $ringRefresh
 
 Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'GPU label'         'GPU'                   16  316 0  0  0 100 $gpuHex
 Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'GPU Load label'    'Load'                  16  337 0  0  0 100 $mutedHex
@@ -745,13 +742,9 @@ Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'GPU Power label'   'Pow
 Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'GPU Power'         '%GPU1 power% W'        110 357 98 19 2 100 $valueHex
 Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'GPU Clock label'   'Clock'                 16  377 0  0  0 100 $mutedHex
 Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'GPU Clock'         '%GPU clock% GHz'       110 377 98 19 2 100 $valueHex
-Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'GPU Voltage label' 'Voltage'               16  397 0  0  0 100 $mutedHex
-Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'GPU Voltage'       '%GPU core voltage% V'  110 397 98 19 2 100 $valueHex
-Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'GPU Fan label'     'Fan'                   16  417 0  0  0 100 $mutedHex
-Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'GPU Fan'           '%GPU fan% rpm'         110 417 98 19 2 100 $valueHex
-Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'GPU VRAM label'    'VRAM'                  16  437 0  0  0 100 $mutedHex
-Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'GPU VRAM'          '%GPU1 memory usage% GB' 110 437 98 19 2 100 $valueHex
-Add-GraphLayer  $mergedLayers $usedRelX $usedRelY $vis4 'GPU usage graph'   '<G=GPU1 usage,0,0,1,0,100,10>' 16 460 192 16 $gpuHex
+Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'GPU VRAM label'    'VRAM'                  16  397 0  0  0 100 $mutedHex
+Add-TextLayer   $mergedLayers $usedRelX $usedRelY $vis4 'GPU VRAM'          '%GPU1 memory usage% GB' 110 397 98 19 2 100 $valueHex
+Add-GraphLayer  $mergedLayers $usedRelX $usedRelY $vis4 'GPU usage graph'   '<G=GPU1 usage smooth,0,0,1,0,100,10>' 16 420 192 16 $gpuHex $ringRefresh
 
 # Dynamic position offset sources backed by TSUME_POS_X / TSUME_POS_Y in AIDA64_SensorValues.
 foreach ($dx in ($usedRelX | Sort-Object)) {

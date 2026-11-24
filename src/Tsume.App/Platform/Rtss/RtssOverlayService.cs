@@ -22,7 +22,7 @@ namespace Tsume.App.Platform.Rtss;
 /// </summary>
 public sealed class RtssOverlayService : IDisposable
 {
-    private static readonly TimeSpan TelemetryInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan TelemetryInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan IdleTelemetryInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan ConflictRetryInterval = TimeSpan.FromSeconds(3);
     private static readonly Journal Log = new("rtss");
@@ -33,6 +33,7 @@ public sealed class RtssOverlayService : IDisposable
     private readonly AidaSensorBridge _aida = new();
     private readonly EnergyMeterTelemetry _energy = new();
     private readonly Lock _gate = new();
+    private readonly Lock _publishGate = new();
     private readonly SemaphoreSlim _sync = new(1, 1);
 
     private RtssSettings _settings;
@@ -612,12 +613,11 @@ public sealed class RtssOverlayService : IDisposable
         {
             StopTelemetryLoop();
             _energy.Reset();
-            _aida.Release();
+            lock (_publishGate) _aida.Release();
             CheckConflictChanged();
             return;
         }
 
-        var level = _settings.Level;
         int? cpuTemp;
         double? cpuWatts;
         double? gpuWatts;
@@ -634,17 +634,20 @@ public sealed class RtssOverlayService : IDisposable
 
         var (tempWarnC, tempHotC) = CurrentTempThresholds();
         var (sw, sh) = GetFramePixels();
-        var (posX, posY) = ResolveActivePosition(level, sw, sh);
-        var published = _aida.TryPublish(
-            new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb, tempWarnC, tempHotC, posX, posY),
-            _install?.Folder);
-        if (published)
+
+        RtssOverlayLevel level;
+        bool published;
+        lock (_publishGate)
         {
-            lock (_gate) _publishedFrame = (sw, sh);
-            if (shiftOverlayNow)
+            if (!IsOverlayVisibleWanted) return;
+            level = _settings.Level;
+            var (posX, posY) = ResolveActivePosition(level, sw, sh);
+            published = _aida.TryPublish(
+                new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb, tempWarnC, tempHotC, posX, posY),
+                _install?.Folder);
+            if (published)
             {
-                var (pw, ph) = RtssOverlayMetrics.GetSize(level);
-                RtssSharedMemory.TryShiftOverlayEditorPosition(posX, posY, pw, ph);
+                lock (_gate) _publishedFrame = (sw, sh);
             }
         }
         CheckConflictChanged();
@@ -718,11 +721,17 @@ public sealed class RtssOverlayService : IDisposable
                     {
                         // FPS-only mode needs no sensor polling; just retry claiming AIDA64_SensorValues until owned.
                         var (fpsSw, fpsSh) = GetFramePixels();
-                        var (fpsPosX, fpsPosY) = ResolveActivePosition(level, fpsSw, fpsSh);
-                        var claimed = _aida.TryPublish(
-                            new AidaSensorSnapshot((int)level, PosX: fpsPosX, PosY: fpsPosY),
-                            _install?.Folder);
-                        if (claimed) lock (_gate) _publishedFrame = (fpsSw, fpsSh);
+                        bool claimed;
+                        lock (_publishGate)
+                        {
+                            if (!IsOverlayVisibleWanted) break;
+                            var currentLevel = _settings.Level;
+                            var (fpsPosX, fpsPosY) = ResolveActivePosition(currentLevel, fpsSw, fpsSh);
+                            claimed = _aida.TryPublish(
+                                new AidaSensorSnapshot((int)currentLevel, PosX: fpsPosX, PosY: fpsPosY),
+                                _install?.Folder);
+                            if (claimed) lock (_gate) _publishedFrame = (fpsSw, fpsSh);
+                        }
                         CheckConflictChanged();
                         if (claimed) break;
 
@@ -739,12 +748,19 @@ public sealed class RtssOverlayService : IDisposable
                         if (!_aida.IsOwned)
                         {
                             var (idleSw, idleSh) = GetScreenPixels();
-                            var (idlePosX, idlePosY) = ResolveActivePosition(level, idleSw, idleSh);
-                            if (_aida.TryPublish(
-                                new AidaSensorSnapshot((int)level, PosX: idlePosX, PosY: idlePosY),
-                                _install?.Folder))
+                            lock (_publishGate)
                             {
-                                lock (_gate) _publishedFrame = (idleSw, idleSh);
+                                if (IsOverlayVisibleWanted)
+                                {
+                                    var currentLevel = _settings.Level;
+                                    var (idlePosX, idlePosY) = ResolveActivePosition(currentLevel, idleSw, idleSh);
+                                    if (_aida.TryPublish(
+                                        new AidaSensorSnapshot((int)currentLevel, PosX: idlePosX, PosY: idlePosY),
+                                        _install?.Folder))
+                                    {
+                                        lock (_gate) _publishedFrame = (idleSw, idleSh);
+                                    }
+                                }
                             }
                             CheckConflictChanged();
                         }
@@ -781,16 +797,20 @@ public sealed class RtssOverlayService : IDisposable
                         _lastGpuVramMb = gpuVramMb;
                     }
 
-                    level = _settings.Level;
-                    if (level == RtssOverlayLevel.Off) break;
-
                     var (tempWarnC, tempHotC) = CurrentTempThresholds();
                     var (sw, sh) = GetFramePixels();
-                    var (posX, posY) = ResolveActivePosition(level, sw, sh);
-                    var ok = _aida.TryPublish(
-                        new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb, tempWarnC, tempHotC, posX, posY),
-                        _install?.Folder);
-                    if (ok) lock (_gate) _publishedFrame = (sw, sh);
+                    bool ok;
+                    lock (_publishGate)
+                    {
+                        if (cancel.IsCancellationRequested || !IsOverlayVisibleWanted) break;
+                        level = _settings.Level;
+                        if (level == RtssOverlayLevel.Off) break;
+                        var (posX, posY) = ResolveActivePosition(level, sw, sh);
+                        ok = _aida.TryPublish(
+                            new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb, tempWarnC, tempHotC, posX, posY),
+                            _install?.Folder);
+                        if (ok) lock (_gate) _publishedFrame = (sw, sh);
+                    }
                     CheckConflictChanged();
 
                     await Task.Delay(ok ? TelemetryInterval : ConflictRetryInterval, cancel).ConfigureAwait(false);

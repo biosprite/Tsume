@@ -34,10 +34,10 @@ within OverlayEditor's 256-layer limit (`84` layers).
   their panel chrome) for single-chip handheld PCs so each displays one shared chip temperature
   reading instead of duplicating CPU/GPU temperatures and discrete VRAM temperature, pack the
   resized panel backgrounds with 145-frame anti-aliased CPU/GPU rings (2.5° per frame, replacing
-  the 51-frame / 7.2° originals) animated at 30 FPS (`RefreshPeriod=33` with two-stage critically
-  damped `HAL/Timer` EMA smoothing) while all hardware sensors stay strictly at RTSS's standard
-  `1000 ms` cadence (with Tsume also shifting `<P=x,y>` directly in shared memory for instant
-  next-frame drag/drop movement), gate each level's layers with `VisibilitySource` on
+  the 51-frame / 7.2° originals) animated at 20 FPS (`RefreshPeriod=50` with two-stage critically
+  damped `HAL/Timer` EMA smoothing) while `OverlayEditor` runs at `1000 ms` for crisp FPS,
+  frametime, and CPU/GPU usage graphs and Tsume feeds temperature, power, CPU clock, and GPU VRAM
+  every `2000 ms` via `AIDA64_SensorValues`, gate each level's layers with `VisibilitySource` on
   `TSUME_OVERLAY_LEVEL` (`x == 1..4`), compute live rolling `1% low` and `0.1% low` from RTSS's
   1,024-frame `Frametime` ring buffer (refreshed every 1 s, no benchmark hotkey needed), and add
   AIDA64 fallbacks for temperature, CPU/GPU power, and CPU clock when OverlayEditor's HAL reports
