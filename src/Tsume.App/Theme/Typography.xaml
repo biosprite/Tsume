@@ -23,6 +23,22 @@
     <Setter Property="FontWeight" Value="SemiBold" />
   </Style>
 
+  <!-- Compact title and breadcrumb segments for Settings screens; fits 1–2 wrapped lines inside the 46px header. -->
+  <Style x:Key="Text.ScreenTitle" TargetType="TextBlock" BasedOn="{StaticResource Text.Base}">
+    <Setter Property="FontSize" Value="16" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="LineHeight" Value="21" />
+    <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+
+  <Style x:Key="Text.ScreenCrumb" TargetType="TextBlock" BasedOn="{StaticResource Text.ScreenTitle}" />
+
+  <Style x:Key="Text.ScreenCrumbSeparator" TargetType="TextBlock" BasedOn="{StaticResource Text.ScreenTitle}">
+    <Setter Property="Margin" Value="6,0" />
+    <Setter Property="TextTrimming" Value="None" />
+  </Style>
+
   <!-- Everyday text -->
   <Style x:Key="Text.Body" TargetType="TextBlock" BasedOn="{StaticResource Text.Base}">
     <Setter Property="FontSize" Value="14" />

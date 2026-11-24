@@ -23,14 +23,23 @@
 
   <DockPanel DataContext="{Binding Settings.Controls.DedicatedActionsPage}">
 
-    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,14">
+    <DockPanel DockPanel.Dock="Top" Height="46" Margin="0,0,0,14">
       <controls:Tile DockPanel.Dock="Left" Style="{StaticResource Tile.Icon}"
                      Glyph="{x:Static theme:Glyphs.Back}"
                      AutomationProperties.Name="{x:Static lang:Strings.Back}"
                      Command="{Binding Close}" />
 
-      <TextBlock Style="{StaticResource Text.Title}" Text="{x:Static lang:Strings.DedicatedActionsTitle}"
-                 Margin="16,0,0,0" VerticalAlignment="Center" />
+      <WrapPanel VerticalAlignment="Center" Margin="14,0,0,0" MaxHeight="46">
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Style="{StaticResource Text.ScreenCrumb}" Text="{x:Static lang:Strings.Settings}" />
+          <TextBlock Style="{StaticResource Text.ScreenCrumbSeparator}" Text="&gt;" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Style="{StaticResource Text.ScreenCrumb}" Text="{x:Static lang:Strings.ControlsAndLayout}" />
+          <TextBlock Style="{StaticResource Text.ScreenCrumbSeparator}" Text="&gt;" />
+        </StackPanel>
+        <TextBlock Style="{StaticResource Text.ScreenTitle}" Text="{x:Static lang:Strings.DedicatedActionsTitle}" />
+      </WrapPanel>
     </DockPanel>
 
     <Border DockPanel.Dock="Top" Style="{StaticResource Card.Info}"
