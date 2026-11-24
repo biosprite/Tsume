@@ -10,85 +10,27 @@ using Tsume.Core.Devices;
 
 namespace Tsume.App.ViewModels;
 
-/// <summary>Controls &amp; layout page; capabilities come from <see cref="DeviceProfile.Controls"/>.</summary>
+/// <summary>Controls &amp; layout page: panel side, Dedicated Actions, and System Buttons.</summary>
 public sealed class ControlsViewModel : LayerViewModel, IDisposable
 {
-    private readonly PerformanceViewModel _performance;
     private readonly SavedState _state;
-    private readonly Dictionary<string, (BackButtonDefinition Button, BackButtonBinding Binding)> _pending = [];
-
-    private ControlsProfile? _controls;
-    private IBackButtonController? _controller;
-
     private bool _absorbing;
-    private bool _msiCenterRuns;
-    private int _changes;
-    private Task? _reading;
-
-    private bool _writing;
-    private Task _writer = Task.CompletedTask;
-    private bool _unsaved;
     private bool _disposed;
 
     public ControlsViewModel(PerformanceViewModel performance, SavedState state)
     {
-        _performance = performance;
         _state = state;
-
-        GameBarOptions =
-        [
-            new(HardwareButtonAction.XboxGameBar, Strings.GameBarDefault),
-            new(HardwareButtonAction.SteamBigPicture, Strings.GameBarSteam),
-            new(HardwareButtonAction.TaskManager, Strings.GameBarTaskManager),
-            new(HardwareButtonAction.TouchKeyboard, Strings.GameBarTouchKeyboard),
-            new(HardwareButtonAction.Screenshot, Strings.GameBarScreenshot),
-            new(HardwareButtonAction.ShowDesktop, Strings.GameBarShowDesktop),
-            new(HardwareButtonAction.Disabled, Strings.GameBarDisabled),
-        ];
-
-        OemButtonOptions =
-        [
-            new(HardwareButtonAction.Disabled, Strings.GameBarDisabled),
-            new(HardwareButtonAction.XboxGameBar, Strings.MButtonXboxGameBar),
-            new(HardwareButtonAction.SteamBigPicture, Strings.GameBarSteam),
-            new(HardwareButtonAction.TaskManager, Strings.GameBarTaskManager),
-            new(HardwareButtonAction.TouchKeyboard, Strings.GameBarTouchKeyboard),
-            new(HardwareButtonAction.Screenshot, Strings.GameBarScreenshot),
-            new(HardwareButtonAction.ShowDesktop, Strings.GameBarShowDesktop),
-        ];
 
         ToggleOpenOnRight = new Command(() => OpenOnRight = !OpenOnRight);
 
-        var initialOem = state.ResolveOemButton();
-
         _absorbing = true;
         OpenOnRight = state.OpenOnRight;
-        SelectedGameBarOption = GameBarOptions.FirstOrDefault(o => o.Action == state.GameBarButton) ?? GameBarOptions[0];
-        SelectedOemButtonOption = OemButtonOptions.FirstOrDefault(o => o.Action == initialOem) ?? OemButtonOptions[0];
         _absorbing = false;
 
-        DedicatedActions.Add(new DedicatedActionEditor(
-            DedicatedAction.OpenFpsOverlay,
-            Strings.DedicatedActionFpsOverlay,
-            Strings.DedicatedActionFpsOverlayDetail,
-            DedicatedActionKeys.All,
-            state.FpsOverlayHotkey,
-            OnDedicatedActionChanged));
+        DedicatedActionsPage = new DedicatedActionsViewModel(state);
+        DedicatedActionsPage.BindingsChanged += () => DedicatedActionsChanged?.Invoke();
 
-        DedicatedActions.Add(new DedicatedActionEditor(
-            DedicatedAction.OpenTsume,
-            Strings.DedicatedActionOpenTsume,
-            Strings.DedicatedActionOpenTsumeDetail,
-            DedicatedActionKeys.All,
-            state.OpenTsumeHotkey ?? [DedicatedActionKeys.OemButtonCode],
-            OnDedicatedActionChanged));
-
-        performance.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(PerformanceViewModel.Device)) AdoptDevice(performance.Device);
-        };
-
-        AdoptDevice(performance.Device);
+        SystemButtonsPage = new SystemButtonsViewModel(performance, state, DedicatedActionsPage);
     }
 
     public ICommand ToggleOpenOnRight { get; }
@@ -105,311 +47,24 @@ public sealed class ControlsViewModel : LayerViewModel, IDisposable
         }
     }
 
-    public Visibility DedicatedButtonsVisibility =>
-        _controls is { HasGameBarButton: true } or { HasOemButton: true }
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+    public DedicatedActionsViewModel DedicatedActionsPage { get; }
 
-    public Visibility GameBarButtonVisibility =>
-        _controls?.HasGameBarButton == true ? Visibility.Visible : Visibility.Collapsed;
-
-    public Visibility OemButtonVisibility =>
-        _controls?.HasOemButton == true ? Visibility.Visible : Visibility.Collapsed;
-
-    public string GameBarButtonLabel => _controls?.GameBarButtonLabel ?? Strings.GameBarButton;
-
-    public string OemButtonLabel => _controls?.OemButtonLabel ?? Strings.MButton;
-
-    public IReadOnlyList<HardwareButtonOption> GameBarOptions { get; }
-
-    public HardwareButtonOption SelectedGameBarOption
-    {
-        get;
-        set
-        {
-            if (value is null || !Set(ref field, value)) return;
-
-            Notify(nameof(GameBarAction));
-            Notify(nameof(GameBarDetail));
-
-            if (_absorbing) return;
-
-            _state.GameBarButton = value.Action;
-            _state.Save();
-        }
-    } = null!;
-
-    public HardwareButtonAction GameBarAction => SelectedGameBarOption.Action;
-
-    public string GameBarDetail =>
-        GameBarAction == HardwareButtonAction.XboxGameBar
-            ? (_controls?.GameBarNativeWinG != false ? Strings.GameBarDefaultDetail : Strings.GameBarNonNativeDefaultDetail)
-            : _msiCenterRuns && _controls?.HasMsiCenterConflict == true ? Strings.GameBarMsiCenterWarning
-            : Strings.GameBarCustomDetail;
-
-    public IReadOnlyList<HardwareButtonOption> OemButtonOptions { get; }
-
-    public HardwareButtonOption SelectedOemButtonOption
-    {
-        get;
-        set
-        {
-            if (value is null || !Set(ref field, value)) return;
-
-            Notify(nameof(OemButtonAction));
-            Notify(nameof(OemButtonDetail));
-
-            if (_absorbing) return;
-
-            SaveOemButton(value.Action);
-            _state.Save();
-        }
-    } = null!;
-
-    public HardwareButtonAction OemButtonAction => SelectedOemButtonOption.Action;
-
-    public string OemButtonDetail =>
-        _msiCenterRuns && _controls?.HasMsiCenterConflict == true ? Strings.MButtonMsiCenterWarning
-        : OemButtonAction switch
-        {
-            HardwareButtonAction.OpenTsume => Strings.MButtonDetailTsume,
-            HardwareButtonAction.Disabled  => Strings.MButtonDetailDisabled,
-            _                              => Strings.MButtonDetailCustom,
-        };
-
-    private void SaveOemButton(HardwareButtonAction action)
-    {
-        _state.OemButton = action;
-        _state.MButton = null;
-        _state.MButtonOpensTsume = action == HardwareButtonAction.OpenTsume;
-    }
-
-    public ObservableCollection<BackButtonEditor> BackButtons { get; } = [];
-
-    public ObservableCollection<DedicatedActionEditor> DedicatedActions { get; } = [];
-
-    public string DedicatedActionsMultiHint => Strings.BackButtonMultiHint(DedicatedActionKeys.MaxKeys);
+    public SystemButtonsViewModel SystemButtonsPage { get; }
 
     /// <summary>Raised whenever a Dedicated Action key binding changes so global listeners can refresh.</summary>
     public event Action? DedicatedActionsChanged;
 
     public IReadOnlyList<DedicatedActionBinding> GetDedicatedActionBindings() =>
-        DedicatedActions.Select(a => new DedicatedActionBinding(a.Action, a.CurrentKeys())).ToList();
+        DedicatedActionsPage.GetBindings();
 
-    private void OnDedicatedActionChanged(DedicatedAction action, IReadOnlyList<byte> keys)
-    {
-        switch (action)
-        {
-            case DedicatedAction.OpenFpsOverlay:
-                _state.FpsOverlayHotkey = keys.Count > 0 ? [.. keys] : null;
-                break;
-            case DedicatedAction.OpenTsume:
-                // Empty list preserves an explicit Unbound choice; null means "never set" (defaults to Quick Menu / OEM).
-                _state.OpenTsumeHotkey = [.. keys];
-                break;
-        }
-
-        _state.Save();
-        DedicatedActionsChanged?.Invoke();
-    }
-
-    public Visibility BackButtonsVisibility =>
-        _controls?.BackButtons is { Buttons.Count: > 0 } ? Visibility.Visible : Visibility.Collapsed;
-
-    public string BackButtonMultiHint =>
-        Strings.BackButtonMultiHint(_controls?.BackButtons?.MaxSimultaneousKeys ?? BackButtonBinding.MaxKeys);
-
-    public bool IsControllerAvailable { get; private set => Set(ref field, value); } = true;
-
-    public string Status { get; private set => Set(ref field, value); } = Strings.ControlsSavedPanelOnly;
-
-    private void AdoptDevice(DeviceProfile device)
-    {
-        var next = device.Controls;
-        var sameControls = _controls is null ? next is null : next is not null && _controls.Matches(next);
-        if (sameControls) return;
-
-        var previousBack = _controls?.BackButtons;
-        var nextBack = next?.BackButtons;
-        var backChanged = previousBack is null ? nextBack is not null : nextBack is null || !previousBack.Matches(nextBack);
-
-        _controls = next;
-
-        if (backChanged)
-        {
-            _controller?.Dispose();
-            _controller = null;
-            _pending.Clear();
-            _unsaved = false;
-
-            RebuildBackButtons(nextBack);
-            IsControllerAvailable = nextBack is { Buttons.Count: > 0 };
-            Status = nextBack is { Buttons.Count: > 0 } ? Strings.ControlsSaved : Strings.ControlsSavedPanelOnly;
-        }
-
-        Notify(nameof(DedicatedButtonsVisibility));
-        Notify(nameof(GameBarButtonVisibility));
-        Notify(nameof(OemButtonVisibility));
-        Notify(nameof(GameBarButtonLabel));
-        Notify(nameof(OemButtonLabel));
-        Notify(nameof(GameBarDetail));
-        Notify(nameof(OemButtonDetail));
-        Notify(nameof(BackButtonsVisibility));
-        Notify(nameof(BackButtonMultiHint));
-
-        if (IsOpen) _ = RefreshAsync();
-    }
-
-    private void RebuildBackButtons(BackButtonsProfile? profile)
-    {
-        BackButtons.Clear();
-        if (profile is null || profile.Buttons.Count == 0) return;
-
-        var keys = BackButtonControllers.KeysFor(profile);
-        var maxKeys = Math.Max(1, profile.MaxSimultaneousKeys);
-
-        foreach (var button in profile.Buttons)
-            BackButtons.Add(new BackButtonEditor(button, keys, maxKeys, OnBackButtonChanged));
-    }
-
-    protected override void OnOpened() => _ = RefreshAsync();
-
-    public Task RefreshAsync() => _reading is { IsCompleted: false } ? _reading : _reading = ReadAsync();
-
-    private async Task ReadAsync()
-    {
-        var changesBefore = _changes;
-        var controls = _controls;
-
-        var msiRuns = controls?.HasMsiCenterConflict == true && await Task.Run(() => MsiCenter.IsRunning);
-        _msiCenterRuns = msiRuns;
-        Notify(nameof(GameBarDetail));
-        Notify(nameof(OemButtonDetail));
-
-        var backProfile = controls?.BackButtons;
-        if (backProfile is null || backProfile.Buttons.Count == 0)
-        {
-            Status = Strings.ControlsSavedPanelOnly;
-            return;
-        }
-
-        var controller = await ConnectAsync(backProfile);
-        if (controller is null) return;
-
-        var readings = new List<(BackButtonEditor Editor, BackButtonBinding Binding)>(BackButtons.Count);
-        foreach (var editor in BackButtons)
-        {
-            var binding = await controller.ReadAsync(editor.Definition);
-            if (binding is null)
-            {
-                Lost();
-                return;
-            }
-            readings.Add((editor, binding));
-        }
-
-        if (_changes != changesBefore || _writing) return;
-
-        foreach (var (editor, binding) in readings)
-            editor.Load(binding);
-
-        Status = msiRuns ? Strings.ControlsMsiCenterRuns : Strings.ControlsSaved;
-    }
-
-    private async Task<IBackButtonController?> ConnectAsync(BackButtonsProfile profile)
-    {
-        _controller ??= await Task.Run(() => BackButtonControllers.Open(profile));
-
-        IsControllerAvailable = _controller is not null;
-        if (_controller is null) Status = Strings.ControllerNotFound;
-
-        return _controller;
-    }
-
-    private void Lost()
-    {
-        _controller?.Dispose();
-        _controller = null;
-        Status = Strings.ControllerNotAnswering;
-    }
-
-    private void OnBackButtonChanged(BackButtonDefinition button, BackButtonBinding binding)
-    {
-        if (_controls?.BackButtons is null) return;
-
-        _changes++;
-        _pending[button.Id] = (button, binding);
-
-        if (_writing) return;
-        _writing = true;
-        _writer = WriteQueuedAsync();
-    }
-
-    private async Task WriteQueuedAsync()
-    {
-        try
-        {
-            while (_pending.Count > 0)
-            {
-                var profile = _controls?.BackButtons;
-                if (profile is null)
-                {
-                    _pending.Clear();
-                    return;
-                }
-
-                var batch = _pending.Values.ToList();
-                _pending.Clear();
-
-                var controller = await ConnectAsync(profile);
-                if (controller is null) return;
-
-                var ok = true;
-                var anyBound = false;
-                foreach (var (button, binding) in batch)
-                {
-                    ok = await controller.WriteAsync(button, binding);
-                    if (!ok) break;
-                    if (binding.Keys.Count > 0) anyBound = true;
-                }
-
-                if (ok && anyBound)
-                    await controller.EnsureActiveAsync();
-
-                if (ok) _unsaved = true;
-                else Lost();
-            }
-        }
-        finally
-        {
-            _writing = false;
-        }
-    }
-
-    protected override async void OnClosed()
-    {
-        Controls.KeyDropdown.CloseIfOpen();
-
-        while (_writing) await _writer;
-
-        if (!_unsaved || _controller is null) return;
-
-        if (await _controller.SaveAsync()) _unsaved = false;
-        else Lost();
-    }
+    public string Status => Strings.ControlsSavedPanelOnly;
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
-        _controller?.Dispose();
-        _controller = null;
+        SystemButtonsPage.Dispose();
     }
-}
-
-public sealed record HardwareButtonOption(HardwareButtonAction Action, string Label)
-{
-    public override string ToString() => Label;
 }
 
 public sealed class BackButtonEditor : Observable
@@ -544,128 +199,6 @@ public sealed class BackButtonEditor : Observable
     }
 
     private void Emit() => _onChanged(Definition, CurrentBinding());
-}
-
-public sealed class DedicatedActionEditor : Observable
-{
-    private readonly Action<DedicatedAction, IReadOnlyList<byte>> _onChanged;
-    private bool _absorbing;
-
-    public DedicatedActionEditor(
-        DedicatedAction action,
-        string title,
-        string subtitle,
-        IReadOnlyList<BackButtonKey> availableKeys,
-        IReadOnlyList<byte>? initialKeys,
-        Action<DedicatedAction, IReadOnlyList<byte>> onChanged)
-    {
-        Action = action;
-        Title = title;
-        Subtitle = subtitle;
-        AvailableKeys = availableKeys;
-        MaxKeys = DedicatedActionKeys.MaxKeys;
-        _onChanged = onChanged;
-
-        AddKey = new Command(AddSlot);
-
-        _absorbing = true;
-        var valid = initialKeys?
-            .Where(code => code is not (0 or BackButtonKey.UnboundCode) && availableKeys.Any(k => k.Code == code))
-            .Take(MaxKeys)
-            .ToList() ?? [];
-
-        if (valid.Count == 0)
-        {
-            Slots.Add(CreateSlot(1, BackButtonKey.Unbound));
-        }
-        else
-        {
-            for (var i = 0; i < valid.Count; i++)
-                Slots.Add(CreateSlot(i + 1, DedicatedActionKeys.FromCode(valid[i])));
-        }
-
-        _absorbing = false;
-        SyncMeta();
-    }
-
-    public DedicatedAction Action { get; }
-    public string Title { get; }
-    public string Subtitle { get; }
-    public IReadOnlyList<BackButtonKey> AvailableKeys { get; }
-    public int MaxKeys { get; }
-
-    public ObservableCollection<KeySlotViewModel> Slots { get; } = [];
-
-    public ICommand AddKey { get; }
-
-    public string Summary { get; private set => Set(ref field, value); } = Strings.BackButtonUnbound;
-
-    public Visibility AddKeyVisibility { get; private set => Set(ref field, value); } = Visibility.Collapsed;
-
-    public IReadOnlyList<byte> CurrentKeys() =>
-        Slots
-            .Select(slot => slot.SelectedKey.Code)
-            .Where(code => code is not (0 or BackButtonKey.UnboundCode))
-            .Take(MaxKeys)
-            .ToList();
-
-    private KeySlotViewModel CreateSlot(int number, BackButtonKey key) =>
-        new(number, key, AvailableKeys, OnSlotChanged, RemoveSlot);
-
-    private void AddSlot()
-    {
-        if (Slots.Count >= MaxKeys) return;
-
-        _absorbing = true;
-        Slots.Add(CreateSlot(Slots.Count + 1, BackButtonKey.Unbound));
-        _absorbing = false;
-
-        SyncMeta();
-    }
-
-    private void RemoveSlot(KeySlotViewModel slot)
-    {
-        if (Slots.Count <= 1)
-        {
-            var hadBinding = slot.SelectedKey.Code != BackButtonKey.UnboundCode;
-
-            _absorbing = true;
-            slot.SelectedKey = BackButtonKey.Unbound;
-            _absorbing = false;
-
-            SyncMeta();
-            if (hadBinding) Emit();
-            return;
-        }
-
-        Slots.Remove(slot);
-        SyncMeta();
-        Emit();
-    }
-
-    private void OnSlotChanged()
-    {
-        if (_absorbing) return;
-        SyncMeta();
-        Emit();
-    }
-
-    private void SyncMeta()
-    {
-        for (var i = 0; i < Slots.Count; i++)
-            Slots[i].Number = i + 1;
-
-        var keys = CurrentKeys();
-        Summary = keys.Count > 0
-            ? string.Join(" + ", keys.Select(code => DedicatedActionKeys.FromCode(code).Name))
-            : Strings.BackButtonUnbound;
-
-        AddKeyVisibility = Slots.Count < MaxKeys && keys.Count > 0
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-    }
-
-    private void Emit() => _onChanged(Action, CurrentKeys());
 }
 
 public sealed class KeySlotViewModel : Observable

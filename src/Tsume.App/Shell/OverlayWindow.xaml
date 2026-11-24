@@ -90,8 +90,16 @@
             <panel:CustomizationScreen />
           </controls:Screen>
 
-          <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Settings.Controls.IsOpen}">
+          <controls:Screen x:Name="ControlsScreen" Margin="18,16,18,16" IsOpen="{Binding Settings.Controls.IsOpen}">
             <panel:ControlsScreen />
+          </controls:Screen>
+
+          <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Settings.Controls.DedicatedActionsPage.IsOpen}">
+            <panel:DedicatedActionsScreen />
+          </controls:Screen>
+
+          <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Settings.Controls.SystemButtonsPage.IsOpen}">
+            <panel:SystemButtonsScreen />
           </controls:Screen>
 
           <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Settings.Developer.IsOpen}">

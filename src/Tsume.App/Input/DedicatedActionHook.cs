@@ -8,10 +8,27 @@ using Tsume.Core.Diagnostics;
 
 namespace Tsume.App.Input;
 
+public enum DedicatedActionCategory
+{
+    Tsume,
+    System,
+}
+
 public enum DedicatedAction
 {
     OpenFpsOverlay,
     OpenTsume,
+    CyclePerformanceMode,
+    CycleRefreshRate,
+    ToggleFanBoost,
+    ToggleControllerMode,
+    Screenshot,
+    TouchKeyboard,
+    ShowDesktop,
+    TaskManager,
+    ToggleMute,
+    SteamBigPicture,
+    XboxGameBar,
 }
 
 public sealed record DedicatedActionBinding(DedicatedAction Action, IReadOnlyList<byte> Keys);

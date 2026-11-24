@@ -848,10 +848,47 @@
     <comment>{0} = maximum simultaneous keys supported by this controller</comment>
   </data>
   <data name="DedicatedActionsHeading" xml:space="preserve"><value>DEDICATED ACTIONS</value></data>
-  <data name="DedicatedActionFpsOverlay" xml:space="preserve"><value>Open FPS overlay</value></data>
-  <data name="DedicatedActionFpsOverlayDetail" xml:space="preserve"><value>Toggle the FPS overlay on or off</value></data>
+  <data name="DedicatedActionsTitle" xml:space="preserve"><value>Dedicated actions</value></data>
+  <data name="DedicatedActionsNoneActive" xml:space="preserve"><value>No shortcuts bound — tap to configure</value></data>
+  <data name="DedicatedActionsActiveSummary" xml:space="preserve"><value>{0} active · {1}</value></data>
+  <data name="DedicatedActionsTabActive" xml:space="preserve"><value>Active</value></data>
+  <data name="DedicatedActionsTabTsume" xml:space="preserve"><value>Tsume</value></data>
+  <data name="DedicatedActionsTabSystem" xml:space="preserve"><value>System</value></data>
+  <data name="DedicatedActionsBrowseHint" xml:space="preserve"><value>Switch to Tsume or System above to bind more actions.</value></data>
+  <data name="DedicatedActionsFooterHint" xml:space="preserve"><value>Hold up to {0} keys or buttons together. Changes save immediately.</value></data>
+  <data name="DedicatedActionsClear" xml:space="preserve"><value>Clear binding</value></data>
+  <data name="SystemButtonsHeading" xml:space="preserve"><value>SYSTEM BUTTONS</value></data>
+  <data name="SystemButtonsTitle" xml:space="preserve"><value>System buttons</value></data>
+  <data name="SystemButtonsDetailAll" xml:space="preserve"><value>Hardware buttons and rear back paddles</value></data>
+  <data name="SystemButtonsDetailHardware" xml:space="preserve"><value>Remap dedicated hardware buttons</value></data>
+  <data name="SystemButtonsDetailBack" xml:space="preserve"><value>Remap rear back paddles</value></data>
+  <data name="SystemButtonCustomDetail" xml:space="preserve"><value>Assigned in Dedicated actions</value></data>
   <data name="DedicatedActionOpenTsume" xml:space="preserve"><value>Open Tsume</value></data>
   <data name="DedicatedActionOpenTsumeDetail" xml:space="preserve"><value>Open or close the Tsume panel</value></data>
+  <data name="DedicatedActionFpsOverlay" xml:space="preserve"><value>FPS overlay</value></data>
+  <data name="DedicatedActionFpsOverlayDetail" xml:space="preserve"><value>Toggle the RTSS performance overlay on or off</value></data>
+  <data name="DedicatedActionCyclePerformance" xml:space="preserve"><value>Cycle performance mode</value></data>
+  <data name="DedicatedActionCyclePerformanceDetail" xml:space="preserve"><value>Step through your device's power profiles</value></data>
+  <data name="DedicatedActionCycleRefreshRate" xml:space="preserve"><value>Cycle refresh rate</value></data>
+  <data name="DedicatedActionCycleRefreshRateDetail" xml:space="preserve"><value>Switch between available display refresh rates</value></data>
+  <data name="DedicatedActionToggleFanBoost" xml:space="preserve"><value>Toggle fan boost</value></data>
+  <data name="DedicatedActionToggleFanBoostDetail" xml:space="preserve"><value>Switch fans between Auto and Max speed</value></data>
+  <data name="DedicatedActionToggleControllerMode" xml:space="preserve"><value>Controller mode</value></data>
+  <data name="DedicatedActionToggleControllerModeDetail" xml:space="preserve"><value>Switch the built-in pad between Gamepad and Cursor mode</value></data>
+  <data name="DedicatedActionScreenshot" xml:space="preserve"><value>Screenshot</value></data>
+  <data name="DedicatedActionScreenshotDetail" xml:space="preserve"><value>Capture a full-screen screenshot to Pictures\Screenshots</value></data>
+  <data name="DedicatedActionTouchKeyboard" xml:space="preserve"><value>Touch keyboard</value></data>
+  <data name="DedicatedActionTouchKeyboardDetail" xml:space="preserve"><value>Show or hide the Windows on-screen keyboard</value></data>
+  <data name="DedicatedActionShowDesktop" xml:space="preserve"><value>Show desktop</value></data>
+  <data name="DedicatedActionShowDesktopDetail" xml:space="preserve"><value>Minimize all windows or exit Xbox Full Screen Experience</value></data>
+  <data name="DedicatedActionTaskManager" xml:space="preserve"><value>Task Manager</value></data>
+  <data name="DedicatedActionTaskManagerDetail" xml:space="preserve"><value>Open Windows Task Manager</value></data>
+  <data name="DedicatedActionToggleMute" xml:space="preserve"><value>Mute audio</value></data>
+  <data name="DedicatedActionToggleMuteDetail" xml:space="preserve"><value>Mute or unmute system speakers</value></data>
+  <data name="DedicatedActionSteamBigPicture" xml:space="preserve"><value>Steam Big Picture</value></data>
+  <data name="DedicatedActionSteamBigPictureDetail" xml:space="preserve"><value>Launch or focus Steam Big Picture mode</value></data>
+  <data name="DedicatedActionXboxGameBar" xml:space="preserve"><value>Xbox Game Bar</value></data>
+  <data name="DedicatedActionXboxGameBarDetail" xml:space="preserve"><value>Open or close the Xbox Game Bar overlay</value></data>
   <data name="ControlsSaved" xml:space="preserve"><value>Panel &amp; button settings save immediately; back buttons save to the controller when you leave.</value></data>
   <data name="ControlsSavedPanelOnly" xml:space="preserve"><value>Panel &amp; button settings save immediately.</value></data>
   <data name="ControlsMsiCenterRuns" xml:space="preserve"><value>MSI Center M is running and may undo back-button bindings.</value></data>

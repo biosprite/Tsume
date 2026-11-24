@@ -56,10 +56,8 @@ public partial class App
     private PanelViewModel? _panel;
     private OverlayWindow? _window;
     private RtssOverlayDragController? _rtssDrag;
-    private DateTime _lastButtonPress;
     private DateTime _lastGameBarPress;
-    private DateTime _lastFpsOverlayAction;
-    private DateTime _lastOpenTsumeAction;
+    private readonly Dictionary<DedicatedAction, DateTime> _lastDedicatedActions = [];
 
     /// <summary>Latest controls profile for lock-free reads from the WMI button thread.</summary>
     private ControlsProfile? _activeControls;
@@ -287,9 +285,9 @@ public partial class App
                 _msiCenterRuns = !panel.Settings.IsMsiCenterPaused;
         };
 
-        panel.Settings.Controls.PropertyChanged += (_, e) =>
+        panel.Settings.Controls.SystemButtonsPage.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(ControlsViewModel.GameBarAction))
+            if (e.PropertyName == nameof(SystemButtonsViewModel.IsGameBarDisabled))
                 SyncHardwareButtons(window, panel);
         };
 
@@ -317,11 +315,11 @@ public partial class App
         {
             _gameBarHook.SetTriggers(controls?.GameBarTriggers ?? []);
 
-            var action = panel.Settings.Controls.GameBarAction;
             var xboxBound = DedicatedActionKeys.UsesCode(
                 Volatile.Read(ref _dedicatedActionBindings), DedicatedActionKeys.XboxButtonCode);
+            var gameBarDisabled = panel.Settings.Controls.SystemButtonsPage.IsGameBarDisabled;
             _gameBarHook.IsEnabled = controls is { HasGameBarButton: true, GameBarTriggers.Count: > 0 }
-                && (xboxBound || action != HardwareButtonAction.XboxGameBar || !controls.GameBarNativeWinG);
+                && (xboxBound || gameBarDisabled || !controls.GameBarNativeWinG);
         }
 
         if (_buttons is null && controls is { OemButtonWmiCode: not null } or { GameBarWmiCode: not null })
@@ -346,15 +344,6 @@ public partial class App
                 if (dedicated == DedicatedAction.OpenTsume) OpenTrace.Summoned();
                 Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnDedicatedAction(dedicated, window, panel));
             }
-            else
-            {
-                var action = panel.Settings.Controls.OemButtonAction;
-                if (action != HardwareButtonAction.Disabled && !blockedByMsi)
-                {
-                    if (action == HardwareButtonAction.OpenTsume) OpenTrace.Summoned();
-                    Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnOemButton(window, panel));
-                }
-            }
 
             if (controls.HasMsiCenterConflict)
                 _msiCenterRuns = MsiCenter.IsRunning;
@@ -369,21 +358,11 @@ public partial class App
                 return;
             }
 
-            var action = panel.Settings.Controls.GameBarAction;
-            var handleDefault = !controls.GameBarNativeWinG && (!controls.HasMsiCenterConflict || !_msiCenterRuns);
-
-            if (action != HardwareButtonAction.XboxGameBar || handleDefault)
+            var handleDefault = !panel.Settings.Controls.SystemButtonsPage.IsGameBarDisabled
+                && !controls.GameBarNativeWinG && (!controls.HasMsiCenterConflict || !_msiCenterRuns);
+            if (handleDefault)
                 Dispatcher.BeginInvoke(DispatcherPriority.Send, () => OnGameBarButton(window, panel));
         }
-    }
-
-    private void OnOemButton(OverlayWindow window, PanelViewModel panel)
-    {
-        var now = DateTime.UtcNow;
-        if (now - _lastButtonPress < ButtonEcho) return;
-        _lastButtonPress = now;
-
-        QuickActions.Run(panel.Settings.Controls.OemButtonAction, window.Toggle);
     }
 
     private void OnGameBarButton(OverlayWindow window, PanelViewModel panel)
@@ -399,28 +378,78 @@ public partial class App
             return;
         }
 
-        var action = panel.Settings.Controls.GameBarAction;
-        if (action == HardwareButtonAction.OpenTsume) OpenTrace.Summoned();
-
-        QuickActions.Run(action, window.Toggle);
+        if (!panel.Settings.Controls.SystemButtonsPage.IsGameBarDisabled)
+            QuickActions.OpenGameBar();
     }
 
     private void OnDedicatedAction(DedicatedAction action, OverlayWindow window, PanelViewModel panel)
     {
         var now = DateTime.UtcNow;
+        if (_lastDedicatedActions.TryGetValue(action, out var last) && now - last < ButtonEcho) return;
+        _lastDedicatedActions[action] = now;
+
         switch (action)
         {
             case DedicatedAction.OpenFpsOverlay:
-                if (now - _lastFpsOverlayAction < ButtonEcho) return;
-                _lastFpsOverlayAction = now;
                 panel.Rtss.ToggleOverlay();
                 break;
 
             case DedicatedAction.OpenTsume:
-                if (now - _lastOpenTsumeAction < ButtonEcho) return;
-                _lastOpenTsumeAction = now;
                 OpenTrace.Summoned();
                 window.Toggle();
+                break;
+
+            case DedicatedAction.CyclePerformanceMode:
+                panel.Performance.CycleMode();
+                break;
+
+            case DedicatedAction.CycleRefreshRate:
+                panel.Actions.Refresh();
+                panel.Actions.CycleRefreshRate.Execute(null);
+                break;
+
+            case DedicatedAction.ToggleFanBoost:
+                panel.Performance.CycleFan.Execute(null);
+                break;
+
+            case DedicatedAction.ToggleControllerMode:
+                panel.PadMode.Toggle.Execute(null);
+                break;
+
+            case DedicatedAction.Screenshot:
+                QuickActions.Screenshot();
+                break;
+
+            case DedicatedAction.TouchKeyboard:
+                QuickActions.ToggleTouchKeyboard();
+                break;
+
+            case DedicatedAction.ShowDesktop:
+                QuickActions.ShowDesktop();
+                break;
+
+            case DedicatedAction.TaskManager:
+                QuickActions.TaskManager();
+                break;
+
+            case DedicatedAction.ToggleMute:
+                Task.Run(() =>
+                {
+                    if (AudioVolume.Read() is { } reading)
+                    {
+                        var nextMuted = !reading.Muted;
+                        AudioVolume.SetMuted(nextMuted);
+                        Dispatcher.BeginInvoke(() => _ = panel.Levels.RefreshAsync());
+                    }
+                });
+                break;
+
+            case DedicatedAction.SteamBigPicture:
+                QuickActions.OpenSteamBigPicture();
+                break;
+
+            case DedicatedAction.XboxGameBar:
+                QuickActions.OpenGameBar();
                 break;
         }
     }

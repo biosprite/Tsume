@@ -130,6 +130,13 @@ public sealed class PerformanceViewModel : Observable
         }
     }
 
+    /// <summary>Steps to the next performance mode this machine offers, wrapping back to the first.</summary>
+    public void CycleMode()
+    {
+        if (Device.Modes.Count < 2) return;
+        ModeIndex = (ModeIndex + 1) % Device.Modes.Count;
+    }
+
     public PerformanceMode Mode
     {
         get;

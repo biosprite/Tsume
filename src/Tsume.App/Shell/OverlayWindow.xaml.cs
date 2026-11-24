@@ -442,12 +442,17 @@ public partial class OverlayWindow
         if (layer.IsOpen) _focusBeneath.Push(Keyboard.FocusedElement);
 
         Main.IsEnabled = !_panel.IsCovered;
+        var onControlsSubpage = _panel.Settings.Controls.DedicatedActionsPage.IsOpen
+            || _panel.Settings.Controls.SystemButtonsPage.IsOpen;
         var onAPage = _panel.Settings.Customization.IsOpen
             || _panel.Settings.PerformancePresets.IsOpen
             || _panel.Settings.Controls.IsOpen
+            || onControlsSubpage
             || _panel.Settings.Developer.IsOpen;
         SettingsScreen.IsCovered = onAPage;
         SettingsScreen.IsEnabled = !onAPage && !_panel.Quit.IsOpen;
+        ControlsScreen.IsCovered = onControlsSubpage;
+        ControlsScreen.IsEnabled = !onControlsSubpage;
         UpscalingScreen.IsCovered = _panel.Upscaling.HasPageOpen;
         UpscalingScreen.IsEnabled = !_panel.Upscaling.HasPageOpen && !_panel.Upscaling.RestoreAll.IsOpen;
         RtssScreen.IsCovered = _panel.Rtss.Download.IsOpen;

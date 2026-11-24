@@ -92,6 +92,22 @@ public static class ScreenShots
                 await Shot("2e-controls-bottom");
                 controlsScroll.ScrollToTop();
             }
+
+            var dedicated = panel.Settings.Controls.DedicatedActionsPage;
+            dedicated.IsOpen = true;
+            await Shot("2f-dedicated-active");
+            if (dedicated.VisibleActions.Count > 0)
+            {
+                dedicated.VisibleActions[0].ToggleExpand.Execute(null);
+                await Shot("2f-dedicated-expanded");
+                dedicated.VisibleActions[0].ToggleExpand.Execute(null);
+            }
+            dedicated.SelectedTabIndex = 1;
+            await Shot("2f-dedicated-tsume");
+            dedicated.SelectedTabIndex = 2;
+            await Shot("2f-dedicated-system");
+            dedicated.IsOpen = false;
+
             panel.Settings.Controls.IsOpen = false;
 
             panel.Settings.IsOpen = false;

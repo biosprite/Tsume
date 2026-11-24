@@ -564,6 +564,106 @@
     </Setter>
   </Style>
 
+  <!-- Compact accordion header row for Dedicated Actions: icon, name, hotkey pill (Detail), and chevron.
+       IsOn lights the icon and tints the pill; Tag="Expanded" rotates the chevron. -->
+  <Style x:Key="Tile.ActionRow" TargetType="controls:Tile">
+    <Setter Property="MinHeight" Value="52" />
+    <Setter Property="Margin" Value="0" />
+    <Setter Property="AutomationProperties.Name" Value="{Binding Label, RelativeSource={RelativeSource Self}}" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="controls:Tile">
+          <Grid x:Name="Body" RenderTransformOrigin="0.5,0.5">
+            <Grid.RenderTransform>
+              <ScaleTransform />
+            </Grid.RenderTransform>
+
+            <Border x:Name="Face" Background="Transparent" CornerRadius="{StaticResource Radius.Control}" />
+
+            <DockPanel Margin="14,10,14,10" IsHitTestVisible="False">
+
+              <TextBlock x:Name="Chevron" DockPanel.Dock="Right" Style="{StaticResource Text.Icon}" FontSize="11"
+                         Foreground="{DynamicResource Text.Faint}" VerticalAlignment="Center" Margin="8,0,0,0"
+                         Text="{x:Static theme:Glyphs.ChevronDown}" RenderTransformOrigin="0.5,0.5">
+                <TextBlock.RenderTransform>
+                  <RotateTransform x:Name="ChevronRotate" Angle="0" />
+                </TextBlock.RenderTransform>
+              </TextBlock>
+
+              <Grid DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0,0,0" MaxWidth="156">
+                <Border x:Name="PillOff" CornerRadius="8" Background="{DynamicResource Surface.Hover}" />
+                <Border x:Name="PillOn" CornerRadius="8" Background="{x:Static theme:Accent.Tint}" Opacity="0" />
+                <TextBlock x:Name="PillText" Style="{StaticResource Text.Caption}" FontSize="11"
+                           Foreground="{DynamicResource Text.Faint}" Padding="9,3"
+                           Text="{TemplateBinding Detail}" />
+              </Grid>
+
+              <Grid DockPanel.Dock="Left" VerticalAlignment="Center" Width="22">
+                <TextBlock x:Name="Icon" Style="{StaticResource Text.Icon}" FontSize="18"
+                           HorizontalAlignment="Center" Text="{TemplateBinding Glyph}" />
+                <TextBlock x:Name="IconLit" Style="{StaticResource Text.Icon}" FontSize="18"
+                           HorizontalAlignment="Center" Text="{TemplateBinding Glyph}"
+                           Foreground="{x:Static theme:Accent.Brush}" Opacity="0" />
+              </Grid>
+
+              <TextBlock Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                         Margin="12,0,4,0" VerticalAlignment="Center"
+                         Text="{TemplateBinding Label}" />
+            </DockPanel>
+
+            <Border x:Name="Ring" Style="{StaticResource Focus.Ring}" BorderBrush="{x:Static theme:Accent.Brush}" />
+          </Grid>
+
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Face" Property="Background" Value="{DynamicResource Surface.Hover}" />
+            </Trigger>
+
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Trigger.EnterActions><BeginStoryboard Storyboard="{StaticResource Ring.Show}" /></Trigger.EnterActions>
+              <Trigger.ExitActions><BeginStoryboard Storyboard="{StaticResource Ring.Hide}" /></Trigger.ExitActions>
+            </Trigger>
+
+            <Trigger Property="IsOn" Value="True">
+              <Setter TargetName="IconLit" Property="Opacity" Value="1" />
+              <Setter TargetName="Icon" Property="Opacity" Value="0" />
+              <Setter TargetName="PillOn" Property="Opacity" Value="1" />
+              <Setter TargetName="PillOff" Property="Opacity" Value="0" />
+              <Setter TargetName="PillText" Property="Foreground" Value="{DynamicResource Text}" />
+            </Trigger>
+
+            <Trigger Property="Tag" Value="Expanded">
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="ChevronRotate" Storyboard.TargetProperty="Angle" To="180" Duration="0:0:0.18" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="ChevronRotate" Storyboard.TargetProperty="Angle" To="0" Duration="0:0:0.18" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
+            </Trigger>
+
+            <Trigger Property="IsPressed" Value="True">
+              <Trigger.EnterActions><BeginStoryboard Storyboard="{StaticResource Press.Down}" /></Trigger.EnterActions>
+              <Trigger.ExitActions><BeginStoryboard Storyboard="{StaticResource Press.Up}" /></Trigger.ExitActions>
+            </Trigger>
+
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.4" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <!-- Game row card: same chrome as Tile.Link, with custom badge content below the game's name. -->
   <Style x:Key="Tile.GameLink" TargetType="controls:Tile">
     <Setter Property="MinHeight" Value="64" />

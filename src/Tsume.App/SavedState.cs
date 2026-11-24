@@ -46,6 +46,9 @@ public sealed class SavedState
     public Platform.HardwareButtonAction? OemButton { get; set; }
 
     /// <summary>Global key/button chords (up to 3 simultaneous <see cref="Core.Controller.BackButtonKey.Code"/> values) for Dedicated Actions.</summary>
+    public Dictionary<string, List<byte>>? DedicatedActionHotkeys { get; set; }
+
+    /// <summary>Legacy fields kept for backwards compatibility with earlier state.json files.</summary>
     public List<byte>? FpsOverlayHotkey { get; set; }
     public List<byte>? OpenTsumeHotkey { get; set; }
 

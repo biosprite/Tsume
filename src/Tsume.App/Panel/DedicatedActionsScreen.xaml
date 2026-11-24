@@ -1,0 +1,129 @@
+<UserControl x:Class="Tsume.App.Panel.DedicatedActionsScreen"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Tsume.App.Controls"
+             xmlns:theme="clr-namespace:Tsume.App.Theme"
+             xmlns:lang="clr-namespace:Tsume.App.Language"
+             xmlns:core="clr-namespace:Tsume.Core.Controller;assembly=Tsume.Core"
+             Focusable="False">
+
+  <!-- Categorized, compact accordion editor for Dedicated Actions. Opened from Controls & Layout. -->
+
+  <UserControl.Resources>
+    <DataTemplate x:Key="KeyOptionTemplate" DataType="{x:Type core:BackButtonKey}">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Right" Style="{StaticResource Text.Caption}" FontSize="11"
+                   Foreground="{DynamicResource Text.Faint}" VerticalAlignment="Center"
+                   Margin="8,0,0,0" Text="{Binding Category}" />
+        <TextBlock Style="{StaticResource Text.Body}" VerticalAlignment="Center"
+                   Text="{Binding Name}" />
+      </DockPanel>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <DockPanel DataContext="{Binding Settings.Controls.DedicatedActionsPage}">
+
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,14">
+      <controls:Tile DockPanel.Dock="Left" Style="{StaticResource Tile.Icon}"
+                     Glyph="{x:Static theme:Glyphs.Back}"
+                     AutomationProperties.Name="{x:Static lang:Strings.Back}"
+                     Command="{Binding Close}" />
+
+      <TextBlock Style="{StaticResource Text.Title}" Text="{x:Static lang:Strings.DedicatedActionsTitle}"
+                 Margin="16,0,0,0" VerticalAlignment="Center" />
+    </DockPanel>
+
+    <controls:SegmentedControl x:Name="CategoryTabs" DockPanel.Dock="Top"
+                               Height="40" Margin="0,0,0,12"
+                               controls:Screen.TakesFocus="True"
+                               AutomationProperties.Name="{x:Static lang:Strings.DedicatedActionsTitle}"
+                               Segments="{Binding Tabs}"
+                               SelectedIndex="{Binding SelectedTabIndex}" />
+
+    <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+               Text="{Binding FooterHint}" Margin="4,10,0,0" />
+
+    <ScrollViewer x:Name="List" Focusable="False"
+                  VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
+      <StackPanel>
+
+        <ItemsControl x:Name="ActionsList" ItemsSource="{Binding VisibleActions}" Focusable="False">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border Background="{DynamicResource Surface}" CornerRadius="{StaticResource Radius.Control}"
+                      Margin="0,0,0,8">
+                <StackPanel>
+
+                  <controls:Tile x:Name="HeaderTile" Style="{StaticResource Tile.ActionRow}"
+                                 Glyph="{Binding Glyph}"
+                                 Label="{Binding Title}"
+                                 Detail="{Binding Summary}"
+                                 IsOn="{Binding IsBound}"
+                                 Tag="{Binding ExpandStateTag}"
+                                 Command="{Binding ToggleExpand}" />
+
+                  <controls:Reveal IsOpen="{Binding IsExpanded}">
+                    <StackPanel Margin="14,0,14,14">
+                      <Border Height="1" Background="{DynamicResource Surface.Divider}" Margin="0,0,0,10" />
+
+                      <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+                                 Text="{Binding Subtitle}" Margin="0,0,0,10" />
+
+                      <ItemsControl x:Name="SlotsList" ItemsSource="{Binding Slots}" Focusable="False">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                            <DockPanel Margin="0,0,0,8">
+                              <controls:Tile DockPanel.Dock="Right" Style="{StaticResource Tile.Icon}"
+                                             Width="42" Height="42" Margin="8,0,0,0"
+                                             Glyph="{x:Static theme:Glyphs.Quit}"
+                                             AutomationProperties.Name="{x:Static lang:Strings.BackButtonRemoveKey}"
+                                             Click="OnRemoveKeyClick"
+                                             Command="{Binding Remove}" />
+
+                              <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Caption}"
+                                         Width="42" VerticalAlignment="Center"
+                                         Text="{Binding SlotLabel}" />
+
+                              <controls:KeyDropdown ItemsSource="{Binding AvailableKeys}"
+                                                    SelectedItem="{Binding SelectedKey, Mode=TwoWay}"
+                                                    ItemTemplate="{StaticResource KeyOptionTemplate}"
+                                                    AutomationProperties.Name="{Binding SlotLabel}" />
+                            </DockPanel>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+
+                      <controls:Tile Style="{StaticResource Tile.Row}" Height="40" Margin="0,2,0,0"
+                                     Glyph="{x:Static theme:Glyphs.Add}"
+                                     Label="{x:Static lang:Strings.BackButtonAddKey}"
+                                     Visibility="{Binding AddKeyVisibility}"
+                                     Click="OnAddKeyClick"
+                                     Command="{Binding AddKey}" />
+
+                      <controls:Tile Style="{StaticResource Tile.Mini}" Height="34" Margin="0,8,0,0"
+                                     Glyph="{x:Static theme:Glyphs.Remove}"
+                                     Label="{x:Static lang:Strings.DedicatedActionsClear}"
+                                     Visibility="{Binding ClearVisibility}"
+                                     Click="OnClearClick"
+                                     Command="{Binding Clear}" />
+                    </StackPanel>
+                  </controls:Reveal>
+
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+                   Foreground="{DynamicResource Text.Faint}"
+                   Text="{x:Static lang:Strings.DedicatedActionsBrowseHint}"
+                   Visibility="{Binding BrowseHintVisibility}"
+                   Margin="4,4,4,0" />
+
+      </StackPanel>
+    </ScrollViewer>
+
+  </DockPanel>
+
+</UserControl>
