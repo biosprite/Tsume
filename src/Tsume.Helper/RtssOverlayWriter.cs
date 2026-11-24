@@ -21,13 +21,14 @@ internal static class RtssOverlayWriter
         ["tsume"] = "essential_tsume",
     };
 
-    private static readonly Dictionary<string, string> Themes = new(StringComparer.OrdinalIgnoreCase)
+    /// <summary>The combined Essential Dark layout file (all four levels in one .ovl), or null.</summary>
+    private static string? ResolveLayout(string layout, string? _)
     {
-        ["dark"] = "Dark",
-        ["smoke"] = "Smoke",
-        ["white"] = "White",
-        ["float"] = "Float",
-    };
+        if (!Layouts.TryGetValue(layout, out var stem)) return null;
+
+        var path = Path.Combine(AppContext.BaseDirectory, "Overlays", "Essential", stem + ".ovl");
+        return File.Exists(path) ? path : null;
+    }
 
     public static HelperReply Apply(SetRtssOverlay request)
     {
@@ -137,17 +138,6 @@ internal static class RtssOverlayWriter
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
 
         return false;
-    }
-
-    /// <summary>The bundled layout file for a known layout and theme name, or null.</summary>
-    private static string? ResolveLayout(string layout, string? theme)
-    {
-        if (!Layouts.TryGetValue(layout, out var stem)) return null;
-        if (!Themes.TryGetValue(theme ?? "dark", out var folder)) return null;
-
-        var suffix = folder == "Dark" ? "" : "_" + folder.ToLowerInvariant();
-        var path = Path.Combine(AppContext.BaseDirectory, "Overlays", "Essential", folder, stem + suffix + ".ovl");
-        return File.Exists(path) ? path : null;
     }
 
     private static List<string> ReadLines(string path) =>

@@ -13,16 +13,6 @@ public enum RtssOverlayLevel
     Full = 4,
 }
 
-/// <summary>Color variant of the Essential overlay layouts.</summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
-public enum RtssOverlayTheme
-{
-    Dark = 0,
-    Smoke = 1,
-    White = 2,
-    Float = 3,
-}
-
 /// <summary>Screen anchor preset (or free-dragged custom position) for an individual FPS overlay level.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum RtssOverlayAlignment
@@ -191,8 +181,6 @@ public sealed record RtssSettings
     /// user's own layout alone, even though <see cref="UseTsumeOverlay"/> defaults to on.
     /// </summary>
     public bool OverlayClaimed { get; init; }
-
-    public RtssOverlayTheme Theme { get; init; } = RtssOverlayTheme.Dark;
 
     /// <summary>Last custom frame-rate limit chosen with the slider (FPS).</summary>
     public int CustomFrameRateLimit { get; init; } = 45;

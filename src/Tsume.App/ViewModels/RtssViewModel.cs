@@ -10,7 +10,7 @@ namespace Tsume.App.ViewModels;
 
 /// <summary>
 /// The RTSS tile and screen: detects an existing RTSS installation (linking to Guru3D rather than
-/// bundling RTSS), picks which Essential overlay layout and theme RTSS's OverlayEditor shows, with an option
+/// bundling RTSS), picks which Essential Dark overlay layout RTSS's OverlayEditor shows, with an option
 /// to leave the user's own RTSS overlay untouched, and controls RTSS's global OSD visibility and frame-rate cap.
 /// </summary>
 public sealed class RtssViewModel : LayerViewModel
@@ -41,7 +41,7 @@ public sealed class RtssViewModel : LayerViewModel
         _service = service;
         _dismiss = dismiss;
 
-        // Tsume restarts RTSS when the overlay theme changes or Tsume's overlay is toggled; show the new state once it is back.
+        // Tsume restarts RTSS when Tsume's overlay is toggled or upgraded; show the new state once it is back.
         _service.Restarted += () => Application.Current?.Dispatcher.InvokeAsync(RefreshState);
         _service.ConflictChanged += () => Application.Current?.Dispatcher.InvokeAsync(NotifyConflict);
         _service.OverlayStateChanged += () => Application.Current?.Dispatcher.InvokeAsync(SyncPlacementState);
@@ -187,14 +187,6 @@ public sealed class RtssViewModel : LayerViewModel
         Strings.RtssLevelBar,
         Strings.RtssLevelDetailed,
         Strings.RtssLevelFull,
-    ];
-
-    public IReadOnlyList<string> Themes { get; } =
-    [
-        Strings.RtssThemeDark,
-        Strings.RtssThemeSmoke,
-        Strings.RtssThemeWhite,
-        Strings.RtssThemeFloat,
     ];
 
     public IReadOnlyList<string> FrameCapModes { get; } =
@@ -591,18 +583,6 @@ public sealed class RtssViewModel : LayerViewModel
         _                         => Strings.RtssLevelOffDetail,
     };
 
-    public int ThemeIndex
-    {
-        get;
-        set
-        {
-            var clamped = Math.Clamp(value, 0, Themes.Count - 1);
-            if (!Set(ref field, clamped) || _absorbing) return;
-
-            _service.ApplySettings(_service.Settings with { Theme = (RtssOverlayTheme)clamped });
-        }
-    }
-
     public bool IsOsdVisible
     {
         get;
@@ -772,7 +752,6 @@ public sealed class RtssViewModel : LayerViewModel
         UseTsumeOverlay = settings.UseTsumeOverlay;
         SkipAntiCheatGames = settings.SkipAntiCheatGames;
         LevelIndex = (int)settings.Level;
-        ThemeIndex = (int)settings.Theme;
         CustomCap = Math.Clamp(settings.CustomFrameRateLimit, RtssSettings.MinCustomFps, RtssSettings.MaxCustomFps);
 
         if (osdVisible is { } visible) IsOsdVisible = visible;
@@ -808,7 +787,6 @@ public sealed class RtssViewModel : LayerViewModel
         UseTsumeOverlay = settings.UseTsumeOverlay;
         SkipAntiCheatGames = settings.SkipAntiCheatGames;
         LevelIndex = (int)settings.Level;
-        ThemeIndex = (int)settings.Theme;
         CustomCap = Math.Clamp(settings.CustomFrameRateLimit, RtssSettings.MinCustomFps, RtssSettings.MaxCustomFps);
         _absorbing = false;
 
@@ -1110,7 +1088,7 @@ public sealed class RtssViewModel : LayerViewModel
 
         try
         {
-            // Configure OverlayEditor before launch so RTSS starts straight into the chosen theme with no second restart.
+            // Configure OverlayEditor before launch so RTSS starts straight into Tsume's layout with no second restart.
             await _service.EnsureSyncedAsync();
 
             // Launch off the UI thread so any Windows UAC prompt never freezes the panel.
@@ -1262,7 +1240,6 @@ public sealed class RtssViewModel : LayerViewModel
         _excludedGamesCount = 2;
         Notify(nameof(SkipAntiCheatDetail));
         LevelIndex = (int)level;
-        ThemeIndex = (int)RtssOverlayTheme.Dark;
         IsOsdVisible = true;
         ActiveFrameRateLimit = isRunning ? frameRateLimit : 0;
 

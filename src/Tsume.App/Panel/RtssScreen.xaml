@@ -150,10 +150,6 @@
 
                   <controls:Reveal IsOpen="{Binding IsTsumeOverlayShown}">
                     <StackPanel>
-                      <controls:SegmentedControl Margin="0,10,0,0"
-                                                 AutomationProperties.Name="{x:Static lang:Strings.RtssTheme}"
-                                                 Segments="{Binding Themes}" SelectedIndex="{Binding ThemeIndex}" />
-
                       <!-- Per-level 3x3 screen alignment picker: each FPS overlay remembers its own position. -->
                       <Border Background="{DynamicResource Surface}"
                               CornerRadius="{StaticResource Radius.Control}"

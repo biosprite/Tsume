@@ -510,11 +510,6 @@ public static class Strings
     public static string RtssLevelDetailedDetail => Find();
     public static string RtssLevelFullDetail => Find();
 
-    public static string RtssTheme => Find();
-    public static string RtssThemeDark => Find();
-    public static string RtssThemeSmoke => Find();
-    public static string RtssThemeWhite => Find();
-    public static string RtssThemeFloat => Find();
     public static string RtssPositionHeading(string levelName) => Fill(Find(), levelName);
     public static string RtssAlignTopLeft => Find();
     public static string RtssAlignTopCenter => Find();

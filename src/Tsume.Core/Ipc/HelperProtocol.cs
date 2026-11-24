@@ -102,12 +102,13 @@ public sealed record GetRtssStartup : HelperRequest;
 public sealed record SetRtssStartup(bool Enabled) : HelperRequest;
 
 /// <summary>
-/// Points RTSS's OverlayEditor plugin at Tsume's combined Essential layout for the requested theme and enables the
-/// plugin, or, with a null <paramref name="Layout"/>, puts back the plugin state and layout the user had before Tsume
-/// changed them. Layout and theme are names (<c>tsume</c>; <c>dark</c>, <c>smoke</c>, <c>white</c>, <c>float</c>):
-/// the helper resolves the file beside itself and never takes a path from the caller.
+/// Points RTSS's OverlayEditor plugin at Tsume's combined Essential Dark layout and enables the plugin, or,
+/// with a null <paramref name="Layout"/>, puts back the plugin state and layout the user had before Tsume
+/// changed them. <paramref name="Layout"/> is a known name (<c>tsume</c>); <paramref name="Theme"/> is
+/// retained as an optional legacy parameter and ignored by the helper, which resolves the file beside itself
+/// and never takes a path from the caller.
 /// </summary>
-public sealed record SetRtssOverlay(string? Layout, string? Theme) : HelperRequest;
+public sealed record SetRtssOverlay(string? Layout, string? Theme = null) : HelperRequest;
 
 /// <summary>
 /// Strictly read-only full hardware discovery scan (SMBIOS, vendor WMI/MOF, OEM-safe firmware reads,

@@ -729,11 +729,6 @@
   <data name="RtssLevelDetailedDetail" xml:space="preserve"><value>Essential Sleek Compact: adds clocks, RAM, VRAM, 0.1% low, frametime and a frametime graph.</value></data>
   <data name="RtssLevelFullDetail" xml:space="preserve"><value>Essential Performance: a full side panel with CPU, GPU and frametime graphs.</value></data>
 
-  <data name="RtssTheme" xml:space="preserve"><value>Overlay theme</value></data>
-  <data name="RtssThemeDark" xml:space="preserve"><value>Dark</value></data>
-  <data name="RtssThemeSmoke" xml:space="preserve"><value>Smoke</value></data>
-  <data name="RtssThemeWhite" xml:space="preserve"><value>White</value></data>
-  <data name="RtssThemeFloat" xml:space="preserve"><value>Float</value></data>
   <data name="RtssPositionHeading" xml:space="preserve"><value>{0} position</value></data>
   <data name="RtssAlignTopLeft" xml:space="preserve"><value>Top left</value></data>
   <data name="RtssAlignTopCenter" xml:space="preserve"><value>Top center</value></data>

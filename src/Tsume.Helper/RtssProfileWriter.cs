@@ -164,6 +164,27 @@ internal static class RtssProfileWriter
 
         try
         {
+            // Ask RTSS.exe to exit cleanly first so it releases its hooks loaders and shared memory gracefully.
+            foreach (var process in Process.GetProcessesByName("RTSS"))
+            {
+                using (process)
+                {
+                    try
+                    {
+                        if (fence is not null)
+                        {
+                            var exe = TryReadProcessPath(process);
+                            if (exe is null || !Path.GetFullPath(exe).StartsWith(fence, StringComparison.OrdinalIgnoreCase))
+                                continue;
+                        }
+
+                        if (process.CloseMainWindow())
+                            process.WaitForExit(1500);
+                    }
+                    catch (Exception error) when (error is Win32Exception or InvalidOperationException) { }
+                }
+            }
+
             foreach (var name in RtssProcessNames)
             {
                 foreach (var process in Process.GetProcessesByName(name))

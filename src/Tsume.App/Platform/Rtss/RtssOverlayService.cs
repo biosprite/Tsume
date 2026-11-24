@@ -12,10 +12,12 @@ using Tsume.Upscaling.Games;
 namespace Tsume.App.Platform.Rtss;
 
 /// <summary>
-/// Drives Tsume's RTSS overlay through RTSS's own OverlayEditor plugin using one combined Essential layout
-/// (realHfde, MIT) per theme. OverlayEditor stays enabled while <see cref="RtssSettings.UseTsumeOverlay"/> is on;
-/// switching levels (including Off) updates <c>AIDA64_SensorValues</c> live with no helper call and no RTSS restart.
-/// Only toggling Tsume's overlay on/off or changing theme updates <c>OverlayEditor.cfg</c> and restarts RTSS (without UAC).
+/// Drives Tsume's RTSS overlay through RTSS's own OverlayEditor plugin using one combined Essential Dark layout
+/// (realHfde, MIT) covering all four levels. OverlayEditor stays enabled while
+/// <see cref="RtssSettings.UseTsumeOverlay"/> is on; switching levels (including Off) and repositioning both
+/// update <c>AIDA64_SensorValues</c> live with no helper call and no RTSS restart.
+/// Only toggling Tsume's overlay on/off (or an install upgrade) updates <c>OverlayEditor.cfg</c>, and any
+/// RTSS restart is deferred while a 3D game is hooked so running games are never crashed mid-session.
 /// When Tsume exits, the shared-memory handle closes and the overlay disappears automatically.
 /// </summary>
 public sealed class RtssOverlayService : IDisposable
@@ -23,7 +25,6 @@ public sealed class RtssOverlayService : IDisposable
     private static readonly TimeSpan TelemetryInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan IdleTelemetryInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan ConflictRetryInterval = TimeSpan.FromSeconds(3);
-    private static readonly TimeSpan ThemeDebounceInterval = TimeSpan.FromMilliseconds(450);
     private static readonly Journal Log = new("rtss");
 
     private readonly HelperClient _helper;
@@ -37,7 +38,8 @@ public sealed class RtssOverlayService : IDisposable
     private RtssSettings _settings;
     private RtssInstallInfo? _install;
     private CancellationTokenSource? _telemetryCts;
-    private CancellationTokenSource? _themeDebounceCts;
+    private bool _rtssRestartPending;
+    private bool _deferredRestartPolling;
     private AidaConflictKind _lastReportedConflict;
     private int? _lastCpuTemp;
     private double? _lastCpuWatts;
@@ -214,7 +216,9 @@ public sealed class RtssOverlayService : IDisposable
     /// </summary>
     public void SyncFrameSize()
     {
-        if (_disposed || !IsOverlayVisibleWanted) return;
+        if (_disposed) return;
+        TryApplyDeferredRestartIfIdle();
+        if (!IsOverlayVisibleWanted) return;
 
         var frame = GetFramePixels();
         bool changed;
@@ -319,7 +323,6 @@ public sealed class RtssOverlayService : IDisposable
     /// <summary>Hands the overlay back to the user's own setup, or takes it again, when the RTSS tile is hidden or shown in Settings.</summary>
     public void SetFeatureEnabled(bool enabled)
     {
-        CancelThemeDebounce();
         ApplyLiveLevelState();
         OverlayStateChanged?.Invoke();
         _ = Task.Run(() => SyncOverlayPluginAsync());
@@ -564,9 +567,8 @@ public sealed class RtssOverlayService : IDisposable
 
     /// <summary>
     /// Saves new overlay settings and applies them:
-    /// - Level changes (including Off) only update <c>AIDA64_SensorValues</c> live, with no helper call and no RTSS restart.
-    /// - Toggling <see cref="RtssSettings.UseTsumeOverlay"/> updates OverlayEditor immediately and restarts RTSS if changed.
-    /// - Theme changes are debounced so stepping across themes only restarts RTSS once on the final choice.
+    /// - Level and placement changes update <c>AIDA64_SensorValues</c> live, with no helper call and no RTSS restart.
+    /// - Toggling <see cref="RtssSettings.UseTsumeOverlay"/> updates OverlayEditor immediately (deferring any RTSS restart while a game is hooked).
     /// </summary>
     public void ApplySettings(RtssSettings next)
     {
@@ -579,12 +581,11 @@ public sealed class RtssOverlayService : IDisposable
 
         var pluginChanged = previous.UseTsumeOverlay != next.UseTsumeOverlay
             || previous.OverlayClaimed != next.OverlayClaimed;
-        var themeChanged = previous.Theme != next.Theme;
         var levelChanged = previous.Level != next.Level;
         var touchDragChanged = previous.TouchDragEnabled != next.TouchDragEnabled;
         var placementChanged = !Equals(previous.GetPlacement(next.Level), next.GetPlacement(next.Level));
 
-        // Publish to AIDA64_SensorValues before writing state.json so RTSS sees new positions immediately.
+        // Publish to AIDA64_SensorValues before writing state.json so RTSS sees new level and position immediately.
         if (pluginChanged || levelChanged || placementChanged)
         {
             ApplyLiveLevelState(
@@ -596,12 +597,7 @@ public sealed class RtssOverlayService : IDisposable
 
         if (pluginChanged)
         {
-            CancelThemeDebounce();
             _ = Task.Run(() => SyncOverlayPluginAsync());
-        }
-        else if (themeChanged && IsOverlayPluginWanted)
-        {
-            ScheduleDebouncedPluginSync();
         }
 
         if (pluginChanged || levelChanged || placementChanged || touchDragChanged)
@@ -739,6 +735,7 @@ public sealed class RtssOverlayService : IDisposable
                     {
                         _energy.Reset();
                         lock (_gate) ClearCachedFrameLocked();
+                        TryApplyDeferredRestartIfIdle();
                         if (!_aida.IsOwned)
                         {
                             var (idleSw, idleSh) = GetScreenPixels();
@@ -837,44 +834,76 @@ public sealed class RtssOverlayService : IDisposable
         }
     }
 
-    private void ScheduleDebouncedPluginSync()
+    private void MarkRestartPendingAndWatchIdle()
     {
-        CancellationToken token;
         lock (_gate)
         {
-            if (_disposed) return;
-            _themeDebounceCts?.Cancel();
-            _themeDebounceCts?.Dispose();
-            _themeDebounceCts = new CancellationTokenSource();
-            token = _themeDebounceCts.Token;
+            _rtssRestartPending = true;
+            if (_disposed || _deferredRestartPolling) return;
+            _deferredRestartPolling = true;
         }
 
         _ = Task.Run(async () =>
         {
             try
             {
-                await Task.Delay(ThemeDebounceInterval, token).ConfigureAwait(false);
-                if (!token.IsCancellationRequested)
-                    await SyncOverlayPluginAsync().ConfigureAwait(false);
+                while (!_disposed)
+                {
+                    await Task.Delay(3000).ConfigureAwait(false);
+                    bool pending;
+                    lock (_gate) pending = _rtssRestartPending;
+                    if (!pending) break;
+                    if (!RtssSharedMemory.HasHookedApps())
+                    {
+                        await FlushDeferredRestartAsync().ConfigureAwait(false);
+                        break;
+                    }
+                }
             }
-            catch (OperationCanceledException) { }
-        }, token);
+            finally
+            {
+                lock (_gate) _deferredRestartPolling = false;
+            }
+        });
     }
 
-    private void CancelThemeDebounce()
+    private void TryApplyDeferredRestartIfIdle()
     {
-        CancellationTokenSource? cts;
-        lock (_gate)
-        {
-            cts = _themeDebounceCts;
-            _themeDebounceCts = null;
-        }
+        if (_disposed) return;
 
-        if (cts is not null)
+        bool pending;
+        lock (_gate) pending = _rtssRestartPending;
+        if (!pending || RtssSharedMemory.HasHookedApps()) return;
+
+        _ = Task.Run(() => FlushDeferredRestartAsync());
+    }
+
+    private async Task FlushDeferredRestartAsync()
+    {
+        if (_disposed) return;
+        await _sync.WaitAsync().ConfigureAwait(false);
+        try
         {
-            try { cts.Cancel(); }
-            catch (ObjectDisposedException) { }
-            cts.Dispose();
+            bool pending;
+            lock (_gate) pending = _rtssRestartPending;
+            if (!pending || !IsRunning || RtssSharedMemory.HasHookedApps()) return;
+
+            lock (_gate) _rtssRestartPending = false;
+            await RestartRtssAsync().ConfigureAwait(false);
+
+            if (IsOverlayVisibleWanted && IsRunning)
+            {
+                EnsureHooks();
+                _hooks.SetOsdVisible(true);
+            }
+        }
+        catch (Exception error)
+        {
+            Log.Write($"deferred RTSS restart failed: {error.Message}");
+        }
+        finally
+        {
+            _sync.Release();
         }
     }
 
@@ -895,8 +924,9 @@ public sealed class RtssOverlayService : IDisposable
     }
 
     /// <summary>
-    /// Points OverlayEditor at the combined layout for the current theme through the helper (or restores the
-    /// user's original setup when Tsume's overlay is turned off) and restarts RTSS only when that changed anything.
+    /// Points OverlayEditor at Tsume's unified layout through the helper (or restores the user's original
+    /// setup when Tsume's overlay is turned off) and restarts RTSS only when that changed anything AND no
+    /// 3D game is currently hooked (deferring the restart until idle so running games are never crashed).
     /// On start-up (<paramref name="autoStartIfWanted"/>), also starts RTSS silently via the helper if the overlay
     /// is enabled and RTSS is not running yet so overlays appear without needing to open Tsume first.
     /// Runs one at a time, always with the latest settings.
@@ -912,12 +942,11 @@ public sealed class RtssOverlayService : IDisposable
             await RestoreLegacyAppearanceAsync().ConfigureAwait(false);
 
             var layout = IsOverlayPluginWanted ? "tsume" : null;
-            var theme = layout is null ? null : _settings.Theme.ToString().ToLowerInvariant();
             HelperReply reply = HelperReply.Failure("offline");
             var attempts = autoStartIfWanted ? 5 : 1;
             for (var attempt = 1; attempt <= attempts; attempt++)
             {
-                reply = await _helper.SendAsync(new SetRtssOverlay(layout, theme)).ConfigureAwait(false);
+                reply = await _helper.SendAsync(new SetRtssOverlay(layout)).ConfigureAwait(false);
                 if (reply.Ok || !reply.Unreachable || attempt == attempts || _disposed) break;
                 await Task.Delay(1000).ConfigureAwait(false);
             }
@@ -928,12 +957,29 @@ public sealed class RtssOverlayService : IDisposable
                 return;
             }
 
-            if (reply.RtssOverlayChanged == true && IsRunning)
+            bool needRestart;
+            lock (_gate)
             {
-                await RestartRtssAsync().ConfigureAwait(false);
+                if (reply.RtssOverlayChanged == true) _rtssRestartPending = true;
+                needRestart = _rtssRestartPending;
+            }
+
+            if (needRestart && IsRunning)
+            {
+                if (RtssSharedMemory.HasHookedApps())
+                {
+                    Log.Write("deferring RTSS restart while a 3D application is hooked");
+                    MarkRestartPendingAndWatchIdle();
+                }
+                else
+                {
+                    lock (_gate) _rtssRestartPending = false;
+                    await RestartRtssAsync().ConfigureAwait(false);
+                }
             }
             else if (autoStartIfWanted && IsOverlayVisibleWanted && !IsRunning)
             {
+                lock (_gate) _rtssRestartPending = false;
                 // Auto-start silently through the elevated helper only (never show a UAC prompt in the background).
                 var started = await _helper.SendAsync(new StartRtss()).ConfigureAwait(false);
                 if (started.Ok)
@@ -969,7 +1015,15 @@ public sealed class RtssOverlayService : IDisposable
     {
         if (_install is not { } install) return;
 
-        Log.Write("restarting RTSS to load the new overlay theme");
+        // Defense in depth: never kill RTSS while a 3D app is hooked (tearing down RTSSHooks64 mid-game crashes DX12/Vulkan titles).
+        if (RtssSharedMemory.HasHookedApps())
+        {
+            MarkRestartPendingAndWatchIdle();
+            Log.Write("skipping RTSS restart because a 3D application is currently hooked");
+            return;
+        }
+
+        Log.Write("restarting RTSS to apply updated OverlayEditor configuration");
         if (!await StopRtssAsync().ConfigureAwait(false)) return;
         if (!await LaunchRtssAsync(install).ConfigureAwait(false)) return;
 
@@ -1037,7 +1091,6 @@ public sealed class RtssOverlayService : IDisposable
         if (_disposed) return;
         _disposed = true;
 
-        CancelThemeDebounce();
         StopTelemetryLoop();
         _energy.Dispose();
         _aida.Dispose();
