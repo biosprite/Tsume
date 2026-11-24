@@ -6,6 +6,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using Tsume.App.Language;
 using Tsume.App.Platform.Interop;
 using Tsume.App.Platform.Rtss;
@@ -27,9 +28,11 @@ public sealed partial class RtssOverlayDragWindow : Window
 {
     private const double DragThresholdDip = 6.0;
     private const double MinStandbyTouchDip = 44.0;
+    private const long HandoffTimeoutMs = 220;
 
     private readonly RtssOverlayService _service;
     private readonly Border[] _snapDots = new Border[9];
+    private readonly DispatcherTimer _handoffTimer;
 
     private RtssOverlayLevel _level = RtssOverlayLevel.Off;
     private int _screenPhysW = 1920;
@@ -52,8 +55,16 @@ public sealed partial class RtssOverlayDragWindow : Window
 
     private bool _interactive;
     private bool _expanded;
+    private bool _showing;
     private bool _pointerDown;
     private bool _dragging;
+    private bool _awaitingHandoff;
+    private int _handoffConfirmedTicks;
+    private long _handoffStartedMs;
+    private int _handoffX;
+    private int _handoffY;
+    private int _handoffW;
+    private int _handoffH;
     private int? _activeTouchId;
     private Point _downScreenDip;
     private int _startPhysX;
@@ -67,8 +78,15 @@ public sealed partial class RtssOverlayDragWindow : Window
         InitializeComponent();
         _service = service;
 
+        _handoffTimer = new DispatcherTimer(DispatcherPriority.Render, Dispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(16),
+        };
+        _handoffTimer.Tick += OnHandoffTick;
+
         SourceInitialized += (_, _) => ApplyWindowStyles();
         Loaded += (_, _) => RefreshDpi();
+        Closed += (_, _) => CancelHandoff();
 
         // Touch handlers (primary path on PC handhelds).
         OverlayBox.PreviewTouchDown += OnOverlayTouchDown;
@@ -92,8 +110,8 @@ public sealed partial class RtssOverlayDragWindow : Window
         BuildSnapDots();
     }
 
-    /// <summary>True while in explicit "Drag on screen" mode or mid-touch-drag.</summary>
-    public bool IsActivelyPositioning => _interactive || _dragging;
+    /// <summary>True while in explicit "Drag on screen" mode, mid-touch-drag, or handing off to RTSS after a drop.</summary>
+    public bool IsActivelyPositioning => _interactive || _dragging || _awaitingHandoff;
 
     /// <summary>True while in explicit full-screen "Drag on screen" mode.</summary>
     public bool IsInteractive => _interactive;
@@ -109,28 +127,30 @@ public sealed partial class RtssOverlayDragWindow : Window
         RtssOverlayLevel level, int x, int y, int width, int height,
         int frameW, int frameH, int viewportX, int viewportY, int viewportW, int viewportH)
     {
-        if (_interactive || _dragging) return;
+        if (_interactive || _dragging || _awaitingHandoff || _showing) return;
 
-        var dpi = VisualTreeHelper.GetDpi(this);
-        var rawDpiX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
-        var rawDpiY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
-
-        if (IsVisible && !_expanded
-            && _level == level
-            && _currentPhysX == x
-            && _currentPhysY == y
-            && _overlayPhysW == width
-            && _overlayPhysH == height
-            && _screenPhysW == frameW
-            && _screenPhysH == frameH
-            && _viewportX == viewportX
-            && _viewportY == viewportY
-            && _viewportW == viewportW
-            && _viewportH == viewportH
-            && _rawDpiX == rawDpiX
-            && _rawDpiY == rawDpiY)
+        if (IsVisible && !_expanded)
         {
-            return;
+            var dpi = VisualTreeHelper.GetDpi(this);
+            var rawDpiX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+            var rawDpiY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
+
+            if (_level == level
+                && _currentPhysX == x
+                && _currentPhysY == y
+                && _overlayPhysW == width
+                && _overlayPhysH == height
+                && _screenPhysW == frameW
+                && _screenPhysH == frameH
+                && _viewportX == viewportX
+                && _viewportY == viewportY
+                && _viewportW == viewportW
+                && _viewportH == viewportH
+                && _rawDpiX == rawDpiX
+                && _rawDpiY == rawDpiY)
+            {
+                return;
+            }
         }
 
         _level = level;
@@ -145,7 +165,7 @@ public sealed partial class RtssOverlayDragWindow : Window
         _viewportW = viewportW;
         _viewportH = viewportH;
 
-        if (!IsVisible) Show();
+        if (!EnsureShown()) return;
         RefreshDpi();
         ApplyStandbyWindowBounds();
         RaiseTopmostNoActivate();
@@ -156,6 +176,9 @@ public sealed partial class RtssOverlayDragWindow : Window
         RtssOverlayLevel level, int x, int y, int width, int height,
         int frameW, int frameH, int viewportX, int viewportY, int viewportW, int viewportH)
     {
+        if (_showing) return;
+
+        CancelHandoff();
         _level = level;
         _overlayPhysW = width;
         _overlayPhysH = height;
@@ -169,7 +192,11 @@ public sealed partial class RtssOverlayDragWindow : Window
         _viewportH = viewportH;
         _interactive = true;
 
-        if (!IsVisible) Show();
+        if (!EnsureShown())
+        {
+            _interactive = false;
+            return;
+        }
         RefreshDpi();
 
         ExpandToFullScreen();
@@ -186,12 +213,30 @@ public sealed partial class RtssOverlayDragWindow : Window
         RaiseTopmostNoActivate();
     }
 
+    private bool EnsureShown()
+    {
+        if (IsVisible) return true;
+        if (_showing) return false;
+
+        _showing = true;
+        try
+        {
+            Show();
+            return IsVisible;
+        }
+        finally
+        {
+            _showing = false;
+        }
+    }
+
     /// <summary>Leaves interactive mode cleanly and notifies the controller to return to standby or hide.</summary>
     public void ExitInteractiveMode()
     {
         if (!_interactive) return;
-        _interactive = false;
         EndDrag(commit: true);
+        _interactive = false;
+        CancelHandoff();
 
         HideElementImmediate(Scrim);
         HideElementImmediate(ActionBar);
@@ -204,6 +249,7 @@ public sealed partial class RtssOverlayDragWindow : Window
 
     public void HideQuietly()
     {
+        CancelHandoff();
         _interactive = false;
         EndDrag(commit: false);
         HideElementImmediate(Scrim);
@@ -286,6 +332,16 @@ public sealed partial class RtssOverlayDragWindow : Window
 
     private void BeginPointer(Point screenDip)
     {
+        if (_awaitingHandoff)
+        {
+            CancelHandoff();
+            if (!_interactive)
+            {
+                ShowDragChrome(visible: false, immediate: true);
+                ApplyStandbyWindowBounds();
+            }
+        }
+
         RefreshDpi();
         _pointerDown = true;
         _dragging = _interactive;
@@ -380,10 +436,93 @@ public sealed partial class RtssOverlayDragWindow : Window
         {
             HideElementImmediate(SnapDotsLayer);
             HideElementImmediate(PositionBadge);
+
+            if (commit && _level != RtssOverlayLevel.Off
+                && (_currentPhysX != _startPhysX || _currentPhysY != _startPhysY))
+            {
+                BeginHandoff(_currentPhysX, _currentPhysY, _overlayPhysW, _overlayPhysH);
+                return;
+            }
+
             ShowDragChrome(visible: false, immediate: true);
             ApplyStandbyWindowBounds();
             DragEnded?.Invoke();
         }
+    }
+
+    private void BeginHandoff(int x, int y, int w, int h)
+    {
+        CancelHandoff();
+        _awaitingHandoff = true;
+        _handoffConfirmedTicks = 0;
+        _handoffStartedMs = Environment.TickCount64;
+        _handoffX = x;
+        _handoffY = y;
+        _handoffW = w;
+        _handoffH = h;
+
+        // Shrink immediately to the dropped overlay rectangle so the rest of the game screen
+        // receives input right away, while holding the accent frame until RTSS redraws there.
+        _expanded = false;
+        var boxW = w / _dpiX;
+        var boxH = h / _dpiY;
+        Left = _viewLeftDip + x / _dpiX;
+        Top = _viewTopDip + y / _dpiY;
+        Width = boxW;
+        Height = boxH;
+        OverlayBox.Width = boxW;
+        OverlayBox.Height = boxH;
+        BoxTranslate.X = 0;
+        BoxTranslate.Y = 0;
+
+        _handoffTimer.Start();
+    }
+
+    private void OnHandoffTick(object? sender, EventArgs e)
+    {
+        if (!_awaitingHandoff)
+        {
+            _handoffTimer.Stop();
+            return;
+        }
+
+        if (Environment.TickCount64 - _handoffStartedMs >= HandoffTimeoutMs)
+        {
+            CompleteHandoff();
+            return;
+        }
+
+        // Wait two 16 ms frames (~32 ms) after the new <P=x,y> is confirmed in shared memory so the
+        // game has presented the moved overlay underneath, and re-shift if an in-flight 1000 ms
+        // OverlayEditor tick raced with the drop and restored the old coordinates.
+        if (RtssSharedMemory.IsOverlayEditorAtPosition(_handoffX, _handoffY, _handoffW, _handoffH))
+        {
+            _handoffConfirmedTicks++;
+            if (_handoffConfirmedTicks >= 2)
+                CompleteHandoff();
+        }
+        else
+        {
+            _handoffConfirmedTicks = 0;
+            RtssSharedMemory.TryShiftOverlayEditorPosition(_handoffX, _handoffY, _handoffW, _handoffH);
+        }
+    }
+
+    private void CompleteHandoff()
+    {
+        CancelHandoff();
+        if (_interactive) return;
+
+        ShowDragChrome(visible: false, immediate: true);
+        ApplyStandbyWindowBounds();
+        DragEnded?.Invoke();
+    }
+
+    private void CancelHandoff()
+    {
+        _handoffTimer.Stop();
+        _awaitingHandoff = false;
+        _handoffConfirmedTicks = 0;
     }
 
     private void ApplyStandbyWindowBounds()

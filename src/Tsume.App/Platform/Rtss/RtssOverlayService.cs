@@ -220,11 +220,11 @@ public sealed class RtssOverlayService : IDisposable
         bool changed;
         lock (_gate) changed = frame != _publishedFrame;
 
-        if (changed) ApplyLiveLevelState();
+        if (changed) ApplyLiveLevelState(shiftOverlayNow: true);
     }
 
     /// <summary>Publishes the overlay position again, worked out afresh for the current frame or screen size.</summary>
-    public void RepublishPosition() => ApplyLiveLevelState();
+    public void RepublishPosition() => ApplyLiveLevelState(shiftOverlayNow: true);
 
     /// <summary>
     /// Bounding box of the active Tsume overlay in the game's frame pixels, together with that frame's size and
@@ -264,7 +264,7 @@ public sealed class RtssOverlayService : IDisposable
         var cy = Math.Clamp(y, 0, Math.Max(0, sh - h));
 
         lock (_gate) _dragOverridePos = (cx, cy);
-        ApplyLiveLevelState();
+        ApplyLiveLevelState(shiftOverlayNow: true);
     }
 
     /// <summary>Saves the final dragged placement for <paramref name="level"/> and publishes it immediately.</summary>
@@ -286,7 +286,7 @@ public sealed class RtssOverlayService : IDisposable
             _dragOverridePos = null;
         }
 
-        if (hadOverride) ApplyLiveLevelState();
+        if (hadOverride) ApplyLiveLevelState(shiftOverlayNow: true);
     }
 
     private (int X, int Y) ResolveActivePosition(RtssOverlayLevel level, int screenWidth, int screenHeight)
@@ -576,7 +576,6 @@ public sealed class RtssOverlayService : IDisposable
 
         var previous = _settings;
         _settings = next;
-        SaveSettings();
 
         var pluginChanged = previous.UseTsumeOverlay != next.UseTsumeOverlay
             || previous.OverlayClaimed != next.OverlayClaimed;
@@ -585,8 +584,15 @@ public sealed class RtssOverlayService : IDisposable
         var touchDragChanged = previous.TouchDragEnabled != next.TouchDragEnabled;
         var placementChanged = !Equals(previous.GetPlacement(next.Level), next.GetPlacement(next.Level));
 
+        // Publish to AIDA64_SensorValues before writing state.json so RTSS sees new positions immediately.
         if (pluginChanged || levelChanged || placementChanged)
-            ApplyLiveLevelState(ensureOsdVisible: levelChanged && next.Level != RtssOverlayLevel.Off);
+        {
+            ApplyLiveLevelState(
+                ensureOsdVisible: levelChanged && next.Level != RtssOverlayLevel.Off,
+                shiftOverlayNow: placementChanged && !levelChanged && !pluginChanged);
+        }
+
+        SaveSettings();
 
         if (pluginChanged)
         {
@@ -602,7 +608,7 @@ public sealed class RtssOverlayService : IDisposable
             OverlayStateChanged?.Invoke();
     }
 
-    private void ApplyLiveLevelState(bool ensureOsdVisible = false)
+    private void ApplyLiveLevelState(bool ensureOsdVisible = false, bool shiftOverlayNow = false)
     {
         if (_disposed) return;
 
@@ -636,7 +642,15 @@ public sealed class RtssOverlayService : IDisposable
         var published = _aida.TryPublish(
             new AidaSensorSnapshot((int)level, cpuTemp, cpuWatts, gpuWatts, cpuClockMhz, gpuVramMb, tempWarnC, tempHotC, posX, posY),
             _install?.Folder);
-        if (published) lock (_gate) _publishedFrame = (sw, sh);
+        if (published)
+        {
+            lock (_gate) _publishedFrame = (sw, sh);
+            if (shiftOverlayNow)
+            {
+                var (pw, ph) = RtssOverlayMetrics.GetSize(level);
+                RtssSharedMemory.TryShiftOverlayEditorPosition(posX, posY, pw, ph);
+            }
+        }
         CheckConflictChanged();
 
         if (ensureOsdVisible && IsRunning)

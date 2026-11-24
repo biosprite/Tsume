@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Buffers.Text;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Text;
@@ -24,13 +26,14 @@ public static class RtssSharedMemory
 {
     private const string MapName = "RTSSSharedMemoryV2";
     private const string OwnerName = "Tsume";
+    private const string OverlayEditorOwnerName = "RTSSOverlayEditor";
     private const uint RtssSignature = 0x52545353; // 'RTSS'
 
     private const uint VersionExText = 0x00020007;      // 2.7+: szOSDEx[4096]
     private const uint VersionApiFlags = 0x0002000A;    // 2.10+: APPFLAG_API_USAGE_MASK
     private const uint VersionBuffer = 0x0002000C;      // 2.12+: buffer[262144]
     private const uint VersionBusy = 0x0002000E;        // 2.14+: dwBusy spinlock
-    private const uint VersionResolution = 0x00020014;  // 2.20+: dwResolutionX / dwResolutionY
+    private const uint VersionResolution = 0x00020014;  // 2.20+: dwResolutionX / dwResolutionY & szOSDEx2[32768]
 
     // Header field byte offsets in RTSS_SHARED_MEMORY
     private const int OffSignature = 0;
@@ -49,7 +52,11 @@ public static class RtssSharedMemory
     private const int OsdOwnerOffset = 256;
     private const int OsdOwnerCapacity = 256;
     private const int OsdTextExOffset = 512;
+    private const int OsdTextExCapacity = 4096;
     private const int OsdBufferOffset = 4608;
+    private const int OsdTextEx2Offset = OsdBufferOffset + 262144;
+    private const int OsdTextEx2Capacity = 32768;
+    private const int MaxOverlayEditorLayers = 256;
 
     // App entry field byte offsets in RTSS_SHARED_MEMORY_APP_ENTRY
     private const int AppPidOffset = 0;
@@ -344,6 +351,183 @@ public static class RtssSharedMemory
         }
     }
 
+    /// <summary>True when RTSS's OverlayEditor plugin currently owns an active OSD slot in shared memory.</summary>
+    public static bool HasOverlayEditorSlot()
+    {
+        try
+        {
+            using var mmf = MemoryMappedFile.OpenExisting(MapName, MemoryMappedFileRights.Read);
+            using var view = mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+
+            if (view.ReadUInt32(OffSignature) != RtssSignature) return false;
+            if (view.ReadUInt32(OffVersion) < 0x00020000) return false;
+
+            var osdEntrySize = view.ReadUInt32(OffOsdEntrySize);
+            var osdArrOffset = view.ReadUInt32(OffOsdArrOffset);
+            var osdArrSize = view.ReadUInt32(OffOsdArrSize);
+            if (osdEntrySize < 512 || osdArrOffset == 0 || osdArrSize == 0) return false;
+
+            return FindSlot(view, osdArrOffset, osdEntrySize, osdArrSize, view.Capacity, OverlayEditorOwnerName) >= 0;
+        }
+        catch (Exception error) when (error is FileNotFoundException or UnauthorizedAccessException or IOException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Checks whether RTSS's OverlayEditor plugin has already published a panel layer at
+    /// <c>&lt;P=x,y&gt;&lt;L...&gt;&lt;E=panelWidth,panelHeight&gt;</c> into its shared-memory OSD slot.
+    /// </summary>
+    public static bool IsOverlayEditorAtPosition(int x, int y, int panelWidth, int panelHeight)
+    {
+        if (panelWidth <= 0 || panelHeight <= 0) return false;
+
+        try
+        {
+            using var mmf = MemoryMappedFile.OpenExisting(MapName, MemoryMappedFileRights.Read);
+            using var view = mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+
+            if (!TryResolveOverlayEditorTextSlot(view, out _, out var textOffset, out var maxBytes))
+                return false;
+
+            var buffer = ArrayPool<byte>.Shared.Rent(maxBytes);
+            try
+            {
+                view.ReadArray(textOffset, buffer, 0, maxBytes);
+                var length = Array.IndexOf(buffer, (byte)0, 0, maxBytes);
+                if (length < 0) length = maxBytes;
+                if (length == 0) return false;
+
+                return TryFindPanelPosition(buffer.AsSpan(0, length), panelWidth, panelHeight, out var currentX, out var currentY)
+                    && currentX == x
+                    && currentY == y;
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+        }
+        catch (Exception error) when (error is FileNotFoundException or UnauthorizedAccessException or IOException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Shifts every visible Tsume overlay layer in RTSS OverlayEditor's live shared-memory OSD slot to
+    /// (<paramref name="newX"/>, <paramref name="newY"/>) and increments <c>dwOSDFrame</c> so the hooked
+    /// 3D app redraws the overlay at its new coordinates on the very next frame without waiting for
+    /// OverlayEditor's 1000 ms polling tick.
+    /// </summary>
+    public static bool TryShiftOverlayEditorPosition(int newX, int newY, int panelWidth, int panelHeight)
+    {
+        if (panelWidth <= 0 || panelHeight <= 0 || newX < 0 || newY < 0) return false;
+
+        try
+        {
+            using var mmf = MemoryMappedFile.OpenExisting(MapName, MemoryMappedFileRights.ReadWrite);
+            using var view = mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.ReadWrite);
+
+            if (!TryResolveOverlayEditorTextSlot(view, out var version, out var textOffset, out var maxBytes))
+                return false;
+
+            var useBusyLock = version >= VersionBusy && OffBusy + 4 <= view.Capacity;
+            if (useBusyLock && !TryAcquireBusy(view)) return false;
+
+            var wrote = false;
+            var input = ArrayPool<byte>.Shared.Rent(maxBytes);
+            var output = ArrayPool<byte>.Shared.Rent(maxBytes);
+            try
+            {
+                view.ReadArray(textOffset, input, 0, maxBytes);
+                var length = Array.IndexOf(input, (byte)0, 0, maxBytes);
+                if (length < 0) length = maxBytes;
+                if (length == 0) return false;
+
+                var text = input.AsSpan(0, length);
+                if (!TryFindPanelPosition(text, panelWidth, panelHeight, out var oldX, out var oldY))
+                    return false;
+
+                if (oldX == newX && oldY == newY)
+                    return true;
+
+                var deltaX = newX - oldX;
+                var deltaY = newY - oldY;
+
+                // Each visible Tsume layer appears twice in OverlayEditor's hypertext:
+                // 1st: OverlayEditor's static <P=0,0><L{id}> prefix (keep untouched).
+                // 2nd: Tsume's dynamic <P={x},{y}><L{id}> tag (shift by deltaX, deltaY).
+                Span<bool> seenLayer = stackalloc bool[MaxOverlayEditorLayers];
+                var readPos = 0;
+                var outPos = 0;
+                var shiftedCount = 0;
+                var maxContent = maxBytes - 1;
+
+                var cursor = 0;
+                while (cursor < text.Length)
+                {
+                    var rel = text[cursor..].IndexOf((byte)'<');
+                    if (rel < 0) break;
+
+                    var tagStart = cursor + rel;
+                    if (TryParsePosLayerTag(text, tagStart, out var px, out var py, out var layerId, out var tagEnd)
+                        && (uint)layerId < MaxOverlayEditorLayers)
+                    {
+                        if (!seenLayer[layerId])
+                        {
+                            seenLayer[layerId] = true;
+                            cursor = tagEnd;
+                            continue;
+                        }
+
+                        var prefixLen = tagStart - readPos;
+                        if (!TryAppendBytes(output, ref outPos, maxContent, text.Slice(readPos, prefixLen))
+                            || !TryAppendPosLayerTag(
+                                output,
+                                ref outPos,
+                                maxContent,
+                                Math.Max(0, px + deltaX),
+                                Math.Max(0, py + deltaY),
+                                layerId))
+                        {
+                            return false;
+                        }
+
+                        shiftedCount++;
+                        readPos = tagEnd;
+                        cursor = tagEnd;
+                        continue;
+                    }
+
+                    cursor = tagStart + 1;
+                }
+
+                if (shiftedCount == 0) return false;
+
+                if (!TryAppendBytes(output, ref outPos, maxContent, text[readPos..]))
+                    return false;
+
+                output[outPos] = 0;
+                view.WriteArray(textOffset, output, 0, outPos + 1);
+                wrote = true;
+            }
+            finally
+            {
+                if (useBusyLock) ReleaseBusy(view);
+                ArrayPool<byte>.Shared.Return(output);
+                ArrayPool<byte>.Shared.Return(input);
+            }
+
+            if (wrote) IncrementOsdFrame(view);
+            return wrote;
+        }
+        catch (Exception error) when (error is FileNotFoundException or UnauthorizedAccessException or IOException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Clears and releases Tsume's OSD slot (if one exists) without disturbing any other application's slot.</summary>
     public static bool ClearSlot()
     {
@@ -362,7 +546,7 @@ public static class RtssSharedMemory
             if (osdEntrySize < 512 || osdArrOffset == 0 || osdArrSize == 0) return false;
 
             var capacity = view.Capacity;
-            var slotOffset = FindSlot(view, osdArrOffset, osdEntrySize, osdArrSize, capacity);
+            var slotOffset = FindSlot(view, osdArrOffset, osdEntrySize, osdArrSize, capacity, OwnerName);
             if (slotOffset < 0) return true;
 
             var useBusyLock = version >= VersionBusy && OffBusy + 4 <= capacity;
@@ -378,15 +562,14 @@ public static class RtssSharedMemory
 
                 if (version >= VersionBuffer && osdEntrySize >= OsdBufferOffset + 4 && slotOffset + OsdBufferOffset + 4 <= capacity)
                     view.Write(slotOffset + OsdBufferOffset, 0u);
-
-                var frame = view.ReadUInt32(OffOsdFrame);
-                view.Write(OffOsdFrame, unchecked(frame + 1));
-                return true;
             }
             finally
             {
-                if (useBusyLock) view.Write(OffBusy, 0u);
+                if (useBusyLock) ReleaseBusy(view);
             }
+
+            IncrementOsdFrame(view);
+            return true;
         }
         catch (Exception error) when (error is FileNotFoundException or UnauthorizedAccessException or IOException)
         {
@@ -394,7 +577,205 @@ public static class RtssSharedMemory
         }
     }
 
-    private static long FindSlot(MemoryMappedViewAccessor view, uint arrOffset, uint entrySize, uint arrSize, long capacity)
+    private static bool TryResolveOverlayEditorTextSlot(
+        MemoryMappedViewAccessor view, out uint version, out long textOffset, out int maxBytes)
+    {
+        version = 0;
+        textOffset = 0;
+        maxBytes = 0;
+
+        if (view.ReadUInt32(OffSignature) != RtssSignature) return false;
+        version = view.ReadUInt32(OffVersion);
+        if (version < VersionExText) return false;
+
+        var osdEntrySize = view.ReadUInt32(OffOsdEntrySize);
+        var osdArrOffset = view.ReadUInt32(OffOsdArrOffset);
+        var osdArrSize = view.ReadUInt32(OffOsdArrSize);
+        if (osdEntrySize < 512 || osdArrOffset == 0 || osdArrSize == 0) return false;
+
+        var capacity = view.Capacity;
+        var slotOffset = FindSlot(view, osdArrOffset, osdEntrySize, osdArrSize, capacity, OverlayEditorOwnerName);
+        if (slotOffset < 0) return false;
+
+        if (version >= VersionResolution && osdEntrySize > OsdTextEx2Offset)
+        {
+            textOffset = slotOffset + OsdTextEx2Offset;
+            maxBytes = (int)Math.Min(OsdTextEx2Capacity, Math.Min(osdEntrySize - OsdTextEx2Offset, capacity - textOffset));
+        }
+        else if (osdEntrySize > OsdTextExOffset)
+        {
+            textOffset = slotOffset + OsdTextExOffset;
+            maxBytes = (int)Math.Min(OsdTextExCapacity, Math.Min(osdEntrySize - OsdTextExOffset, capacity - textOffset));
+        }
+
+        return maxBytes > 1;
+    }
+
+    private static bool TryFindPanelPosition(
+        ReadOnlySpan<byte> text, int panelWidth, int panelHeight, out int x, out int y)
+    {
+        x = 0;
+        y = 0;
+
+        Span<byte> extentTag = stackalloc byte[32];
+        if (!TryFormatExtentTag(extentTag, out var extentLen, panelWidth, panelHeight))
+            return false;
+        var extentSpan = extentTag[..extentLen];
+
+        var cursor = 0;
+        while (cursor < text.Length)
+        {
+            var rel = text[cursor..].IndexOf((byte)'<');
+            if (rel < 0) return false;
+
+            var tagStart = cursor + rel;
+            if (TryParsePosLayerTag(text, tagStart, out var px, out var py, out _, out var tagEnd))
+            {
+                if (text[tagEnd..].StartsWith(extentSpan))
+                {
+                    x = px;
+                    y = py;
+                    return true;
+                }
+
+                cursor = tagEnd;
+                continue;
+            }
+
+            cursor = tagStart + 1;
+        }
+
+        return false;
+    }
+
+    private static bool TryParsePosLayerTag(
+        ReadOnlySpan<byte> text, int start, out int x, out int y, out int layerId, out int end)
+    {
+        x = 0;
+        y = 0;
+        layerId = 0;
+        end = 0;
+
+        if (start + 11 > text.Length
+            || text[start] != (byte)'<'
+            || text[start + 1] != (byte)'P'
+            || text[start + 2] != (byte)'=')
+        {
+            return false;
+        }
+
+        var pos = start + 3;
+        if (!TryParseInt(text, ref pos, out x)) return false;
+        if (pos >= text.Length || text[pos] != (byte)',') return false;
+        pos++;
+        if (!TryParseInt(text, ref pos, out y)) return false;
+
+        if (pos + 4 > text.Length
+            || text[pos] != (byte)'>'
+            || text[pos + 1] != (byte)'<'
+            || text[pos + 2] != (byte)'L')
+        {
+            return false;
+        }
+
+        pos += 3;
+        if (!TryParseNonNegativeInt(text, ref pos, out layerId)) return false;
+        if (pos >= text.Length || text[pos] != (byte)'>') return false;
+
+        end = pos + 1;
+        return true;
+    }
+
+    private static bool TryParseInt(ReadOnlySpan<byte> text, ref int pos, out int value)
+    {
+        value = 0;
+        if (pos >= text.Length) return false;
+
+        var negative = false;
+        if (text[pos] == (byte)'-')
+        {
+            negative = true;
+            pos++;
+        }
+
+        if (!TryParseNonNegativeInt(text, ref pos, out var magnitude)) return false;
+        value = negative ? -magnitude : magnitude;
+        return true;
+    }
+
+    private static bool TryParseNonNegativeInt(ReadOnlySpan<byte> text, ref int pos, out int value)
+    {
+        value = 0;
+        var digitsStart = pos;
+        while (pos < text.Length && text[pos] is >= (byte)'0' and <= (byte)'9')
+        {
+            if (value > 100_000_000) return false;
+            value = value * 10 + (text[pos] - (byte)'0');
+            pos++;
+        }
+
+        return pos > digitsStart;
+    }
+
+    private static bool TryFormatExtentTag(Span<byte> dest, out int written, int width, int height)
+    {
+        written = 0;
+        if (dest.Length < 8) return false;
+
+        dest[0] = (byte)'<';
+        dest[1] = (byte)'E';
+        dest[2] = (byte)'=';
+        var pos = 3;
+
+        if (!Utf8Formatter.TryFormat(width, dest[pos..], out var wLen)) return false;
+        pos += wLen;
+        if (pos >= dest.Length) return false;
+        dest[pos++] = (byte)',';
+
+        if (!Utf8Formatter.TryFormat(height, dest[pos..], out var hLen)) return false;
+        pos += hLen;
+        if (pos >= dest.Length) return false;
+        dest[pos++] = (byte)'>';
+
+        written = pos;
+        return true;
+    }
+
+    private static bool TryAppendBytes(byte[] dest, ref int outPos, int maxContent, ReadOnlySpan<byte> src)
+    {
+        if (src.IsEmpty) return true;
+        if (outPos + src.Length > maxContent) return false;
+        src.CopyTo(dest.AsSpan(outPos));
+        outPos += src.Length;
+        return true;
+    }
+
+    private static bool TryAppendPosLayerTag(byte[] dest, ref int outPos, int maxContent, int x, int y, int layerId)
+    {
+        Span<byte> tag = stackalloc byte[48];
+        tag[0] = (byte)'<';
+        tag[1] = (byte)'P';
+        tag[2] = (byte)'=';
+        var pos = 3;
+
+        if (!Utf8Formatter.TryFormat(x, tag[pos..], out var xLen)) return false;
+        pos += xLen;
+        tag[pos++] = (byte)',';
+
+        if (!Utf8Formatter.TryFormat(y, tag[pos..], out var yLen)) return false;
+        pos += yLen;
+        tag[pos++] = (byte)'>';
+        tag[pos++] = (byte)'<';
+        tag[pos++] = (byte)'L';
+
+        if (!Utf8Formatter.TryFormat(layerId, tag[pos..], out var idLen)) return false;
+        pos += idLen;
+        tag[pos++] = (byte)'>';
+
+        return TryAppendBytes(dest, ref outPos, maxContent, tag[..pos]);
+    }
+
+    private static long FindSlot(MemoryMappedViewAccessor view, uint arrOffset, uint entrySize, uint arrSize, long capacity, string ownerName)
     {
         var limit = Math.Min(arrSize, 64u);
         for (uint i = 0; i < limit; i++)
@@ -402,26 +783,70 @@ public static class RtssSharedMemory
             var offset = arrOffset + (long)i * entrySize;
             if (offset + OsdOwnerOffset + OsdOwnerCapacity > capacity) break;
 
-            if (ReadAnsiString(view, offset + OsdOwnerOffset, OsdOwnerCapacity).Equals(OwnerName, StringComparison.Ordinal))
+            if (ReadAnsiString(view, offset + OsdOwnerOffset, OsdOwnerCapacity).Equals(ownerName, StringComparison.Ordinal))
                 return offset;
         }
 
         return -1;
     }
 
-    private static bool TryAcquireBusy(MemoryMappedViewAccessor view)
+    private static unsafe bool TryAcquireBusy(MemoryMappedViewAccessor view)
     {
-        for (var attempt = 0; attempt < 20; attempt++)
+        byte* basePtr = null;
+        view.SafeMemoryMappedViewHandle.AcquirePointer(ref basePtr);
+        try
         {
-            if (view.ReadUInt32(OffBusy) == 0)
-            {
-                view.Write(OffBusy, 1u);
-                return true;
-            }
-            Thread.Sleep(1);
-        }
+            if (basePtr == null) return false;
+            ref var busy = ref *(int*)(basePtr + view.PointerOffset + OffBusy);
 
-        return false;
+            for (var attempt = 0; attempt < 40; attempt++)
+            {
+                if ((Interlocked.Or(ref busy, 1) & 1) == 0)
+                    return true;
+                Thread.Sleep(1);
+            }
+
+            return false;
+        }
+        finally
+        {
+            if (basePtr != null)
+                view.SafeMemoryMappedViewHandle.ReleasePointer();
+        }
+    }
+
+    private static unsafe void ReleaseBusy(MemoryMappedViewAccessor view)
+    {
+        byte* basePtr = null;
+        view.SafeMemoryMappedViewHandle.AcquirePointer(ref basePtr);
+        try
+        {
+            if (basePtr != null)
+                Volatile.Write(ref *(int*)(basePtr + view.PointerOffset + OffBusy), 0);
+        }
+        finally
+        {
+            if (basePtr != null)
+                view.SafeMemoryMappedViewHandle.ReleasePointer();
+        }
+    }
+
+    private static unsafe void IncrementOsdFrame(MemoryMappedViewAccessor view)
+    {
+        if (OffOsdFrame + 4 > view.Capacity) return;
+
+        byte* basePtr = null;
+        view.SafeMemoryMappedViewHandle.AcquirePointer(ref basePtr);
+        try
+        {
+            if (basePtr != null)
+                Interlocked.Increment(ref *(int*)(basePtr + view.PointerOffset + OffOsdFrame));
+        }
+        finally
+        {
+            if (basePtr != null)
+                view.SafeMemoryMappedViewHandle.ReleasePointer();
+        }
     }
 
     private static string ReadAnsiString(MemoryMappedViewAccessor view, long offset, int maxBytes)

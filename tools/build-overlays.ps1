@@ -93,15 +93,14 @@ $themes = @(
 )
 
 # High-resolution ring sprites (145 frames = 2.5 deg / ~1.2 px per step; exact 0/25/50/75/100% frames)
-# animated at ~60 FPS (RefreshPeriod=16) via a two-stage critically damped EMA on HAL/Timer.
+# updated cleanly at RTSS's standard 1-second cadence (RefreshPeriod=1000) alongside all text readouts
+# so OverlayEditor polls HAL sensors and rebuilds OSD geometry only once per second during gameplay.
 $ringFrames  = 145
 $ringPerLine = 29
 $ringRows    = [int][Math]::Ceiling($ringFrames / [double]$ringPerLine)
 $ringMax     = '100.6944'
 $ringBias    = '0.5'
-$ringAlpha   = '0.18'
-$ringRefresh = 16
-$baseRefresh = 250
+$baseRefresh = 1000
 
 # Reworked panel chrome dimensions.
 $fpsPanelW     = 72;  $fpsPanelH     = 72
@@ -464,7 +463,6 @@ function Add-SpriteLayer(
         "ExtentX=0"
         "ExtentY=0"
         "ExtentOrigin=0"
-        "RefreshPeriod=$baseRefresh"
     ))
 }
 
@@ -493,7 +491,6 @@ function Add-RingLayer(
         "ExtentX=0"
         "ExtentY=0"
         "ExtentOrigin=0"
-        "RefreshPeriod=$ringRefresh"
     ))
 }
 
@@ -518,7 +515,6 @@ function Add-GraphLayer(
         "ExtentY=0"
         "ExtentOrigin=0"
         "TextColor=$color"
-        "RefreshPeriod=$baseRefresh"
     ))
 }
 
@@ -532,8 +528,7 @@ function Add-TextLayer(
     [string]$text,
     [int]$dx, [int]$dy, [int]$ex, [int]$ey, [int]$origin,
     [int]$size,
-    [string]$color,
-    [int]$refresh = $baseRefresh) {
+    [string]$color) {
 
     if ($theme.HasShadows) {
         foreach ($off in @(@(1, 1), @(0, 2))) {
@@ -549,7 +544,6 @@ function Add-TextLayer(
             $shadowLines.Add("ExtentOrigin=0")
             if ($size -ne 100) { $shadowLines.Add("Size=$size") }
             $shadowLines.Add('TextColor=000000')
-            $shadowLines.Add("RefreshPeriod=$refresh")
             $list.Add($shadowLines.ToArray())
         }
     }
@@ -566,7 +560,6 @@ function Add-TextLayer(
     $mainLines.Add("ExtentOrigin=0")
     if ($size -ne 100) { $mainLines.Add("Size=$size") }
     $mainLines.Add("TextColor=$color")
-    $mainLines.Add("RefreshPeriod=$refresh")
     $list.Add($mainLines.ToArray())
 }
 
@@ -636,21 +629,20 @@ foreach ($theme in $themes) {
         $imgPerf.Dispose()
     }
 
-    $sleekCpuRing   = @{ Source = 'CPU usage smooth';  X = 0; Y = $sleekCpuRingY;   Size = $sleekRingSz;   Frames = $ringFrames; PerLine = $ringPerLine; Max = $ringMax; Bias = $ringBias }
-    $sleekGpuRing   = @{ Source = 'GPU1 usage smooth'; X = 0; Y = $sleekGpuRingY;   Size = $sleekRingSz;   Frames = $ringFrames; PerLine = $ringPerLine; Max = $ringMax; Bias = $ringBias }
-    $compactCpuRing = @{ Source = 'CPU usage smooth';  X = 0; Y = $compactCpuRingY; Size = $compactRingSz; Frames = $ringFrames; PerLine = $ringPerLine; Max = $ringMax; Bias = $ringBias }
-    $compactGpuRing = @{ Source = 'GPU1 usage smooth'; X = 0; Y = $compactGpuRingY; Size = $compactRingSz; Frames = $ringFrames; PerLine = $ringPerLine; Max = $ringMax; Bias = $ringBias }
+    $sleekCpuRing   = @{ Source = 'CPU usage';  X = 0; Y = $sleekCpuRingY;   Size = $sleekRingSz;   Frames = $ringFrames; PerLine = $ringPerLine; Max = $ringMax; Bias = $ringBias }
+    $sleekGpuRing   = @{ Source = 'GPU1 usage'; X = 0; Y = $sleekGpuRingY;   Size = $sleekRingSz;   Frames = $ringFrames; PerLine = $ringPerLine; Max = $ringMax; Bias = $ringBias }
+    $compactCpuRing = @{ Source = 'CPU usage';  X = 0; Y = $compactCpuRingY; Size = $compactRingSz; Frames = $ringFrames; PerLine = $ringPerLine; Max = $ringMax; Bias = $ringBias }
+    $compactGpuRing = @{ Source = 'GPU1 usage'; X = 0; Y = $compactGpuRingY; Size = $compactRingSz; Frames = $ringFrames; PerLine = $ringPerLine; Max = $ringMax; Bias = $ringBias }
 
     $perfSections = Read-IniSections (Join-Path $dir "essential_performance_overlay${sfx}.ovl")
     $masterSection = $perfSections | Where-Object { $_.Name -eq 'Master' } | Select-Object -First 1
 
-    # 2. Build combined sources:
+    # 2. Build combined sources (all polled once per second at [Settings] RefreshPeriod=1000):
     #    - 4 AIDA visibility sources (x == 1..4 on TSUME_OVERLAY_LEVEL)
-    #    - 4 raw HAL sources (updated BEFORE AIDA in OverlayDataSourcesList::UpdateSources)
-    #    - 4 effective AIDA sources that use HAL when valid, falling back to Tsume AIDA values
+    #    - 5 raw HAL sources (updated BEFORE AIDA in OverlayDataSourcesList::UpdateSources)
+    #    - 5 effective AIDA sources that use HAL when valid, falling back to Tsume AIDA values
     #    - remaining HAL sources from essential_performance_overlay (excluding removed GPU/VRAM temps)
     #    - rolling 1% / 0.1% low from RTSS's 1024-frame Frametime ring buffer
-    #    - two-stage critically damped EMA sources (HAL/Timer) for 60 FPS smooth ring animation
     $sources = [System.Collections.Generic.List[string[]]]::new()
 
     for ($lvl = 1; $lvl -le 4; $lvl++) {
@@ -696,15 +688,9 @@ foreach ($theme in $themes) {
     }
 
     # Live rolling 1% low and 0.1% low from RTSS's always-active 1024-frame Frametime ring buffer,
-    # refreshed every 1 s on the source itself so the layers stay on $baseRefresh and move in lockstep.
-    $sources.Add((New-SourceLines 'Framerate 1% Low'   'FPS' '%.0f' '1000 / percentile("Frametime", 99)'   'HAL' 'Stub' 1000))
-    $sources.Add((New-SourceLines 'Framerate 0.1% Low' 'FPS' '%.0f' '1000 / percentile("Frametime", 99.9)' 'HAL' 'Stub' 1000))
-
-    # Smooth 60 FPS resource ring sources (two-stage critically damped EMA on HAL/Timer).
-    $sources.Add((New-SourceLines 'CPU usage stage1'  '%' '' "if(validate(`"CPU usage stage1`"), `"CPU usage stage1`" + (`"CPU usage`" - `"CPU usage stage1`") * $ringAlpha, `"CPU usage`")"          'HAL' 'Timer'))
-    $sources.Add((New-SourceLines 'CPU usage smooth'  '%' '' "if(validate(`"CPU usage smooth`"), `"CPU usage smooth`" + (`"CPU usage stage1`" - `"CPU usage smooth`") * $ringAlpha, `"CPU usage`")"   'HAL' 'Timer'))
-    $sources.Add((New-SourceLines 'GPU1 usage stage1' '%' '' "if(validate(`"GPU1 usage stage1`"), `"GPU1 usage stage1`" + (`"GPU1 usage`" - `"GPU1 usage stage1`") * $ringAlpha, `"GPU1 usage`")"     'HAL' 'Timer'))
-    $sources.Add((New-SourceLines 'GPU1 usage smooth' '%' '' "if(validate(`"GPU1 usage smooth`"), `"GPU1 usage smooth`" + (`"GPU1 usage stage1`" - `"GPU1 usage smooth`") * $ringAlpha, `"GPU1 usage`")" 'HAL' 'Timer'))
+    # updated once per second alongside all other telemetry sources.
+    $sources.Add((New-SourceLines 'Framerate 1 Low'  'FPS' '%.0f' '1000 / percentile("Frametime", 99)'   'HAL' 'Stub'))
+    $sources.Add((New-SourceLines 'Framerate 01 Low' 'FPS' '%.0f' '1000 / percentile("Frametime", 99.9)' 'HAL' 'Stub'))
 
     # 3. Build layers for all four levels using relative offsets from TSUME_POS_X / TSUME_POS_Y so
     #    alignment presets and touchscreen dragging move every overlay live with zero RTSS restart.
@@ -730,7 +716,7 @@ foreach ($theme in $themes) {
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 'FPS label'    'FPS'                   157 13 0  0  0 100 $theme.FpsHex
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 'FPS'          '%Framerate%'           156 24 0  0  0 200 $theme.ValueHex
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 '1% low label' '1%'                    220 17 0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 '1% low'       '%Framerate 1% Low%'    220 17 72 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 '1% low'       '%Framerate 1 Low%'     220 17 72 19 2 100 $theme.ValueHex
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 'Temp label'   'Temp'                  220 39 0  0  0 100 $theme.MutedHex
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis2 'Temperature'  "%CPU temperature%$deg" 220 39 77 19 2 100 $theme.TempColor
 
@@ -769,9 +755,9 @@ foreach ($theme in $themes) {
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'Temp label'      'Temp'                 478 50 0   0  0 100 $theme.MutedHex
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'Temperature'     "%CPU temperature%$deg" 521 50 0  0  0 100 $theme.TempColor
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 '1% label'        '1%'                   563 8  0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 '1%'              '%Framerate 1% Low%'   592 8  80  19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 '1%'              '%Framerate 1 Low%'    592 8  80  19 2 100 $theme.ValueHex
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 '0.1% label'      '0.1%'                 563 29 0   0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 '0.1%'            '%Framerate 0.1% Low%' 592 29 80  19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 '0.1%'            '%Framerate 01 Low%'   592 29 80  19 2 100 $theme.ValueHex
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'FT label'        'FT'                   563 50 0   0  0 100 $theme.MutedHex
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis3 'FT'              '<FT> ms'              592 50 80  19 2 100 $theme.ValueHex
     Add-GraphLayer  $mergedLayers $usedRelX $usedRelY $vis3 'Frametime graph' '<G=Frametime,0,0,1,0,40,0>'  478 73 194 12 $theme.FpsHex
@@ -788,9 +774,9 @@ foreach ($theme in $themes) {
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'Temp label'       'Temp'                 16  56  0  0  0 100 $theme.MutedHex
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'Temperature'      "%CPU temperature%$deg" 115 56 98 19 2 100 $theme.TempColor
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 '1% low label'     '1% low'               16  76  0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 '1% low'           '%Framerate 1% Low%'   118 76  90 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 '1% low'           '%Framerate 1 Low%'    118 76  90 19 2 100 $theme.ValueHex
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 '0.1% low label'   '0.1% low'             16  96  0  0  0 100 $theme.MutedHex
-    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 '0.1% low'         '%Framerate 0.1% Low%' 118 96  90 19 2 100 $theme.ValueHex
+    Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 '0.1% low'         '%Framerate 01 Low%'   118 96  90 19 2 100 $theme.ValueHex
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'Frametime label'  'Frametime'            16  116 0  0  0 100 $theme.MutedHex
     Add-TextLayer   $mergedLayers $usedRelX $usedRelY $theme $vis4 'Frametime'        '<FT> ms'              118 116 90 19 2 100 $theme.ValueHex
     Add-GraphLayer  $mergedLayers $usedRelX $usedRelY $vis4 'Frametime graph' '<G=Frametime,0,0,1,0,40,10>'  16  139 192 19 $theme.FpsHex

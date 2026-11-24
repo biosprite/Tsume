@@ -34,9 +34,10 @@ Each combined layout comes in the Dark, Smoke, White and Float themes (`essentia
   limit), rework the Bar, Detail and Full layouts (plus their panel chrome) for single-chip
   handheld PCs so each displays one shared chip temperature reading instead of duplicating CPU/GPU
   temperatures and discrete VRAM temperature, pack the resized panel backgrounds with 145-frame
-  anti-aliased CPU/GPU rings (2.5° per frame, replacing the 51-frame / 7.2° originals), animate
-  those rings at ~60 FPS (`RefreshPeriod=16` via a two-stage critically damped EMA on `HAL/Timer`
-  while keeping all other layers snapshotted at `250 ms` / `1000 ms`), gate each level's layers
+  anti-aliased CPU/GPU rings (2.5° per frame, replacing the 51-frame / 7.2° originals) refreshed at
+  RTSS's standard `1000 ms` cadence alongside all text readouts (so OverlayEditor polls HAL sensors
+  and rebuilds OSD geometry only once per second while Tsume shifts `<P=x,y>` directly in shared
+  memory for instant next-frame drag/drop movement), gate each level's layers
   with `VisibilitySource` on `TSUME_OVERLAY_LEVEL` (`x == 1..4`), compute live rolling `1% low` and
   `0.1% low` from RTSS's 1,024-frame `Frametime` ring buffer (refreshed every 1 s, no benchmark
   hotkey needed), and add AIDA64 fallbacks for temperature, CPU/GPU power, and CPU clock when
