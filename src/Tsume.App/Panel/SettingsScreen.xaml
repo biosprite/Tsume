@@ -30,7 +30,7 @@
                   VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
       <StackPanel DataContext="{Binding Settings}">
 
-        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.StartupHeading}" />
+        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.GeneralHeading}" />
 
         <controls:Tile Style="{StaticResource Tile.Switch}" controls:Screen.TakesFocus="True"
                        Glyph="{x:Static theme:Glyphs.Startup}"
@@ -49,9 +49,6 @@
 
         <!-- Charge limit: a card with its choices inside, not a switch. -->
         <StackPanel DataContext="{Binding ChargeLimit}" Visibility="{Binding Card}">
-
-          <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.BatteryHeading}"
-                     Margin="4,12,0,10" />
 
           <Border Background="{DynamicResource Surface}" CornerRadius="{StaticResource Radius.Control}"
                   Padding="18,10,16,10" Margin="0,0,0,8">
@@ -94,6 +91,13 @@
 
         </StackPanel>
 
+        <controls:Tile Style="{StaticResource Tile.Switch}"
+                       Glyph="{x:Static theme:Glyphs.Pause}"
+                       Label="{x:Static lang:Strings.PauseMsiCenter}"
+                       Detail="{Binding MsiCenterDetail}"
+                       IsOn="{Binding IsMsiCenterPaused}"
+                       Command="{Binding ToggleMsiCenter}" />
+
         <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.CustomizationHeading}"
                    Margin="4,12,0,10" />
 
@@ -116,16 +120,6 @@
                        Label="{x:Static lang:Strings.ControlsAndLayout}"
                        Detail="{x:Static lang:Strings.ControlsAndLayoutDetail}"
                        Command="{Binding Controls.Open}" />
-
-        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.MsiCenterHeading}"
-                   Margin="4,12,0,10" />
-
-        <controls:Tile Style="{StaticResource Tile.Switch}"
-                       Glyph="{x:Static theme:Glyphs.Pause}"
-                       Label="{x:Static lang:Strings.PauseMsiCenter}"
-                       Detail="{Binding MsiCenterDetail}"
-                       IsOn="{Binding IsMsiCenterPaused}"
-                       Command="{Binding ToggleMsiCenter}" />
 
         <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.TroubleshootingHeading}"
                    Margin="4,12,0,10" />

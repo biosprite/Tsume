@@ -67,13 +67,12 @@ public static class Strings
     public static string Restart => Find();
     public static string ShutDown => Find();
 
-    public static string StartupHeading => Find();
+    public static string GeneralHeading => Find();
     public static string StartWithWindows => Find();
     public static string StartWithWindowsDetail => Find();
     public static string ShowInStartMenu => Find();
     public static string ShowInStartMenuDetail => Find();
 
-    public static string BatteryHeading => Find();
     public static string ChargeLimit => Find();
 
     /// <summary>"80 %"</summary>
@@ -88,7 +87,6 @@ public static class Strings
     public static string ChargeDraining => Find();
     public static string ChargeOnBattery(int percent) => Fill(Find(), percent);
 
-    public static string MsiCenterHeading => Find();
     public static string PauseMsiCenter => Find();
     public static string MsiCenterPaused => Find();
     public static string MsiCenterRunning => Find();

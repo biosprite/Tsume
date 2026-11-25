@@ -110,13 +110,12 @@
 
   <!-- Settings screen -->
 
-  <data name="StartupHeading" xml:space="preserve"><value>STARTING UP</value></data>
+  <data name="GeneralHeading" xml:space="preserve"><value>GENERAL</value></data>
   <data name="StartWithWindows" xml:space="preserve"><value>Start with Windows</value></data>
   <data name="StartWithWindowsDetail" xml:space="preserve"><value>Ready in the background after you sign in</value></data>
   <data name="ShowInStartMenu" xml:space="preserve"><value>Show in Start menu</value></data>
   <data name="ShowInStartMenuDetail" xml:space="preserve"><value>Keeps a Tsume shortcut among your apps</value></data>
 
-  <data name="BatteryHeading" xml:space="preserve"><value>BATTERY</value></data>
   <data name="ChargeLimit" xml:space="preserve"><value>Charge limit</value></data>
   <data name="Percent" xml:space="preserve">
     <value>{0} %</value>
@@ -143,11 +142,10 @@
     <comment>{0} = the limit, in percent</comment>
   </data>
 
-  <data name="MsiCenterHeading" xml:space="preserve"><value>MSI CENTER M</value></data>
   <data name="PauseMsiCenter" xml:space="preserve"><value>Pause MSI Center M</value></data>
-  <data name="MsiCenterPaused" xml:space="preserve"><value>Paused  ·  the M button opens Tsume</value></data>
-  <data name="MsiCenterRunning" xml:space="preserve"><value>Running  ·  it owns the M button</value></data>
-  <data name="MsiCenterNoHelper" xml:space="preserve"><value>Running  ·  helper not found</value></data>
+  <data name="MsiCenterPaused" xml:space="preserve"><value>Paused: the M button opens Tsume</value></data>
+  <data name="MsiCenterRunning" xml:space="preserve"><value>Running: it owns the M button</value></data>
+  <data name="MsiCenterNoHelper" xml:space="preserve"><value>Running: helper not found</value></data>
 
   <data name="TroubleshootingHeading" xml:space="preserve"><value>TROUBLESHOOTING</value></data>
   <data name="ShareLogs" xml:space="preserve"><value>Share logs</value></data>
