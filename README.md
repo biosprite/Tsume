@@ -34,14 +34,16 @@
 <details>
 <summary><b>Supported devices</b></summary>
 
-| | Device | Board |
-|---|---|---|
-| ✅ | MSI Claw 8 EX AI+ (Arc G3 Extreme) | MS-1T91 |
-| 🧪 | MSI Claw 8 EX AI+ (Arc G3) (beta) | MS-1T91 |
-| 🧪 | MSI Claw 8 AI+ (beta) | MS-1T52 |
-| 🧪 | MSI Claw 7 AI+ (beta) | MS-1T42 |
-| 🧪 | MSI Claw A1M (beta) | MS-1T41 |
-| 🧪 | MSI Claw A8 (beta) | MS-1T8K |
+✅ Tested &nbsp;&nbsp; 🟠 Beta
+
+| | Device | Chip | Board |
+|---|---|---|---|
+| ✅ | MSI Claw 8 EX AI+ | Intel Arc G3 Extreme | MS-1T91 |
+| 🟠 | MSI Claw 8 EX AI+ | Intel Arc G3 | MS-1T91 |
+| 🟠 | MSI Claw A8 | AMD Ryzen Z2 Extreme | MS-1T8K |
+| 🟠 | MSI Claw 8 AI+ | Intel Core Ultra 7 258V | MS-1T52 |
+| 🟠 | MSI Claw 7 AI+ | Intel Core Ultra 7 258V | MS-1T42 |
+| 🟠 | MSI Claw A1M | Intel Core Ultra 5 135H / Ultra 7 155H | MS-1T41 |
 
 On these, Tsume replaces MSI Center M and its Game Bar Quick Settings widget.
 
