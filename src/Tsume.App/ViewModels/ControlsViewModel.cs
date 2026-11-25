@@ -25,9 +25,11 @@ public sealed class ControlsViewModel : LayerViewModel, IDisposable
         _state = state;
 
         ToggleOpenOnRight = new Command(() => OpenOnRight = !OpenOnRight);
+        ToggleRememberLastPage = new Command(() => RememberLastPage = !RememberLastPage);
 
         _absorbing = true;
         OpenOnRight = state.OpenOnRight;
+        RememberLastPage = state.RememberLastPage;
         _absorbing = false;
 
         MainTilesPage = new MainTilesViewModel(state);
@@ -41,6 +43,8 @@ public sealed class ControlsViewModel : LayerViewModel, IDisposable
 
     public ICommand ToggleOpenOnRight { get; }
 
+    public ICommand ToggleRememberLastPage { get; }
+
     /// <summary>True to pin Tsume to the right screen edge and mirror its slide animation.</summary>
     public bool OpenOnRight
     {
@@ -49,6 +53,18 @@ public sealed class ControlsViewModel : LayerViewModel, IDisposable
         {
             if (!Set(ref field, value) || _absorbing) return;
             _state.OpenOnRight = value;
+            _state.Save();
+        }
+    }
+
+    /// <summary>True to keep the last open screen when dismissing and reopen Tsume there.</summary>
+    public bool RememberLastPage
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value) || _absorbing) return;
+            _state.RememberLastPage = value;
             _state.Save();
         }
     }

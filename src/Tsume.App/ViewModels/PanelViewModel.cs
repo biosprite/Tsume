@@ -43,6 +43,7 @@ public sealed class PanelViewModel : IDisposable
         Actions.ApplyLayout(mainTiles.ActiveIds, mainTiles.Columns);
 
         Layers = [Power, Settings, Settings.PerformancePresets, Settings.Customization, Settings.Controls, Settings.Controls.MainTilesPage, Settings.Controls.DedicatedActionsPage, Settings.Controls.SystemButtonsPage, Settings.Developer, Lighting, Upscaling, .. Upscaling.Pages, Upscaling.RestoreAll, Rtss, Rtss.Download, Quit];
+        Sheets = [Power, Upscaling.RestoreAll, Quit];
 
         _tick.Tick += async (_, _) =>
         {
@@ -70,6 +71,9 @@ public sealed class PanelViewModel : IDisposable
     /// <summary>Everything that can cover the panel, lowest first; a layer later in the list opens over earlier ones.</summary>
     public IReadOnlyList<LayerViewModel> Layers { get; }
 
+    /// <summary>Transient modal sheets (Power, Restore All, Quit) that always close when the panel hides.</summary>
+    public IReadOnlyList<LayerViewModel> Sheets { get; }
+
     public bool IsCovered => Layers.Any(layer => layer.IsOpen);
 
     /// <summary>Starts background features that keep running while the panel is closed (e.g. Tsume's RTSS overlay).</summary>
@@ -87,15 +91,28 @@ public sealed class PanelViewModel : IDisposable
         foreach (var layer in Layers.Reverse()) layer.IsOpen = false;
     }
 
-    /// <summary>Called as the panel is about to slide in: refreshes every reading and starts polling.</summary>
-    public async void OnOpening()
+    /// <summary>Flushes any deferred saves on screens that remain open after the panel hides.</summary>
+    public void FlushOpenLayers()
     {
-        CloseLayers();
+        foreach (var layer in Layers)
+            if (layer.IsOpen) layer.FlushPending();
+    }
+
+    /// <summary>Called as the panel is about to slide in: refreshes every reading and starts polling.</summary>
+    public async void OnOpening(bool keepPages = false)
+    {
+        if (!keepPages) CloseLayers();
         Status.Refresh();
         Actions.Refresh();
         Upscaling.RefreshTile();
         _ = Upscaling.PrepareAsync();
         Rtss.RefreshTile();
+        if (Settings.IsOpen)
+        {
+            Settings.Refresh();
+            _ = Settings.ChargeLimit.RefreshAsync();
+        }
+        if (Rtss.IsOpen) Rtss.RefreshRunningState();
         _tick.Start();
 
         await Task.WhenAll(Levels.RefreshAsync(), Performance.RefreshAsync(), RefreshControllerTilesAsync());
@@ -110,7 +127,10 @@ public sealed class PanelViewModel : IDisposable
         if (_padIsolation is not null)
             await _padIsolation.WaitForOpenCaptureAsync();
 
-        await Task.WhenAll(Lighting.RefreshAsync(), PadMode.RefreshAsync());
+        var tasks = new List<Task> { Lighting.RefreshAsync(), PadMode.RefreshAsync() };
+        if (Settings.Controls.SystemButtonsPage.IsOpen)
+            tasks.Add(Settings.Controls.SystemButtonsPage.RefreshAsync());
+        await Task.WhenAll(tasks);
     }
 
     /// <summary>Called once the panel has gone: stops all polling.</summary>

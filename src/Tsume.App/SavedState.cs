@@ -40,6 +40,9 @@ public sealed class SavedState
     /// <summary>True to slide the panel in from the right edge of the screen instead of the left.</summary>
     public bool OpenOnRight { get; set; }
 
+    /// <summary>True to reopen Tsume on the last open page instead of returning to the main screen.</summary>
+    public bool RememberLastPage { get; set; }
+
     /// <summary>Ordered main-screen tile IDs (see <see cref="ViewModels.MainTileId"/>). Null uses the default layout.</summary>
     public List<string>? MainTiles { get; set; }
 

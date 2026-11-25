@@ -507,6 +507,8 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
         else Lost();
     }
 
+    public override void FlushPending() => OnClosed();
+
     public void Dispose()
     {
         if (_disposed) return;

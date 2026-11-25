@@ -63,6 +63,7 @@ public static class Glyphs
     public const string ChevronRight = "\uE76C";  // points right (matching pair for reorder controls)
     public const string ChevronDown = "\uE70D";   // points down: opens a dropdown
     public const string DockRight   = "\uE90D";   // panel pinned to the right edge
+    public const string History     = "\uE81C";   // clock with reverse arrow (remember last page)
     public const string Tiles       = "\uF0E2";   // 2x2 tile grid
     public const string Minus       = "\uE738";   // minus sign (hide tile badge)
     public const string Hide        = "\uED1A";   // eye with slash (hide)

@@ -560,6 +560,8 @@ public static class Strings
     public static string PanelPositionHeading => Find();
     public static string OpenOnRight => Find();
     public static string OpenOnRightDetail => Find();
+    public static string RememberLastPage => Find();
+    public static string RememberLastPageDetail => Find();
     public static string MainTilesHeading => Find();
     public static string MainTilesTitle => Find();
     public static string MainTilesSummary(int shown, int total, int columns) => Fill(Find(), shown, total, columns);

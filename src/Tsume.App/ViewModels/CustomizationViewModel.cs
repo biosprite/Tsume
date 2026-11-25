@@ -110,6 +110,8 @@ public sealed class CustomizationViewModel : LayerViewModel
     {
         if (_settle.IsEnabled) Save();
     }
+
+    public override void FlushPending() => OnClosed();
 }
 
 /// <summary>One ready-made scheme on the customization page, drawn in its own colours.</summary>

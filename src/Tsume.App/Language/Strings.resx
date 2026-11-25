@@ -798,9 +798,11 @@
   <data name="ControlsAndLayout" xml:space="preserve"><value>Controls &amp; Layout</value></data>
   <data name="ControlsAndLayoutDetail" xml:space="preserve"><value>Quick tiles, system layout &amp; buttons</value></data>
 
-  <data name="PanelPositionHeading" xml:space="preserve"><value>PANEL SIDE</value></data>
+  <data name="PanelPositionHeading" xml:space="preserve"><value>PANEL</value></data>
   <data name="OpenOnRight" xml:space="preserve"><value>Open from right side</value></data>
   <data name="OpenOnRightDetail" xml:space="preserve"><value>Slide Tsume in from the right edge of the screen instead of the left</value></data>
+  <data name="RememberLastPage" xml:space="preserve"><value>Remember last open page</value></data>
+  <data name="RememberLastPageDetail" xml:space="preserve"><value>Reopen Tsume on the page you left instead of returning to the main screen</value></data>
 
   <data name="MainTilesHeading" xml:space="preserve"><value>MAIN SCREEN</value></data>
   <data name="MainTilesTitle" xml:space="preserve"><value>Quick tiles</value></data>

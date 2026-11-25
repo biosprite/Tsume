@@ -48,6 +48,7 @@ public partial class OverlayWindow
 
     /// <summary>What had focus as each layer opened, so focus can go back there as each one closes.</summary>
     private readonly Stack<IInputElement?> _focusBeneath = new();
+    private bool _resettingLayers;
 
     /// <param name="stayOpen">Development aid: keep the panel up when it loses focus.</param>
     public OverlayWindow(PanelViewModel panel, bool stayOpen = false)
@@ -73,6 +74,7 @@ public partial class OverlayWindow
     }
 
     private bool IsRightSide => _panel.Settings.Controls.OpenOnRight;
+    private bool RememberLastPage => _panel.Settings.Controls.RememberLastPage;
 
     /// <summary>Starting/ending horizontal offset in design units: off the left or right edge.</summary>
     private double OffscreenX => IsRightSide ? DesignWidth : -DesignWidth;
@@ -102,19 +104,24 @@ public partial class OverlayWindow
         if (IsOpen) return;
         IsOpen = true;
         _closing?.TrySetResult();
+        _closing = null;
         RightOfWay.Claim();   // first, so everything below already runs ahead of the game
         OpenTrace.Begin();
 
         // Notify isolation before tile refreshes start so Mode 1 -> Mode 4 capture wins the vendor HID channel.
         OpenChanged?.Invoke(true);
 
+        Stage.IsHitTestVisible = true;
+        if (RememberLastPage) CloseSheetsSilently();
+        else ResetLayersSilently();
         PlaceOnScreen();
-        _panel.OnOpening();
+        _panel.OnOpening(keepPages: RememberLastPage);
 
         // Start off screen and invisible. Slide is inside Fit, so it moves in design units.
         Slide.Snap(TranslateTransform.XProperty, OffscreenX);
         Stage.Snap(OpacityProperty, 0);
-        SetSectionsBack();
+        if (_panel.IsCovered) RestoreSections();
+        else SetSectionsBack();
 
         // Until the panel has settled in front, losing focus does not close it (see HoldTheFront).
         ForegroundWindow.BehindPanel = _wasInFront = ForegroundWindow.Current;
@@ -135,7 +142,7 @@ public partial class OverlayWindow
         // more than one late first frame is seen.
         PlayIn();
 
-        Dispatcher.BeginInvoke(DispatcherPriority.Input, FocusFirstControl);
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, FocusActiveControl);
     }
 
     /// <summary>
@@ -309,6 +316,8 @@ public partial class OverlayWindow
     {
         Slide.Animate(TranslateTransform.XProperty, 0, Motion.Arrive, Motion.Glide);
 
+        if (_panel.IsCovered) return;
+
         var delay = TimeSpan.FromMilliseconds(70);
 
         foreach (var section in SectionsInOrder())
@@ -335,6 +344,17 @@ public partial class OverlayWindow
         }
     }
 
+    /// <summary>Ensures main sections sit at resting opacity and position while a remembered page is open.</summary>
+    private void RestoreSections()
+    {
+        foreach (var section in SectionsInOrder())
+        {
+            if (section.RenderTransform is TranslateTransform rise)
+                rise.Snap(TranslateTransform.YProperty, 0);
+            section.Snap(OpacityProperty, 1);
+        }
+    }
+
     private IEnumerable<UIElement> SectionsInOrder()
     {
         yield return Header;
@@ -344,19 +364,40 @@ public partial class OverlayWindow
 
     private void FocusFirstControl() => Sections.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
 
+    /// <summary>Focuses the topmost open screen when reopening a remembered page, otherwise the main screen.</summary>
+    private void FocusActiveControl()
+    {
+        if (!IsOpen) return;
+
+        if (_panel.IsCovered)
+        {
+            for (var i = LayerHost.Children.Count - 1; i >= 0; i--)
+            {
+                if (LayerHost.Children[i] is Controls.Screen { IsOpen: true } top)
+                {
+                    top.FocusInitial();
+                    return;
+                }
+            }
+        }
+
+        FocusFirstControl();
+    }
+
     /// <summary>Slides the panel away. The task completes once it is fully hidden.</summary>
     public Task CloseAsync()
     {
         if (!IsOpen) return _closing?.Task ?? Task.CompletedTask;
         IsOpen = false;
         _settling.Stop();
+        Stage.IsHitTestVisible = false;
 
         var closing = _closing = new TaskCompletionSource();
         OpenChanged?.Invoke(false);
 
-        // A layer left up would still be folding away during the next opening.
+        // Close any floating popup immediately; layers stay visually frozen until the panel is hidden
+        // so dismissing never flashes the main screen mid-slide.
         Controls.KeyDropdown.CloseIfOpen();
-        _panel.CloseLayers();
 
         var finished = false;
         var fallback = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
@@ -367,13 +408,14 @@ public partial class OverlayWindow
             finished = true;
             fallback.Stop();
 
-            if (!IsOpen)   // not reopened mid-flight
+            if (!IsOpen && _closing == closing)   // not reopened mid-flight
             {
                 ForgetFocus();
                 _zOrderChanges.Stop();
                 if (IsVisible) Hide();
                 DisplayClock.KeepAwake(false);
                 RightOfWay.Yield();
+                SettleLayersAfterHide();
                 _panel.OnClosed();
             }
 
@@ -405,21 +447,19 @@ public partial class OverlayWindow
         DisplayClock.KeepAwake(false);
         RightOfWay.Yield();
 
-        if (wasOpen)
-        {
-            OpenChanged?.Invoke(false);
-            Controls.KeyDropdown.CloseIfOpen();
-            _panel.CloseLayers();
-        }
+        if (wasOpen) OpenChanged?.Invoke(false);
 
         if (wasOpen || IsVisible)
         {
+            Controls.KeyDropdown.CloseIfOpen();
             ForgetFocus();
             if (IsVisible) Hide();
+            SettleLayersAfterHide();
             _panel.OnClosed();
         }
 
         _closing?.TrySetResult();
+        _closing = null;
     }
 
     /// <summary>
@@ -434,6 +474,12 @@ public partial class OverlayWindow
     /// <summary>Back / Escape closes an open dropdown, or the top layer, otherwise the panel.</summary>
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
+        if (!IsOpen)
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key != Key.Escape) return;
 
         if (Controls.KeyDropdown.CloseIfOpen())
@@ -465,7 +511,7 @@ public partial class OverlayWindow
         };
 
         if (!IsOpen || key == Key.None) return;
-        if (Keyboard.FocusedElement is null) FocusFirstControl();
+        if (Keyboard.FocusedElement is null) FocusActiveControl();
 
         var source = Keyboard.FocusedElement is Visual focused
             ? PresentationSource.FromVisual(focused) ?? PresentationSource.FromVisual(this)
@@ -479,15 +525,79 @@ public partial class OverlayWindow
             new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, key) { RoutedEvent = stroke });
     }
 
-    /// <summary>
-    /// Disables the controls under an open layer, and returns focus to the button that opened it when it closes.
-    /// </summary>
-    private void OnLayerMoved(object? sender, PropertyChangedEventArgs e)
+    private void SettleLayersAfterHide()
     {
-        if (e.PropertyName != nameof(LayerViewModel.IsOpen) || sender is not LayerViewModel layer) return;
+        if (RememberLastPage)
+        {
+            CloseSheetsSilently();
+            _panel.FlushOpenLayers();
+        }
+        else
+        {
+            ResetLayersSilently();
+        }
+    }
 
-        if (layer.IsOpen) _focusBeneath.Push(Keyboard.FocusedElement);
+    /// <summary>
+    /// Closes every open layer and snaps the panel back to the main screen without running layer
+    /// transitions, so closing never reveals the main screen and the next opening starts clean.
+    /// </summary>
+    private void ResetLayersSilently()
+    {
+        _resettingLayers = true;
+        try
+        {
+            _focusBeneath.Clear();
+            _panel.CloseLayers();
 
+            foreach (var child in LayerHost.Children)
+            {
+                if (child is Controls.Screen screen) screen.SnapClosed();
+                else if (child is Controls.Sheet sheet) sheet.SnapClosed();
+            }
+
+            Main.IsEnabled = true;
+            Main.Snap(OpacityProperty, 1);
+            MainAside.Snap(TranslateTransform.XProperty, 0);
+        }
+        finally
+        {
+            _resettingLayers = false;
+        }
+    }
+
+    /// <summary>
+    /// Silently closes transient confirmation/action sheets while keeping any open Screen pages
+    /// intact when Remember last open page is enabled.
+    /// </summary>
+    private void CloseSheetsSilently()
+    {
+        _resettingLayers = true;
+        try
+        {
+            foreach (var sheet in _panel.Sheets)
+            {
+                if (!sheet.IsOpen) continue;
+                sheet.IsOpen = false;
+                _focusBeneath.TryPop(out _);
+            }
+
+            foreach (var child in LayerHost.Children)
+            {
+                if (child is Controls.Sheet sheet) sheet.SnapClosed();
+                else if (child is Controls.Screen { IsOpen: false } screen) screen.SnapClosed();
+            }
+
+            SyncLayerInteractivity();
+        }
+        finally
+        {
+            _resettingLayers = false;
+        }
+    }
+
+    private void SyncLayerInteractivity()
+    {
         Main.IsEnabled = !_panel.IsCovered;
         var onControlsSubpage = _panel.Settings.Controls.MainTilesPage.IsOpen
             || _panel.Settings.Controls.DedicatedActionsPage.IsOpen
@@ -497,14 +607,35 @@ public partial class OverlayWindow
             || _panel.Settings.Controls.IsOpen
             || onControlsSubpage
             || _panel.Settings.Developer.IsOpen;
-        SettingsScreen.IsCovered = onAPage;
         SettingsScreen.IsEnabled = !onAPage && !_panel.Quit.IsOpen;
-        ControlsScreen.IsCovered = onControlsSubpage;
         ControlsScreen.IsEnabled = !onControlsSubpage;
-        UpscalingScreen.IsCovered = _panel.Upscaling.HasPageOpen;
         UpscalingScreen.IsEnabled = !_panel.Upscaling.HasPageOpen && !_panel.Upscaling.RestoreAll.IsOpen;
-        RtssScreen.IsCovered = _panel.Rtss.Download.IsOpen;
         RtssScreen.IsEnabled = !_panel.Rtss.Download.IsOpen;
+    }
+
+    /// <summary>
+    /// Disables the controls under an open layer, and returns focus to the button that opened it when it closes.
+    /// </summary>
+    private void OnLayerMoved(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_resettingLayers) return;
+        if (e.PropertyName != nameof(LayerViewModel.IsOpen) || sender is not LayerViewModel layer) return;
+
+        if (layer.IsOpen) _focusBeneath.Push(Keyboard.FocusedElement);
+
+        var onControlsSubpage = _panel.Settings.Controls.MainTilesPage.IsOpen
+            || _panel.Settings.Controls.DedicatedActionsPage.IsOpen
+            || _panel.Settings.Controls.SystemButtonsPage.IsOpen;
+        var onAPage = _panel.Settings.Customization.IsOpen
+            || _panel.Settings.PerformancePresets.IsOpen
+            || _panel.Settings.Controls.IsOpen
+            || onControlsSubpage
+            || _panel.Settings.Developer.IsOpen;
+        SettingsScreen.IsCovered = onAPage;
+        ControlsScreen.IsCovered = onControlsSubpage;
+        UpscalingScreen.IsCovered = _panel.Upscaling.HasPageOpen;
+        RtssScreen.IsCovered = _panel.Rtss.Download.IsOpen;
+        SyncLayerInteractivity();
         StepAside(_panel.Settings.IsOpen || _panel.Lighting.IsOpen || _panel.Upscaling.IsOpen || _panel.Rtss.IsOpen);
 
         if (layer.IsOpen || !_focusBeneath.TryPop(out var beneath)) return;

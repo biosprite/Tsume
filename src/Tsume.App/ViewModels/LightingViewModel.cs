@@ -333,4 +333,6 @@ public sealed class LightingViewModel : LayerViewModel
         if (await _controller.SaveAsync()) _unsaved = false;
         else Lost();
     }
+
+    public override void FlushPending() => OnClosed();
 }

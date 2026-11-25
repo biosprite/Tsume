@@ -112,6 +112,8 @@ public sealed class PerformancePresetsViewModel : LayerViewModel
 
     /// <summary>Saves any pending change at once instead of waiting for the timer.</summary>
     protected override void OnClosed() => Keep();
+
+    public override void FlushPending() => Keep();
 }
 
 /// <summary>One mode on the performance presets page: its two limits, and the machine's own (stock) ones.</summary>

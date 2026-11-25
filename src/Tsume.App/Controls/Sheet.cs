@@ -50,6 +50,15 @@ public sealed class Sheet : ContentControl
         if (_scrim is not null) _scrim.MouseLeftButtonDown += (_, _) => IsOpen = false;
     }
 
+    /// <summary>Stops any transition and puts the sheet straight into its closed resting state.</summary>
+    public void SnapClosed()
+    {
+        if (_scrim is not null) _scrim.Snap(OpacityProperty, 0);
+        if (_card is not null) _card.Snap(OpacityProperty, 0);
+        _rise.Snap(TranslateTransform.YProperty, StartsBelow);
+        Visibility = Visibility.Collapsed;
+    }
+
     private void Move(bool open)
     {
         if (open) Visibility = Visibility.Visible;
@@ -65,7 +74,7 @@ public sealed class Sheet : ContentControl
 
             // Focus the first row once the card has been laid out.
             Dispatcher.BeginInvoke(DispatcherPriority.Input,
-                () => _card.MoveFocus(new TraversalRequest(FocusNavigationDirection.First)));
+                () => { if (IsOpen) _card.MoveFocus(new TraversalRequest(FocusNavigationDirection.First)); });
         }
         else
         {

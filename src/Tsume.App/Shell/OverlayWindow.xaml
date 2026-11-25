@@ -44,7 +44,7 @@
               Background="{DynamicResource Panel.Fill}"
               BorderBrush="{DynamicResource Panel.Edge}" BorderThickness="1"
               CornerRadius="{StaticResource Radius.Panel}">
-        <Grid>
+        <Grid x:Name="LayerHost">
 
           <DockPanel x:Name="Main" Margin="18,16,18,16">
             <DockPanel.RenderTransform>

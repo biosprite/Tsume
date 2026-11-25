@@ -56,7 +56,7 @@
                   VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
       <StackPanel>
 
-        <!-- Panel side -->
+        <!-- Panel side & reopen behavior -->
         <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.PanelPositionHeading}" />
 
         <controls:Tile Style="{StaticResource Tile.Switch}" controls:Screen.TakesFocus="True"
@@ -65,6 +65,13 @@
                        Detail="{x:Static lang:Strings.OpenOnRightDetail}"
                        IsOn="{Binding OpenOnRight}"
                        Command="{Binding ToggleOpenOnRight}" />
+
+        <controls:Tile Style="{StaticResource Tile.Switch}"
+                       Glyph="{x:Static theme:Glyphs.History}"
+                       Label="{x:Static lang:Strings.RememberLastPage}"
+                       Detail="{x:Static lang:Strings.RememberLastPageDetail}"
+                       IsOn="{Binding RememberLastPage}"
+                       Command="{Binding ToggleRememberLastPage}" />
 
         <!-- Main screen quick tiles (live preview grid, reordering, and column density) -->
         <StackPanel>

@@ -64,6 +64,19 @@ public sealed class Screen : ContentControl
         }
     }
 
+    /// <summary>Stops any transition and puts the screen straight into its closed resting state.</summary>
+    public void SnapClosed()
+    {
+        this.Snap(OpacityProperty, 0);
+        _glide.Snap(TranslateTransform.XProperty, StartsAside);
+        Visibility = Visibility.Collapsed;
+        IsCovered = false;
+        IsEnabled = true;
+    }
+
+    /// <summary>Moves focus to this screen's designated starting control (or its first focusable control).</summary>
+    public void FocusInitial() => FocusWhereAsked();
+
     private void Move(bool open)
     {
         if (open)
