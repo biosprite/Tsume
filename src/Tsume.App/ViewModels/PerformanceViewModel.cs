@@ -31,6 +31,7 @@ public sealed class PerformanceViewModel : Observable
 
     private bool _applying;
     private bool _applyAgain;
+    private bool _reconnecting;
 
     public PerformanceViewModel(HelperClient helper, SavedState state)
     {
@@ -510,10 +511,24 @@ public sealed class PerformanceViewModel : Observable
         Absorb(reply, adoptMode: _changes == changesBefore && !_applying && !_settle.IsEnabled);
     }
 
-    /// <summary>Reads only the live numbers. Called once a second while the panel is open.</summary>
+    /// <summary>
+    /// Reads only the live numbers. Called once a second while the panel is open. While the helper reads as
+    /// offline it asks for a full snapshot instead, so one missed answer (the helper's pipe serves one request
+    /// at a time) never leaves the readout offline until the panel reopens. Not on a machine the helper does
+    /// not support: that answer will not change while the panel is open.
+    /// </summary>
     public async Task RefreshTelemetryAsync()
     {
-        if (!IsHelperOnline || _applying) return;
+        if (_applying) return;
+
+        if (!IsHelperOnline)
+        {
+            if (_reconnecting || IsUnsupported) return;
+            _reconnecting = true;
+            try { await RefreshAsync(); }
+            finally { _reconnecting = false; }
+            return;
+        }
 
         var reply = await _helper.SendAsync(new GetReadings());
 
