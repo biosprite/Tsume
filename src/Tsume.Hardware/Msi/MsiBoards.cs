@@ -58,7 +58,7 @@ public static class MsiBoards
                 new(PerformanceMode.Performance, new PowerLimits(Sustained: 32, Boost: 36)),
                 new(PerformanceMode.Manual),
             ],
-            ManualRange = new PowerRange(Min: 8, MaxSustained: 35, MaxBoost: 45),
+            ManualRange = new PowerRange(Min: 8, MaxSustained: 35, MaxBoost: 45, MinBoostHeadroom: 2),
             ManualDefault = new PowerLimits(Sustained: 25, Boost: 28),
             FanModes = [FanMode.Auto, FanMode.Max],
             ChargeLimits = [80, 90, 100],   // the owner's choice; MSI Center M's own are 60, 80 and 100
@@ -111,7 +111,7 @@ public static class MsiBoards
                 new(PerformanceMode.Performance, new PowerLimits(Sustained: 30, Boost: 37)),
                 new(PerformanceMode.Manual),
             ],
-            ManualRange = new PowerRange(Min: 8, MaxSustained: 30, MaxBoost: 45),
+            ManualRange = new PowerRange(Min: 8, MaxSustained: 30, MaxBoost: 45, MinBoostHeadroom: 2),
         },
     };
 
