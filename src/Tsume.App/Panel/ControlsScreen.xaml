@@ -8,6 +8,30 @@
 
   <!-- Panel side, Quick tiles, Dedicated Actions, and System Buttons. Opened from Settings. -->
 
+  <UserControl.Resources>
+    <DataTemplate x:Key="SummaryChipTemplate">
+      <Grid Margin="0,0,5,4">
+        <Border Background="{x:Static theme:Accent.Tint}"
+                BorderBrush="{x:Static theme:Accent.Wash}"
+                BorderThickness="1" CornerRadius="4" Padding="6,2"
+                Visibility="{Binding AccentShown}">
+          <TextBlock Style="{StaticResource Text.Caption}" FontSize="10.5" FontWeight="SemiBold"
+                     Foreground="{x:Static theme:Accent.Brush}"
+                     Text="{Binding Text}" VerticalAlignment="Center" />
+        </Border>
+
+        <Border Background="{DynamicResource Surface.Hover}"
+                BorderBrush="{DynamicResource Surface.Divider}"
+                BorderThickness="1" CornerRadius="4" Padding="6,2"
+                Visibility="{Binding NeutralShown}">
+          <TextBlock Style="{StaticResource Text.Caption}" FontSize="10.5"
+                     Foreground="{DynamicResource Text.Muted}"
+                     Text="{Binding Text}" VerticalAlignment="Center" />
+        </Border>
+      </Grid>
+    </DataTemplate>
+  </UserControl.Resources>
+
   <DockPanel DataContext="{Binding Settings.Controls}">
 
     <DockPanel DockPanel.Dock="Top" Height="46" Margin="0,0,0,20">
@@ -47,12 +71,22 @@
           <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.MainTilesHeading}"
                      Margin="4,16,0,10" />
 
-          <controls:Tile Style="{StaticResource Tile.Link}"
+          <controls:Tile Style="{StaticResource Tile.GameLink}"
                          Glyph="{x:Static theme:Glyphs.Tiles}"
                          Label="{x:Static lang:Strings.MainTilesTitle}"
-                         Detail="{Binding MainTilesPage.SummaryDetail}"
+                         AutomationProperties.HelpText="{Binding MainTilesPage.SummaryDetail}"
                          IsOn="{Binding MainTilesPage.IsCustomized}"
-                         Command="{Binding MainTilesPage.Open}" />
+                         Command="{Binding MainTilesPage.Open}">
+            <ItemsControl ItemsSource="{Binding MainTilesPage.SummaryChips}"
+                          ItemTemplate="{StaticResource SummaryChipTemplate}"
+                          Focusable="False" Margin="0,0,0,-4">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+            </ItemsControl>
+          </controls:Tile>
         </StackPanel>
 
         <!-- Dedicated actions (opens a categorized, compact shortcuts screen) -->
@@ -60,12 +94,22 @@
           <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.DedicatedActionsHeading}"
                      Margin="4,16,0,10" />
 
-          <controls:Tile Style="{StaticResource Tile.Link}"
+          <controls:Tile Style="{StaticResource Tile.GameLink}"
                          Glyph="{x:Static theme:Glyphs.Keyboard}"
                          Label="{x:Static lang:Strings.DedicatedActionsTitle}"
-                         Detail="{Binding DedicatedActionsPage.SummaryDetail}"
+                         AutomationProperties.HelpText="{Binding DedicatedActionsPage.SummaryDetail}"
                          IsOn="{Binding DedicatedActionsPage.HasActiveBindings}"
-                         Command="{Binding DedicatedActionsPage.Open}" />
+                         Command="{Binding DedicatedActionsPage.Open}">
+            <ItemsControl ItemsSource="{Binding DedicatedActionsPage.SummaryChips}"
+                          ItemTemplate="{StaticResource SummaryChipTemplate}"
+                          Focusable="False" Margin="0,0,0,-4">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+            </ItemsControl>
+          </controls:Tile>
         </StackPanel>
 
         <!-- System buttons (hardware buttons + rear back paddles in one screen) -->

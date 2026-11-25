@@ -807,10 +807,12 @@
   <data name="MainTilesHeading" xml:space="preserve"><value>MAIN SCREEN</value></data>
   <data name="MainTilesTitle" xml:space="preserve"><value>Quick tiles</value></data>
   <data name="MainTilesSummary" xml:space="preserve">
-    <value>{0} of {1} tiles · {2} per row</value>
+    <value>{0} of {1} tiles, {2} per row</value>
     <comment>{0} = active count, {1} = total available tiles, {2} = columns per row</comment>
   </data>
-  <data name="MainTilesSummaryNone" xml:space="preserve"><value>No tiles shown · Tap to customize</value></data>
+  <data name="MainTilesSummaryNone" xml:space="preserve"><value>No tiles shown</value></data>
+  <data name="MainTilesCountChip" xml:space="preserve"><value>{0} of {1} tiles</value></data>
+  <data name="MainTilesColumnsChip" xml:space="preserve"><value>{0} per row</value></data>
   <data name="MainTilesPreviewHeading" xml:space="preserve"><value>ON MAIN SCREEN</value></data>
   <data name="MainTilesCountBadge" xml:space="preserve">
     <value>{0} / {1}</value>
@@ -879,8 +881,9 @@
   </data>
   <data name="DedicatedActionsHeading" xml:space="preserve"><value>DEDICATED ACTIONS</value></data>
   <data name="DedicatedActionsTitle" xml:space="preserve"><value>Dedicated actions</value></data>
-  <data name="DedicatedActionsNoneActive" xml:space="preserve"><value>No shortcuts bound — tap to configure</value></data>
-  <data name="DedicatedActionsActiveSummary" xml:space="preserve"><value>{0} active · {1}</value></data>
+  <data name="DedicatedActionsNoneActive" xml:space="preserve"><value>No shortcuts bound</value></data>
+  <data name="DedicatedActionsActiveSummary" xml:space="preserve"><value>{0} active: {1}</value></data>
+  <data name="DedicatedActionsActiveChip" xml:space="preserve"><value>{0} active</value></data>
   <data name="DedicatedActionsTabActive" xml:space="preserve"><value>Active</value></data>
   <data name="DedicatedActionsTabTsume" xml:space="preserve"><value>Tsume</value></data>
   <data name="DedicatedActionsTabSystem" xml:space="preserve"><value>System</value></data>

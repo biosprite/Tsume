@@ -116,6 +116,24 @@ public sealed class DedicatedActionsViewModel : LayerViewModel
         }
     }
 
+    public IReadOnlyList<SummaryChip> SummaryChips
+    {
+        get
+        {
+            var active = _all.Where(a => a.IsBound).ToList();
+            if (active.Count == 0) return [new(Strings.DedicatedActionsNoneActive)];
+
+            List<SummaryChip> chips = [new(Strings.DedicatedActionsActiveChip(active.Count), IsAccent: true)];
+            foreach (var item in active.Take(2))
+                chips.Add(new(item.Title));
+
+            if (active.Count > 2)
+                chips.Add(new($"+{active.Count - 2}"));
+
+            return chips;
+        }
+    }
+
     /// <summary>Raised whenever any Dedicated Action binding changes so global hooks can refresh.</summary>
     public event Action? BindingsChanged;
 
@@ -175,6 +193,7 @@ public sealed class DedicatedActionsViewModel : LayerViewModel
         RebuildVisible();
         Notify(nameof(HasActiveBindings));
         Notify(nameof(SummaryDetail));
+        Notify(nameof(SummaryChips));
         BindingsChanged?.Invoke();
     }
 
@@ -283,6 +302,7 @@ public sealed class DedicatedActionsViewModel : LayerViewModel
         _state.Save();
         Notify(nameof(HasActiveBindings));
         Notify(nameof(SummaryDetail));
+        Notify(nameof(SummaryChips));
         BindingsChanged?.Invoke();
     }
 

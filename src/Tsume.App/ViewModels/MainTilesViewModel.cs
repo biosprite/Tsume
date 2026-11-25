@@ -155,6 +155,13 @@ public sealed class MainTilesViewModel : LayerViewModel
         ? Strings.MainTilesSummaryNone
         : Strings.MainTilesSummary(ActiveTiles.Count, _slots.Count, Columns);
 
+    public IReadOnlyList<SummaryChip> SummaryChips => ActiveTiles.Count == 0
+        ? [new(Strings.MainTilesSummaryNone)]
+        : [
+            new(Strings.MainTilesCountChip(ActiveTiles.Count, _slots.Count), IsAccent: IsCustomized),
+            new(Strings.MainTilesColumnsChip(Columns)),
+          ];
+
     public Visibility ActiveGridVisibility => ActiveTiles.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     public Visibility EmptyActiveVisibility => ActiveTiles.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     public Visibility AvailableGridVisibility => AvailableTiles.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -369,6 +376,7 @@ public sealed class MainTilesViewModel : LayerViewModel
         Notify(nameof(ActiveCountBadge));
         Notify(nameof(IsCustomized));
         Notify(nameof(SummaryDetail));
+        Notify(nameof(SummaryChips));
         Notify(nameof(ActiveGridVisibility));
         Notify(nameof(EmptyActiveVisibility));
         Notify(nameof(AvailableGridVisibility));

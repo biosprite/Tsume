@@ -566,6 +566,8 @@ public static class Strings
     public static string MainTilesTitle => Find();
     public static string MainTilesSummary(int shown, int total, int columns) => Fill(Find(), shown, total, columns);
     public static string MainTilesSummaryNone => Find();
+    public static string MainTilesCountChip(int shown, int total) => Fill(Find(), shown, total);
+    public static string MainTilesColumnsChip(int columns) => Fill(Find(), columns);
     public static string MainTilesPreviewHeading => Find();
     public static string MainTilesCountBadge(int shown, int total) => Fill(Find(), shown, total);
     public static string MainTilesEmptyPreview => Find();
@@ -618,6 +620,7 @@ public static class Strings
     public static string DedicatedActionsTitle => Find();
     public static string DedicatedActionsNoneActive => Find();
     public static string DedicatedActionsActiveSummary(int count, string names) => Fill(Find(), count, names);
+    public static string DedicatedActionsActiveChip(int count) => Fill(Find(), count);
     public static string DedicatedActionsTabActive => Find();
     public static string DedicatedActionsTabTsume => Find();
     public static string DedicatedActionsTabSystem => Find();

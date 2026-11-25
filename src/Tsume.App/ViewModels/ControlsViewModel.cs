@@ -75,6 +75,13 @@ public sealed class ControlsViewModel : LayerViewModel, IDisposable
     }
 }
 
+/// <summary>Compact rounded tag chip shown beneath a Controls &amp; Layout link card.</summary>
+public sealed record SummaryChip(string Text, bool IsAccent = false)
+{
+    public Visibility AccentShown => IsAccent ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility NeutralShown => IsAccent ? Visibility.Collapsed : Visibility.Visible;
+}
+
 public sealed class BackButtonEditor : Observable
 {
     private readonly Action<BackButtonDefinition, BackButtonBinding> _onChanged;
