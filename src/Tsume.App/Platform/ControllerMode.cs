@@ -14,6 +14,9 @@ public static class ControllerMode
     /// <summary>MSI's own pause between asking for a mode and reading it back.</summary>
     private static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(20);
 
+    /// <summary>Pause before resending SwitchMode when the controller answers with the old mode.</summary>
+    private static readonly TimeSpan RetrySwitch = TimeSpan.FromMilliseconds(40);
+
     private static readonly TimeSpan LookAgain = TimeSpan.FromMilliseconds(100);
 
     private static readonly TimeSpan GiveUp = TimeSpan.FromSeconds(5);
@@ -31,57 +34,135 @@ public static class ControllerMode
     /// Switches the pad and waits until it reads back the new mode; false if it never does.
     /// <paramref name="note"/> receives each step, for the check report.
     /// </summary>
-    public static async Task<bool> SetAsync(PadMode wanted, Action<string>? note = null)
+    public static async Task<bool> SetAsync(PadMode wanted, Action<string>? note = null, CancellationToken cancel = default)
     {
         var started = DateTime.UtcNow;
         string At() => $"{(DateTime.UtcNow - started).TotalMilliseconds,5:0} ms";
 
-        var controller = await Task.Run(ClawController.Find);
+        var controller = await Task.Run(ClawController.Find, cancel);
+        if (controller is null)
+        {
+            note?.Invoke($"{At()}  controller not found");
+            return false;
+        }
+
+        (byte Mode, byte MKeys)? before;
         try
         {
-            if (controller is null)
-            {
-                note?.Invoke($"{At()}  controller not found");
-                return false;
-            }
+            before = await controller.ReadModeAsync();
+        }
+        catch
+        {
+            controller.Dispose();
+            throw;
+        }
 
-            if (await controller.ReadModeAsync() is not { } before)
-            {
-                note?.Invoke($"{At()}  mode read: no answer — nothing sent");
-                return false;
-            }
+        if (before is null)
+        {
+            controller.Dispose();
+            note?.Invoke($"{At()}  mode read: no answer — nothing sent");
+            return false;
+        }
 
-            note?.Invoke($"{At()}  mode {before.Mode}, M keys {before.MKeys}");
-            if (before.Mode == (byte)wanted) return true;
+        note?.Invoke($"{At()}  mode {before.Value.Mode}, M keys {before.Value.MKeys}");
+        if (before.Value.Mode == (byte)wanted)
+        {
+            controller.Dispose();
+            return true;
+        }
 
+        return await SwitchOnHandleAsync(controller, before.Value.MKeys, wanted, started, note, cancel);
+    }
+
+    /// <summary>
+    /// Switches the pad using an already-open <paramref name="controller"/> handle and takes ownership of disposing it.
+    /// Resends <c>SwitchMode</c> if the firmware answers with the old mode (e.g. deferred mid-input) instead of
+    /// only polling read-back until timeout.
+    /// </summary>
+    internal static async Task<bool> SwitchOnHandleAsync(
+        ClawController controller,
+        byte mKeys,
+        PadMode wanted,
+        DateTime? startedAt = null,
+        Action<string>? note = null,
+        CancellationToken cancel = default)
+    {
+        var started = startedAt ?? DateTime.UtcNow;
+        string At() => $"{(DateTime.UtcNow - started).TotalMilliseconds,5:0} ms";
+
+        ClawController? active = controller;
+        var currentMKeys = Math.Min(mKeys, (byte)2);
+
+        try
+        {
             // Pass the paddles' (M keys) setting back unchanged.
-            var sent = await controller.SwitchModeAsync(wanted, Math.Min(before.MKeys, (byte)2));
+            var sent = await active.SwitchModeAsync(wanted, currentMKeys);
             note?.Invoke($"{At()}  switch to {(byte)wanted} ({wanted}): {(sent ? "sent" : "NOT sent")}");
             if (!sent) return false;
 
+            // Always wait the initial settle + read-back without cancelling so we never lose track of a
+            // switch command that was already written to the USB endpoint.
             await Task.Delay(Settle);
 
             while (DateTime.UtcNow - started < GiveUp)
             {
-                if (controller is not null)
+                if (active is not null)
                 {
-                    var now = await controller.ReadModeAsync();
+                    var now = await active.ReadModeAsync();
                     note?.Invoke($"{At()}  read back: {(now is { } n ? $"mode {n.Mode}, M keys {n.MKeys}" : "no answer on this handle")}");
                     if (now?.Mode == (byte)wanted) return true;
+
+                    if (cancel.IsCancellationRequested) return false;
+
+                    if (now is { } current)
+                    {
+                        // Handle is alive and answered with the old mode (e.g. firmware ignored/deferred 0x24
+                        // while a stick or button was actively moving): resend SwitchMode instead of passively polling.
+                        currentMKeys = Math.Min(current.MKeys, (byte)2);
+                        await Task.Delay(RetrySwitch, cancel);
+                        var resent = await active.SwitchModeAsync(wanted, currentMKeys);
+                        note?.Invoke($"{At()}  re-sent switch to {(byte)wanted} ({wanted}): {(resent ? "sent" : "NOT sent")}");
+                        if (resent)
+                        {
+                            await Task.Delay(Settle);
+                            continue;
+                        }
+                    }
                 }
 
-                // Not switched yet, or not answering: find the pad again.
-                controller?.Dispose();
-                await Task.Delay(LookAgain);
-                controller = await Task.Run(ClawController.Find);
-                note?.Invoke($"{At()}  looked for the pad again: {(controller is null ? "not there" : "found")}");
+                if (cancel.IsCancellationRequested) return false;
+
+                // Handle stopped answering or re-enumerated: find the pad again.
+                active?.Dispose();
+                active = null;
+                await Task.Delay(LookAgain, cancel);
+                active = await Task.Run(ClawController.Find, cancel);
+                note?.Invoke($"{At()}  looked for the pad again: {(active is null ? "not there" : "found")}");
+
+                if (active is not null)
+                {
+                    var now = await active.ReadModeAsync();
+                    if (now?.Mode == (byte)wanted) return true;
+
+                    if (now is { } current && !cancel.IsCancellationRequested)
+                    {
+                        currentMKeys = Math.Min(current.MKeys, (byte)2);
+                        var resent = await active.SwitchModeAsync(wanted, currentMKeys);
+                        note?.Invoke($"{At()}  re-sent switch to {(byte)wanted} ({wanted}): {(resent ? "sent" : "NOT sent")}");
+                        if (resent) await Task.Delay(Settle);
+                    }
+                }
             }
 
             return false;
         }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
         finally
         {
-            controller?.Dispose();
+            active?.Dispose();
         }
     }
 

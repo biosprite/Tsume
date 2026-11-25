@@ -45,6 +45,7 @@ public partial class App
     private static readonly Tsume.Core.Diagnostics.Journal Errors = new("errors");
 
     private readonly DispatcherTimer _idle =new() { Interval = TimeSpan.FromSeconds(12) };
+    private readonly CancellationTokenSource _appExit = new();
 
     private SingleInstance? _instance;
     private GlobalHotkey? _hotkey;
@@ -129,18 +130,26 @@ public partial class App
             return;
         }
 
-        // The panel has to sit in the UIAccess window band to show over the taskbar, Start, Search, and elevated
-        // windows. Only the helper, which runs as the system, can hand that to an unsigned program. A copy that starts
-        // without it — the Start-menu shortcut, or the sign-in entry when the helper was not yet granting it — asks the
-        // helper to start Tsume again with UIAccess and steps aside. This comes before the single-instance check so it
-        // does not hold the lock while the UIAccess copy takes over.
-        if (!UiAccess.IsGranted && !e.Args.Contains(RelaunchedSwitch) && StartAgainWithUiAccess(e.Args))
+        var quietly = e.Args.Contains(BackgroundSwitch);
+
+        // If a live instance already owns the mutex, toggle it (or exit quietly for --background) without
+        // asking the helper to spawn a redundant UIAccess copy on every Explorer Run launch or shortcut click.
+        if (SingleInstance.TrySignalExisting(toggle: !quietly))
         {
             Shutdown();
             return;
         }
 
-        var quietly = e.Args.Contains(BackgroundSwitch);
+        // The panel has to sit in the UIAccess window band to show over the taskbar, Start, Search, Xbox FSE, and
+        // elevated windows. Only the helper, which runs as the system, can hand that to an unsigned program. A copy
+        // that starts without it — the Start-menu shortcut, or the sign-in entry when the helper was not yet granting
+        // it — asks the helper to start Tsume again with UIAccess and steps aside. This comes before taking the
+        // single-instance lock so it does not hold the lock while the UIAccess copy takes over.
+        if (!UiAccess.IsGranted && !e.Args.Contains(RelaunchedSwitch) && StartAgainWithUiAccess(e.Args))
+        {
+            Shutdown();
+            return;
+        }
 
         _instance = new SingleInstance();
         if (!_instance.IsFirst)
@@ -155,6 +164,7 @@ public partial class App
         AppDomain.CurrentDomain.ProcessExit += (_, _) => _padIsolation?.RestoreSynchronously();
         SessionEnding += (_, _) => _padIsolation?.RestoreSynchronously();
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
+        SystemEvents.SessionSwitch += OnSessionSwitch;
 
         var panel = _panel = new PanelViewModel(
             SavedState.Load(),
@@ -242,6 +252,8 @@ public partial class App
     {
         _hotkey = new GlobalHotkey();
         _hotkey.Pressed += window.Toggle;
+        if (!_hotkey.IsRegistered)
+            _ = RetryHotkeyRegistrationAsync(_appExit.Token);
 
         _gamepad = new Gamepad();
         _gamepad.Summoned += () => Dispatcher.BeginInvoke(window.Toggle);
@@ -264,6 +276,11 @@ public partial class App
         SyncDedicatedActions();
 
         _padIsolation!.Pressed += window.Press;
+        _padIsolation.StateChanged += (capturing, captured) =>
+        {
+            _gamepad.SuppressNavigation = capturing;
+            _gamepad.SuppressBuiltInSlot = captured;
+        };
 
         // The controller is only read closely while the panel is open; on the Claw, temporarily
         // isolate it from the game behind the panel so inputs never move both at once.
@@ -299,9 +316,10 @@ public partial class App
 
         SyncHardwareButtons(window, panel);
 
-        // Fetch the profile right away if state.json predates ControlsProfile so hardware buttons work before first open.
+        // Fetch the profile right away if state.json predates ControlsProfile (or was reset) so hardware buttons
+        // work before first open — retrying briefly while the helper finishes early-boot WMI discovery.
         if (panel.Performance.Device.Controls is null)
-            _ = panel.Performance.RefreshAsync();
+            _ = EnsureControlsProfileLoadedAsync(panel, _appExit.Token);
 
         _instance!.ToggleRequested += () => Dispatcher.BeginInvoke(window.Toggle);
     }
@@ -486,14 +504,79 @@ public partial class App
         }
     });
 
+    private async Task EnsureControlsProfileLoadedAsync(PanelViewModel panel, CancellationToken stop)
+    {
+        for (var attempt = 1; attempt <= 15 && !stop.IsCancellationRequested; attempt++)
+        {
+            await panel.Performance.RefreshAsync();
+            if (panel.Performance.Device.Controls is not null) return;
+
+            try { await Task.Delay(TimeSpan.FromSeconds(2), stop); }
+            catch (OperationCanceledException) { return; }
+        }
+    }
+
+    private async Task RetryHotkeyRegistrationAsync(CancellationToken stop)
+    {
+        for (var attempt = 1; attempt <= 5 && !stop.IsCancellationRequested; attempt++)
+        {
+            try { await Task.Delay(TimeSpan.FromSeconds(3), stop); }
+            catch (OperationCanceledException) { return; }
+
+            if (_hotkey is null || _hotkey.IsRegistered) return;
+            _hotkey.EnsureRegistered();
+            if (_hotkey.IsRegistered) return;
+        }
+    }
+
     private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
     {
-        if (e.Mode == PowerModes.Suspend) _padIsolation?.RestoreSynchronously();
+        if (e.Mode == PowerModes.Suspend)
+        {
+            // Pause native WMI/XInput/WinMM listeners cleanly before S3/S4 so nothing races PnP/WMI teardown.
+            _gamepad?.Suspend();
+            _buttons?.Suspend();
+            _gameBarHook?.ResetState();
+            _dedicatedActions?.ResetState();
+            _padIsolation?.RestoreSynchronously();
+            Dispatcher.BeginInvoke(() => _window?.ForceCloseForSuspend());
+        }
+        else if (e.Mode == PowerModes.Resume)
+        {
+            _gamepad?.Resume();
+            _buttons?.Resume();
+            Dispatcher.BeginInvoke(() =>
+            {
+                _hotkey?.EnsureRegistered();
+                _gameBarHook?.ResetAndReinstall();
+                _dedicatedActions?.ResetAndReinstall();
+            });
+        }
+    }
+
+    private void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
+    {
+        if (e.Reason == SessionSwitchReason.SessionLock)
+        {
+            _gameBarHook?.ResetState();
+            _dedicatedActions?.ResetState();
+        }
+        else if (e.Reason == SessionSwitchReason.SessionUnlock)
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                _hotkey?.EnsureRegistered();
+                _gameBarHook?.ResetAndReinstall();
+                _dedicatedActions?.ResetAndReinstall();
+            });
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _appExit.Cancel();
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        SystemEvents.SessionSwitch -= OnSessionSwitch;
         _rtssDrag?.Dispose();
         _padIsolation?.Dispose();
         _panel?.Dispose();
@@ -503,6 +586,7 @@ public partial class App
         _gamepad?.Dispose();
         _hotkey?.Dispose();
         _instance?.Dispose();
+        _appExit.Dispose();
 
         base.OnExit(e);
     }

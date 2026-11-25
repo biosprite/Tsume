@@ -22,7 +22,9 @@ public sealed class ChargeKeeper(IDevice device)
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(Memory)!);
-                File.WriteAllText(Memory, HelperJson.Write(chosen));
+                var temp = Memory + ".tsume-tmp";
+                File.WriteAllText(temp, HelperJson.Write(chosen));
+                File.Move(temp, Memory, overwrite: true);
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
@@ -53,7 +55,7 @@ public sealed class ChargeKeeper(IDevice device)
                 device.SetChargeLimit(chosen.Percent);
                 Log.Write($"On {occasion} the firmware's charge limit was {(found is { } percent ? $"{percent} %" : "off")}. Put back {chosen.Percent} %.");
             }
-            catch (Exception error) when (error is FirmwareException or ArgumentOutOfRangeException or System.Management.ManagementException)
+            catch (Exception error) when (error is FirmwareException or ArgumentOutOfRangeException or System.Management.ManagementException or System.Runtime.InteropServices.COMException)
             {
                 Log.Write($"Could not restore the charge limit on {occasion}: {error.Message}");
             }

@@ -13,18 +13,20 @@ public sealed class PanelViewModel : IDisposable
 {
     private readonly DispatcherTimer _tick = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly RtssOverlayService _rtssService;
+    private readonly PadIsolation? _padIsolation;
 
     /// <param name="dismiss">Closes the panel and completes once it is fully off screen.</param>
     /// <param name="quit">Exits Tsume.</param>
     public PanelViewModel(SavedState state, Func<Task> dismiss, Action quit, PadIsolation? padIsolation = null)
     {
         var helper = new HelperClient();
+        _padIsolation = padIsolation;
 
         Status = new StatusViewModel();
         Performance = new PerformanceViewModel(helper, state);
         Levels = new LevelsViewModel();
         Actions = new ActionsViewModel(dismiss);
-        Power = new PowerViewModel(dismiss);
+        Power = new PowerViewModel(dismiss, padIsolation is null ? null : () => padIsolation.EnsureRestoredAsync());
 
         _rtssService = new RtssOverlayService(helper, state);
 
@@ -96,7 +98,19 @@ public sealed class PanelViewModel : IDisposable
         Rtss.RefreshTile();
         _tick.Start();
 
-        await Task.WhenAll(Levels.RefreshAsync(), Performance.RefreshAsync(), Lighting.RefreshAsync(), PadMode.RefreshAsync());
+        await Task.WhenAll(Levels.RefreshAsync(), Performance.RefreshAsync(), RefreshControllerTilesAsync());
+    }
+
+    /// <summary>
+    /// Waits for any in-flight open-time pad isolation switch before reading lighting/mode over vendor HID,
+    /// so tile refreshes never delay switching the Claw out of Gamepad mode.
+    /// </summary>
+    private async Task RefreshControllerTilesAsync()
+    {
+        if (_padIsolation is not null)
+            await _padIsolation.WaitForOpenCaptureAsync();
+
+        await Task.WhenAll(Lighting.RefreshAsync(), PadMode.RefreshAsync());
     }
 
     /// <summary>Called once the panel has gone: stops all polling.</summary>

@@ -116,6 +116,20 @@ public sealed class AidaSensorBridge : IDisposable
 
         if (lastError == ErrorAlreadyExists)
         {
+            if (IsOrphanedTsumeMapping(handle))
+            {
+                var reclaimedView = MapViewOfFile(handle, FileMapAllAccess, 0, 0, MappingSize);
+                if (reclaimedView != 0)
+                {
+                    _mapping = handle;
+                    _view = reclaimedView;
+                    if (_conflict != AidaConflictKind.None)
+                        _conflict = AidaConflictKind.None;
+                    Log.Write($"reclaimed orphaned {MappingName} mapping");
+                    return true;
+                }
+            }
+
             var kind = IdentifyExistingOwner(handle, rtssFolder);
             CloseHandle(handle);
 
@@ -245,25 +259,42 @@ public sealed class AidaSensorBridge : IDisposable
           .Append("</").Append(tag).Append('>');
     }
 
-    private static unsafe AidaConflictKind IdentifyExistingOwner(nint existingMapping, string? rtssFolder)
+    /// <summary>
+    /// True when an existing mapping already contains Tsume's own sensor payload (e.g. left open briefly by
+    /// RTSS OverlayEditor after an abrupt crash), so Tsume can safely reclaim it instead of flagging a conflict.
+    /// </summary>
+    private static bool IsOrphanedTsumeMapping(nint existingMapping)
     {
-        var snippet = "";
+        var snippet = ReadSnippet(existingMapping);
+        return snippet.Contains("<id>TSUME_OVERLAY_LEVEL</id>", StringComparison.Ordinal)
+            && !snippet.Contains("WINHANCED_", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static unsafe string ReadSnippet(nint existingMapping)
+    {
         var readView = MapViewOfFile(existingMapping, FileMapRead, 0, 0, 0);
-        if (readView != 0)
+        if (readView == 0) return "";
+
+        try
         {
-            try
-            {
-                var ptr = (byte*)readView;
-                var len = 0;
-                while (len < 512 && ptr[len] != 0) len++;
-                if (len > 0) snippet = Encoding.ASCII.GetString(ptr, len);
-            }
-            catch { }
-            finally
-            {
-                UnmapViewOfFile(readView);
-            }
+            var ptr = (byte*)readView;
+            var len = 0;
+            while (len < 512 && ptr[len] != 0) len++;
+            return len > 0 ? Encoding.ASCII.GetString(ptr, len) : "";
         }
+        catch
+        {
+            return "";
+        }
+        finally
+        {
+            UnmapViewOfFile(readView);
+        }
+    }
+
+    private static AidaConflictKind IdentifyExistingOwner(nint existingMapping, string? rtssFolder)
+    {
+        var snippet = ReadSnippet(existingMapping);
 
         if (snippet.Contains("WINHANCED_", StringComparison.OrdinalIgnoreCase)
             || IsProcessRunning("Winhanced")

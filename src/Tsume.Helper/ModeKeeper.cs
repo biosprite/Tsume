@@ -23,7 +23,9 @@ public sealed class ModeKeeper(IDevice device)
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(Memory)!);
-                File.WriteAllText(Memory, HelperJson.Write(chosen));
+                var temp = Memory + ".tsume-tmp";
+                File.WriteAllText(temp, HelperJson.Write(chosen));
+                File.Move(temp, Memory, overwrite: true);
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
@@ -57,7 +59,7 @@ public sealed class ModeKeeper(IDevice device)
                 device.SetPerformance(chosen.Mode, manual, chosen.Custom);
                 Log.Write($"On {occasion} the firmware had {mode}, {limits}. Put back {chosen.Mode}, {wanted}.");
             }
-            catch (Exception error) when (error is FirmwareException or ArgumentOutOfRangeException or System.Management.ManagementException)
+            catch (Exception error) when (error is FirmwareException or ArgumentOutOfRangeException or System.Management.ManagementException or System.Runtime.InteropServices.COMException)
             {
                 Log.Write($"Could not restore the chosen mode on {occasion}: {error.Message}");
             }

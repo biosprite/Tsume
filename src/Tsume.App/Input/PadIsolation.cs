@@ -31,6 +31,19 @@ public sealed class PadIsolation : IDisposable
     private static readonly TimeSpan ReleasePoll = TimeSpan.FromMilliseconds(10);
     private static readonly TimeSpan NavInterval = TimeSpan.FromMilliseconds(16);
 
+    /// <summary>How long to wait for sticks/buttons to return to neutral before switching Mode 1 -> Mode 4.</summary>
+    private static readonly TimeSpan PreCaptureNeutralCap = TimeSpan.FromMilliseconds(600);
+    private static readonly TimeSpan NeutralPoll = TimeSpan.FromMilliseconds(8);
+
+    /// <summary>Idle windows in Mode 4 before flushing any latched XInput/HID report from a mid-input switch.</summary>
+    private const long LatchedFlushLeftIdleMs = 60;
+    private const long LatchedFlushRightIdleMs = 80;
+    private static readonly TimeSpan LatchedFlushPoll = TimeSpan.FromMilliseconds(20);
+    private static readonly TimeSpan LatchedFlushRetryBackoff = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan LatchedNeutralWaitCap = TimeSpan.FromMilliseconds(100);
+    private const short LatchedStickDeadzone = 8_000;
+    private const byte LatchedTriggerDeadzone = 40;
+
     private static readonly Journal Errors = new("errors");
 
     private readonly Dispatcher _dispatcher;
@@ -69,15 +82,24 @@ public sealed class PadIsolation : IDisposable
 
     // Shared coordination state across UI thread and background HID transitions.
     private volatile bool _panelOpen;
+    private volatile bool _isCapturing;
     private volatile bool _isCaptured;
     private volatile bool _hooksActive;
     private volatile bool _userChoseCursorWhileOpen;
     private volatile bool _anyButtonHeld;
     private volatile bool _disposed;
+    private long _lastClawInputTick;
+    private long _lastRightStickTick;
+    private TaskCompletionSource _openCaptureDone = CreateCompletedWaiter();
+    private CancellationTokenSource? _captureCancel;
     private CancellationTokenSource? _releaseCancel;
+    private CancellationTokenSource? _flushCancel;
 
     /// <summary>Raised on the UI thread when an intercepted Claw input maps to a panel navigation button.</summary>
     public event Action<PadButton>? Pressed;
+
+    /// <summary>Raised whenever capture-in-progress or captured state changes.</summary>
+    public event Action<bool, bool>? StateChanged;
 
     public PadIsolation(Dispatcher dispatcher)
     {
@@ -95,6 +117,12 @@ public sealed class PadIsolation : IDisposable
     /// <summary>True while the Claw pad is temporarily held in Desktop mode on behalf of Gamepad mode.</summary>
     public bool IsCaptured => _isCaptured;
 
+    /// <summary>
+    /// Completes once the current open-time capture attempt has settled (captured, skipped, or closed),
+    /// so panel tile refreshes never contend with the isolation switch over the vendor HID pipe.
+    /// </summary>
+    public Task WaitForOpenCaptureAsync() => Volatile.Read(ref _openCaptureDone).Task;
+
     /// <summary>Called when the overlay opens or starts closing.</summary>
     public void SetPanelOpen(bool open)
     {
@@ -105,10 +133,24 @@ public sealed class PadIsolation : IDisposable
         if (open)
         {
             CancelPendingRelease();
+            CancelPendingFlush();
+
+            if (!_isCaptured && !_userChoseCursorWhileOpen)
+            {
+                _isCapturing = true;
+                var next = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                Interlocked.Exchange(ref _openCaptureDone, next).TrySetResult();
+                NotifyStateChanged();
+            }
         }
         else
         {
             _userChoseCursorWhileOpen = false;
+            _isCapturing = false;
+            CancelPendingCapture();
+            CancelPendingFlush();
+            Volatile.Read(ref _openCaptureDone).TrySetResult();
+            NotifyStateChanged();
         }
 
         _ = Task.Run(ReconcileAsync);
@@ -148,10 +190,12 @@ public sealed class PadIsolation : IDisposable
             // Captured (hardware is already in Cursor) -> user explicitly wants Cursor mode.
             if (_isCaptured && wanted == PadMode.Cursor)
             {
+                CancelPendingFlush();
                 await WaitForButtonsReleasedAsync(CancellationToken.None);
                 _isCaptured = false;
                 _userChoseCursorWhileOpen = true;
                 await _dispatcher.InvokeAsync(UninstallHooks);
+                NotifyStateChanged();
                 return true;
             }
 
@@ -166,20 +210,57 @@ public sealed class PadIsolation : IDisposable
                 await ControllerMode.ReleasedAsync();
                 _userChoseCursorWhileOpen = false;
 
-                await _dispatcher.InvokeAsync(InstallHooks);
+                await _dispatcher.InvokeAsync(InstallHooks, DispatcherPriority.Send);
                 var ok = current == PadMode.Cursor || await ControllerMode.SetAsync(PadMode.Cursor);
                 if (!ok)
                 {
-                    await _dispatcher.InvokeAsync(UninstallHooks);
+                    await _dispatcher.InvokeAsync(UninstallHooks, DispatcherPriority.Send);
                     return false;
                 }
 
                 _isCaptured = true;
+                NotifyStateChanged();
                 return true;
             }
 
             _userChoseCursorWhileOpen = _panelOpen && wanted == PadMode.Cursor;
             return await ControllerMode.SetAsync(wanted);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Asynchronously waits for any in-flight capture/release transition to finish and restores Gamepad mode
+    /// if still captured. Call before initiating Hibernate/Restart/Shutdown so the controller never wakes in Cursor mode.
+    /// </summary>
+    public async Task EnsureRestoredAsync(int timeoutMs = 2000)
+    {
+        if (_disposed) return;
+
+        _panelOpen = false;
+        _isCapturing = false;
+        CancelPendingCapture();
+        CancelPendingRelease();
+        CancelPendingFlush();
+        Volatile.Read(ref _openCaptureDone).TrySetResult();
+        NotifyStateChanged();
+
+        if (!await _gate.WaitAsync(timeoutMs)) return;
+        try
+        {
+            if (!_isCaptured) return;
+
+            await ControllerMode.SetAsync(PadMode.Gamepad);
+            _isCaptured = false;
+            await _dispatcher.InvokeAsync(UninstallHooks);
+            NotifyStateChanged();
+        }
+        catch (Exception error)
+        {
+            Errors.Write($"PadIsolation async restore failed: {error}");
         }
         finally
         {
@@ -194,7 +275,11 @@ public sealed class PadIsolation : IDisposable
     public void RestoreSynchronously()
     {
         _panelOpen = false;
-        CancelPendingRelease();
+        _isCapturing = false;
+        CancelPendingCapture();
+        CancelPendingFlush();
+        Volatile.Read(ref _openCaptureDone).TrySetResult();
+        NotifyStateChanged();
 
         if (_dispatcher.CheckAccess())
         {
@@ -208,15 +293,39 @@ public sealed class PadIsolation : IDisposable
         }
 
         if (!_isCaptured) return;
-        _isCaptured = false;
+
+        // Avoid deadlocking the UI thread if a background transition is awaiting _dispatcher.InvokeAsync under _gate.
+        var gateTimeoutMs = _dispatcher.CheckAccess() ? 0 : 1500;
+        var locked = false;
+        try
+        {
+            locked = _gate.Wait(gateTimeoutMs);
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
+        if (!locked)
+        {
+            // A background ReconcileAsync already holds _gate and will see _panelOpen == false and restore Gamepad mode.
+            return;
+        }
 
         try
         {
+            if (!_isCaptured) return;
+            _isCaptured = false;
+            NotifyStateChanged();
             Task.Run(() => ControllerMode.SetAsync(PadMode.Gamepad)).Wait(TimeSpan.FromMilliseconds(1500));
         }
         catch (Exception error)
         {
             Errors.Write($"PadIsolation restore failed: {error}");
+        }
+        finally
+        {
+            _gate.Release();
         }
     }
 
@@ -229,9 +338,20 @@ public sealed class PadIsolation : IDisposable
             {
                 if (_panelOpen && !_isCaptured)
                 {
-                    if (_userChoseCursorWhileOpen) return;
+                    var waiter = Volatile.Read(ref _openCaptureDone);
+                    if (_userChoseCursorWhileOpen)
+                    {
+                        _isCapturing = false;
+                        waiter.TrySetResult();
+                        NotifyStateChanged();
+                        return;
+                    }
 
                     var captured = await CaptureLockedAsync();
+                    _isCapturing = false;
+                    waiter.TrySetResult();
+                    NotifyStateChanged();
+
                     if (!captured) return;
                     // Loop once more in case the panel closed while we were switching.
                     continue;
@@ -244,11 +364,17 @@ public sealed class PadIsolation : IDisposable
                     continue;
                 }
 
+                _isCapturing = false;
+                Volatile.Read(ref _openCaptureDone).TrySetResult();
+                NotifyStateChanged();
                 return;
             }
         }
         catch (Exception error)
         {
+            _isCapturing = false;
+            Volatile.Read(ref _openCaptureDone).TrySetResult();
+            NotifyStateChanged();
             Errors.Write($"PadIsolation transition failed: {error}");
         }
         finally
@@ -259,32 +385,250 @@ public sealed class PadIsolation : IDisposable
 
     private async Task<bool> CaptureLockedAsync()
     {
-        var before = await ReadRawModeAsync();
-        if (before is null || before.Value.Mode == (byte)PadMode.Cursor) return false;
-        if (!_panelOpen || _disposed) return false;
+        using var cancel = new CancellationTokenSource();
+        Interlocked.Exchange(ref _captureCancel, cancel);
 
-        await _dispatcher.InvokeAsync(InstallHooks);
-        if (!_hooksActive) return false;
+        _isCapturing = true;
+        NotifyStateChanged();
 
-        var switched = await ControllerMode.SetAsync(PadMode.Cursor);
-        if (!switched)
+        try
         {
-            await _dispatcher.InvokeAsync(UninstallHooks);
+            if (!_panelOpen || _disposed) return false;
+
+            var controller = await Task.Run(ClawController.Find, cancel.Token);
+            if (controller is null) return false;
+
+            (byte Mode, byte MKeys)? before;
+            try
+            {
+                before = await controller.ReadModeAsync();
+                if (before is null || before.Value.Mode == (byte)PadMode.Cursor)
+                {
+                    controller.Dispose();
+                    return false;
+                }
+
+                if (!_panelOpen || _disposed || cancel.IsCancellationRequested)
+                {
+                    controller.Dispose();
+                    return false;
+                }
+
+                // If a stick, trigger, or button is deflected right as Tsume opens (e.g. fast-scrolling in
+                // Xbox FSE or turning a game camera), switching Mode 1 -> Mode 4 immediately makes the Claw
+                // firmware stop sending XInput reports without sending a neutral report first, latching that
+                // non-zero state in xusb22.sys / InputHost. Wait briefly for the thumb to lift or cross center
+                // so the controller itself emits a clean zeroed XInput report before entering Mode 4.
+                if (ReadBuiltInGamepadInput() != BuiltInInput.None)
+                {
+                    var deadline = DateTime.UtcNow + PreCaptureNeutralCap;
+                    while (DateTime.UtcNow < deadline && _panelOpen && !_disposed && !cancel.IsCancellationRequested)
+                    {
+                        await Task.Delay(NeutralPoll, cancel.Token);
+                        if (ReadBuiltInGamepadInput() == BuiltInInput.None) break;
+                    }
+                }
+
+                if (!_panelOpen || _disposed || cancel.IsCancellationRequested)
+                {
+                    controller.Dispose();
+                    return false;
+                }
+
+                await _dispatcher.InvokeAsync(InstallHooks, DispatcherPriority.Send);
+                if (!_hooksActive)
+                {
+                    controller.Dispose();
+                    return false;
+                }
+            }
+            catch
+            {
+                controller.Dispose();
+                throw;
+            }
+
+            // Ownership of controller transfers to SwitchOnHandleAsync (which always disposes it).
+            var switched = await ControllerMode.SwitchOnHandleAsync(
+                controller, before.Value.MKeys, PadMode.Cursor, cancel: cancel.Token);
+            if (!switched)
+            {
+                await _dispatcher.InvokeAsync(UninstallHooks, DispatcherPriority.Send);
+                return false;
+            }
+
+            _isCaptured = true;
+
+            if (_panelOpen && ReadBuiltInGamepadInput() != BuiltInInput.None)
+                StartLatchedInputFlush();
+
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            if (_hooksActive && !_isCaptured)
+                await _dispatcher.InvokeAsync(UninstallHooks, DispatcherPriority.Send);
             return false;
         }
-
-        _isCaptured = true;
-        return true;
+        finally
+        {
+            Interlocked.CompareExchange(ref _captureCancel, null, cancel);
+        }
     }
 
-    private static async Task<(byte Mode, byte MKeys)?> ReadRawModeAsync()
+    private void StartLatchedInputFlush()
     {
-        using var controller = ClawController.Find();
-        return controller is null ? null : await controller.ReadModeAsync();
+        CancelPendingFlush();
+        var cancel = new CancellationTokenSource();
+        Interlocked.Exchange(ref _flushCancel, cancel);
+        _ = Task.Run(() => FlushLatchedInputAsync(cancel));
+    }
+
+    /// <summary>
+    /// If switching Mode 1 -> Mode 4 while a stick was still held (past <see cref="PreCaptureNeutralCap"/>
+    /// or re-deflected during the ~30 ms USB switch) left the Claw's persistent XInput/HID gamepad endpoint
+    /// reporting a non-zero stick or button state, keeps retrying on idle pauses until a brief
+    /// Gamepad -> neutral -> Cursor bounce clears it through <c>xusb22.sys</c> / <c>InputHost</c>.
+    /// </summary>
+    private async Task FlushLatchedInputAsync(CancellationTokenSource cancel)
+    {
+        var token = cancel.Token;
+
+        try
+        {
+            while (!token.IsCancellationRequested && _panelOpen && _isCaptured)
+            {
+                var input = ReadBuiltInGamepadInput();
+                if (input == BuiltInInput.None) return;
+
+                var nowTick = Environment.TickCount64;
+                var readyToTry = input == BuiltInInput.LeftOrButtons
+                    ? !_anyButtonHeld && nowTick - Volatile.Read(ref _lastClawInputTick) >= LatchedFlushLeftIdleMs
+                    : nowTick - Volatile.Read(ref _lastRightStickTick) >= LatchedFlushRightIdleMs;
+
+                if (readyToTry)
+                {
+                    await _gate.WaitAsync(token);
+                    var shouldBackoff = false;
+                    try
+                    {
+                        if (token.IsCancellationRequested || !_panelOpen || !_isCaptured) return;
+                        if (ReadBuiltInGamepadInput() == BuiltInInput.None) return;
+
+                        if (!await ControllerMode.SetAsync(PadMode.Gamepad, cancel: token))
+                        {
+                            shouldBackoff = true;
+                        }
+                        else
+                        {
+                            // Give the controller a brief moment in Mode 1 to emit a fresh neutral XInput/HID report.
+                            var deadline = DateTime.UtcNow + LatchedNeutralWaitCap;
+                            while (DateTime.UtcNow < deadline && ReadBuiltInGamepadInput() != BuiltInInput.None)
+                                await Task.Delay(NeutralPoll);
+
+                            var cleared = ReadBuiltInGamepadInput() == BuiltInInput.None;
+
+                            if (!_panelOpen || _disposed)
+                            {
+                                // Panel closed during the brief bounce: stay cleanly in Gamepad mode.
+                                _isCaptured = false;
+                                await _dispatcher.InvokeAsync(UninstallHooks, DispatcherPriority.Send);
+                                NotifyStateChanged();
+                                return;
+                            }
+
+                            if (!await ControllerMode.SetAsync(PadMode.Cursor))
+                            {
+                                _isCaptured = false;
+                                await _dispatcher.InvokeAsync(UninstallHooks, DispatcherPriority.Send);
+                                NotifyStateChanged();
+                                return;
+                            }
+
+                            if (cleared) return;
+                            shouldBackoff = true;
+                        }
+                    }
+                    finally
+                    {
+                        _gate.Release();
+                    }
+
+                    if (shouldBackoff)
+                    {
+                        await Task.Delay(LatchedFlushRetryBackoff, token);
+                        continue;
+                    }
+                }
+
+                await Task.Delay(LatchedFlushPoll, token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Panel closed, user chose Cursor mode, or a new open cancelled the flush.
+        }
+        catch (Exception error)
+        {
+            Errors.Write($"PadIsolation latched input flush failed: {error}");
+        }
+        finally
+        {
+            Interlocked.CompareExchange(ref _flushCancel, null, cancel);
+            cancel.Dispose();
+        }
+    }
+
+    private enum BuiltInInput
+    {
+        None,
+        RightStick,
+        LeftOrButtons,
+    }
+
+    /// <summary>
+    /// Checks whether the built-in Claw gamepad interface (slot 0) is reporting any pressed button,
+    /// trigger, or deflected stick across XInput or WinMM HID.
+    /// </summary>
+    private static BuiltInInput ReadBuiltInGamepadInput()
+    {
+        if (XInput.XInputGetState(0, out var x) == XInput.ERROR_SUCCESS)
+        {
+            if (x.Buttons != 0
+                || x.LeftTrigger >= LatchedTriggerDeadzone
+                || x.RightTrigger >= LatchedTriggerDeadzone
+                || Math.Abs((int)x.ThumbLX) > LatchedStickDeadzone
+                || Math.Abs((int)x.ThumbLY) > LatchedStickDeadzone)
+            {
+                return BuiltInInput.LeftOrButtons;
+            }
+
+            if (Math.Abs((int)x.ThumbRX) > LatchedStickDeadzone
+                || Math.Abs((int)x.ThumbRY) > LatchedStickDeadzone)
+            {
+                return BuiltInInput.RightStick;
+            }
+        }
+
+        var joy = WinMm.JOYINFOEX.Create();
+        if (WinMm.joyGetPosEx(0, ref joy) == WinMm.JOYERR_NOERROR)
+        {
+            const int center = 32_767;
+            if (joy.Buttons != 0
+                || joy.Pov < WinMm.JOY_POVCENTERED
+                || Math.Abs((int)joy.X - center) > LatchedStickDeadzone
+                || Math.Abs((int)joy.Y - center) > LatchedStickDeadzone)
+            {
+                return BuiltInInput.LeftOrButtons;
+            }
+        }
+
+        return BuiltInInput.None;
     }
 
     private async Task ReleaseLockedAsync()
     {
+        CancelPendingFlush();
         using var cancel = new CancellationTokenSource();
         Interlocked.Exchange(ref _releaseCancel, cancel);
 
@@ -299,7 +643,8 @@ public sealed class PadIsolation : IDisposable
 
             await ControllerMode.SetAsync(PadMode.Gamepad);
             _isCaptured = false;
-            await _dispatcher.InvokeAsync(UninstallHooks);
+            await _dispatcher.InvokeAsync(UninstallHooks, DispatcherPriority.Send);
+            NotifyStateChanged();
         }
         catch (OperationCanceledException)
         {
@@ -334,10 +679,31 @@ public sealed class PadIsolation : IDisposable
         }
     }
 
+    private void CancelPendingCapture()
+    {
+        try { Volatile.Read(ref _captureCancel)?.Cancel(); }
+        catch (ObjectDisposedException) { }
+    }
+
     private void CancelPendingRelease()
     {
         try { Volatile.Read(ref _releaseCancel)?.Cancel(); }
         catch (ObjectDisposedException) { }
+    }
+
+    private void CancelPendingFlush()
+    {
+        try { Volatile.Read(ref _flushCancel)?.Cancel(); }
+        catch (ObjectDisposedException) { }
+    }
+
+    private void NotifyStateChanged() => StateChanged?.Invoke(_isCapturing, _isCaptured);
+
+    private static TaskCompletionSource CreateCompletedWaiter()
+    {
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        tcs.SetResult();
+        return tcs;
     }
 
     private void InstallHooks()
@@ -400,6 +766,9 @@ public sealed class PadIsolation : IDisposable
         _externalMouseUntil = 0;
         _externalButtonDown = false;
         _anyButtonHeld = false;
+        var nowTick = Environment.TickCount64;
+        Volatile.Write(ref _lastClawInputTick, nowTick);
+        Volatile.Write(ref _lastRightStickTick, nowTick);
     }
 
     private void NudgeCursorAwayFromEdges()
@@ -521,6 +890,7 @@ public sealed class PadIsolation : IDisposable
         switch (message)
         {
             case User32.WM_MOUSEMOVE:
+                Volatile.Write(ref _lastClawInputTick, Environment.TickCount64);
                 if (User32.GetCursorPos(out var cur))
                 {
                     var now = DateTime.UtcNow;
@@ -535,6 +905,7 @@ public sealed class PadIsolation : IDisposable
                 return 1;
 
             case User32.WM_LBUTTONDOWN:
+                Volatile.Write(ref _lastClawInputTick, Environment.TickCount64);
                 if (!_leftDown)
                 {
                     _leftDown = true;
@@ -544,11 +915,13 @@ public sealed class PadIsolation : IDisposable
                 return 1;
 
             case User32.WM_LBUTTONUP:
+                Volatile.Write(ref _lastClawInputTick, Environment.TickCount64);
                 _leftDown = false;
                 UpdateHeldFlag();
                 return 1;
 
             case User32.WM_RBUTTONDOWN:
+                Volatile.Write(ref _lastClawInputTick, Environment.TickCount64);
                 if (!_rightDown)
                 {
                     _rightDown = true;
@@ -558,17 +931,24 @@ public sealed class PadIsolation : IDisposable
                 return 1;
 
             case User32.WM_RBUTTONUP:
+                Volatile.Write(ref _lastClawInputTick, Environment.TickCount64);
                 _rightDown = false;
                 UpdateHeldFlag();
                 return 1;
 
             // Swallow right-stick scroll, back/forward, and middle click so nothing leaks to the game behind.
-            case User32.WM_MBUTTONDOWN:
-            case User32.WM_MBUTTONUP:
             case User32.WM_MOUSEWHEEL:
             case User32.WM_MOUSEHWHEEL:
+                var wheelTick = Environment.TickCount64;
+                Volatile.Write(ref _lastClawInputTick, wheelTick);
+                Volatile.Write(ref _lastRightStickTick, wheelTick);
+                return 1;
+
+            case User32.WM_MBUTTONDOWN:
+            case User32.WM_MBUTTONUP:
             case User32.WM_XBUTTONDOWN:
             case User32.WM_XBUTTONUP:
+                Volatile.Write(ref _lastClawInputTick, Environment.TickCount64);
                 return 1;
 
             default:
@@ -611,6 +991,7 @@ public sealed class PadIsolation : IDisposable
         {
             if (isDown && !modified)
             {
+                Volatile.Write(ref _lastClawInputTick, Environment.TickCount64);
                 if ((_heldKeys & direction) == 0)
                 {
                     _heldKeys |= direction;
@@ -623,6 +1004,7 @@ public sealed class PadIsolation : IDisposable
 
             if (isUp && (_heldKeys & direction) != 0)
             {
+                Volatile.Write(ref _lastClawInputTick, Environment.TickCount64);
                 _heldKeys &= ~direction;
                 UpdateHeldFlag();
                 return 1;
@@ -635,6 +1017,7 @@ public sealed class PadIsolation : IDisposable
         {
             if (isDown && !modified)
             {
+                Volatile.Write(ref _lastClawInputTick, Environment.TickCount64);
                 if (!_confirmKeyDown)
                 {
                     _confirmKeyDown = true;
@@ -646,6 +1029,7 @@ public sealed class PadIsolation : IDisposable
 
             if (isUp && _confirmKeyDown)
             {
+                Volatile.Write(ref _lastClawInputTick, Environment.TickCount64);
                 _confirmKeyDown = false;
                 UpdateHeldFlag();
                 return 1;
@@ -658,6 +1042,7 @@ public sealed class PadIsolation : IDisposable
         {
             if (isDown && !modified)
             {
+                Volatile.Write(ref _lastClawInputTick, Environment.TickCount64);
                 if (!_backKeyDown)
                 {
                     _backKeyDown = true;
@@ -669,6 +1054,7 @@ public sealed class PadIsolation : IDisposable
 
             if (isUp && _backKeyDown)
             {
+                Volatile.Write(ref _lastClawInputTick, Environment.TickCount64);
                 _backKeyDown = false;
                 UpdateHeldFlag();
                 return 1;
@@ -682,6 +1068,7 @@ public sealed class PadIsolation : IDisposable
         {
             if (isDown && !modified)
             {
+                Volatile.Write(ref _lastClawInputTick, Environment.TickCount64);
                 _tabKeyDown = true;
                 UpdateHeldFlag();
                 return 1;
@@ -689,6 +1076,7 @@ public sealed class PadIsolation : IDisposable
 
             if (isUp && _tabKeyDown)
             {
+                Volatile.Write(ref _lastClawInputTick, Environment.TickCount64);
                 _tabKeyDown = false;
                 UpdateHeldFlag();
                 return 1;

@@ -8,12 +8,20 @@ namespace Tsume.App.ViewModels;
 public sealed class PowerViewModel : LayerViewModel
 {
     /// <param name="dismiss">Closes the panel and completes once it is fully off screen.</param>
-    public PowerViewModel(Func<Task> dismiss)
+    /// <param name="beforePowerAction">Optional async hook (e.g. restoring captured gamepad mode) run before leaving the session.</param>
+    public PowerViewModel(Func<Task> dismiss, Func<Task>? beforePowerAction = null)
     {
-        Hibernate = new Command(async () => { await dismiss(); PowerActions.Hibernate(); });
-        Lock     = new Command(async () => { await dismiss(); PowerActions.Lock(); });
-        Restart  = new Command(async () => { await dismiss(); PowerActions.Restart(); });
-        ShutDown = new Command(async () => { await dismiss(); PowerActions.ShutDown(); });
+        async Task RunAfterDismiss(Action action)
+        {
+            await dismiss();
+            if (beforePowerAction is not null) await beforePowerAction();
+            action();
+        }
+
+        Hibernate = new Command(() => _ = RunAfterDismiss(PowerActions.Hibernate));
+        Lock      = new Command(() => _ = RunAfterDismiss(PowerActions.Lock));
+        Restart   = new Command(() => _ = RunAfterDismiss(PowerActions.Restart));
+        ShutDown  = new Command(() => _ = RunAfterDismiss(PowerActions.ShutDown));
     }
 
     public ICommand Hibernate { get; }

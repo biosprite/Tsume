@@ -30,6 +30,7 @@ public sealed class Gamepad : IDisposable
 
     private static readonly TimeSpan IdlePoll = TimeSpan.FromMilliseconds(60);
     private static readonly TimeSpan ActivePoll = TimeSpan.FromMilliseconds(16);
+    private const long ResumeSettleMs = 2500;
 
     private sealed record PadActionBinding(
         DedicatedAction Action,
@@ -37,9 +38,12 @@ public sealed class Gamepad : IDisposable
         byte[] KeyboardCodes);
 
     private readonly CancellationTokenSource _stop = new();
+    private readonly ManualResetEventSlim _active = new(initialState: true);
     private readonly Thread _thread;
     private readonly HashSet<DedicatedAction> _latchedActions = [];
     private volatile PadActionBinding[] _actionBindings = [];
+    private volatile bool _resetOnResume;
+    private long _resumeAfterTick;
 
     /// <summary>Raised on a background thread when the summon chord is pressed.</summary>
     public event Action? Summoned;
@@ -52,6 +56,19 @@ public sealed class Gamepad : IDisposable
 
     /// <summary>True while the panel is open and wants button presses.</summary>
     public volatile bool IsNavigating;
+
+    /// <summary>
+    /// True during the brief Claw Gamepad -> Desktop capture transition so pre-switch gamepad motion
+    /// is not double-fed into the panel alongside the incoming Desktop-mode hooks.
+    /// </summary>
+    public volatile bool SuppressNavigation;
+
+    /// <summary>
+    /// True while <see cref="PadIsolation"/> holds the built-in Claw pad in Desktop mode: skips slot 0
+    /// (the built-in pad) so any latched XInput/HID state cannot phantom-scroll Tsume, while leaving
+    /// external controllers on slots 1–3 active.
+    /// </summary>
+    public volatile bool SuppressBuiltInSlot;
 
     public void SetActionBindings(IReadOnlyList<DedicatedActionBinding> bindings)
     {
@@ -100,13 +117,53 @@ public sealed class Gamepad : IDisposable
         _thread.Start();
     }
 
+    /// <summary>Pauses XInput/WinMM polling across sleep/hibernate so USB/HID teardown is not raced.</summary>
+    public void Suspend()
+    {
+        _resetOnResume = true;
+        try { _active.Reset(); }
+        catch (ObjectDisposedException) { }
+    }
+
+    /// <summary>Resumes polling after a brief settle period so USB/XInput controllers finish re-enumerating.</summary>
+    public void Resume()
+    {
+        _resetOnResume = true;
+        Volatile.Write(ref _resumeAfterTick, Environment.TickCount64 + ResumeSettleMs);
+        try { _active.Set(); }
+        catch (ObjectDisposedException) { }
+    }
+
     private void Watch()
     {
         var presses = new PadPresses();
+        WaitHandle[] pauseOrStop = [_active.WaitHandle, _stop.Token.WaitHandle];
 
         while (!_stop.IsCancellationRequested)
         {
-            var (summoned, pressed) = presses.Step(ReadButtons(), IsNavigating, DateTime.UtcNow);
+            if (!_active.IsSet)
+            {
+                if (WaitHandle.WaitAny(pauseOrStop) != 0) break;
+                continue;
+            }
+
+            var remainingMs = Volatile.Read(ref _resumeAfterTick) - Environment.TickCount64;
+            if (remainingMs > 0)
+            {
+                _stop.Token.WaitHandle.WaitOne((int)Math.Min(remainingMs, 250));
+                continue;
+            }
+
+            if (_resetOnResume)
+            {
+                _resetOnResume = false;
+                presses = new PadPresses();
+                _latchedActions.Clear();
+            }
+
+            var navigating = IsNavigating && !SuppressNavigation;
+            var skipSlotZero = navigating && SuppressBuiltInSlot;
+            var (summoned, pressed) = presses.Step(ReadButtons(skipSlotZero), navigating, DateTime.UtcNow);
 
             if (summoned) Summoned?.Invoke();
             foreach (var button in Each(pressed)) Pressed?.Invoke(button);
@@ -187,17 +244,17 @@ public sealed class Gamepad : IDisposable
     }
 
     /// <summary>Buttons held on any connected controller, with the left stick folded into the d-pad.</summary>
-    private static PadButton ReadButtons()
+    private static PadButton ReadButtons(bool skipSlotZero)
     {
-        var buttons = ReadXInput();
-        return buttons != PadButton.None ? buttons : ReadWinMm();
+        var buttons = ReadXInput(skipSlotZero);
+        return buttons != PadButton.None ? buttons : ReadWinMm(skipSlotZero);
     }
 
-    private static PadButton ReadXInput()
+    private static PadButton ReadXInput(bool skipSlotZero)
     {
         var buttons = PadButton.None;
 
-        for (uint user = 0; user < XInput.MaxControllers; user++)
+        for (uint user = skipSlotZero ? 1u : 0u; user < XInput.MaxControllers; user++)
         {
             if (XInput.XInputGetState(user, out var state) != XInput.ERROR_SUCCESS) continue;
 
@@ -216,7 +273,7 @@ public sealed class Gamepad : IDisposable
     /// Fallback when <c>xinput1_4.dll</c> returns empty state (for example under Xbox FSE's <c>InputHost</c>
     /// gamepad interception). Reads the controller's standard HID gamepad interface via <c>winmm.dll</c>.
     /// </summary>
-    private static PadButton ReadWinMm()
+    private static PadButton ReadWinMm(bool skipSlotZero)
     {
         const uint center = 32_767;
         const uint threshold = 16_000;
@@ -224,7 +281,7 @@ public sealed class Gamepad : IDisposable
         var buttons = PadButton.None;
         var info = WinMm.JOYINFOEX.Create();
 
-        for (uint id = 0; id < WinMm.MaxControllers; id++)
+        for (uint id = skipSlotZero ? 1u : 0u; id < WinMm.MaxControllers; id++)
         {
             if (WinMm.joyGetPosEx(id, ref info) != WinMm.JOYERR_NOERROR) continue;
 
@@ -262,6 +319,7 @@ public sealed class Gamepad : IDisposable
     {
         _stop.Cancel();
         _thread.Join(TimeSpan.FromMilliseconds(250));
+        _active.Dispose();
         _stop.Dispose();
     }
 }

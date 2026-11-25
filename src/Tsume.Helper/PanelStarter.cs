@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
 using Microsoft.Win32;
+using Microsoft.Win32.SafeHandles;
 using Tsume.Core.Ipc;
 
 namespace Tsume.Helper;
@@ -44,9 +45,19 @@ internal static class PanelStarter
     private const int LaunchAttempts = 3;
     private const uint VerifyAliveMs = 3000;
     private static readonly TimeSpan RetryPause = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan WakePause = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan CrashRestartDelay = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan CrashWindow = TimeSpan.FromMinutes(5);
+    private const int MaxCrashRestartsInWindow = 3;
 
-    /// <summary>Serialises boot/logon/unlock start attempts so overlapping session events never double-launch.</summary>
+    /// <summary>Serialises boot/logon/unlock/request/recovery start attempts so overlapping events never double-launch.</summary>
     private static readonly Lock LaunchGate = new();
+    private static readonly Lock CrashGate = new();
+    private static readonly Dictionary<int, Queue<DateTime>> RecentCrashes = [];
+    private static CancellationToken _serviceStop = CancellationToken.None;
+
+    /// <summary>Registers the service's stop token so crash recovery and startup waits abort cleanly on stop/shutdown.</summary>
+    public static void SetServiceStop(CancellationToken stop) => _serviceStop = stop;
 
     /// <summary>The session shown on the device's own screen; -1 if there is none.</summary>
     public static int ScreenSession => unchecked((int)WTSGetActiveConsoleSessionId());
@@ -70,10 +81,17 @@ internal static class PanelStarter
         }
     }
 
-    /// <param name="occasion">Why now — "sign-in", "start-up", "unlock" — for the log.</param>
-    public static void StartFor(int session, string occasion)
+    /// <summary>Waits briefly after wake from sleep/hibernate and starts the panel if it is not running.</summary>
+    public static void EnsureRunningAfterWake(int session, CancellationToken stop = default)
     {
-        if (session < 0 || !WTSQueryUserToken((uint)session, out var person)) return;   // nobody signed in there
+        if (session < 0 || stop.WaitHandle.WaitOne(WakePause)) return;
+        StartFor(session, "wake", stop);
+    }
+
+    /// <param name="occasion">Why now — "sign-in", "start-up", "unlock", "wake" — for the log.</param>
+    public static void StartFor(int session, string occasion, CancellationToken stop = default)
+    {
+        if (session < 0 || stop.IsCancellationRequested || !WTSQueryUserToken((uint)session, out var person)) return;   // nobody signed in there
 
         try
         {
@@ -82,29 +100,30 @@ internal static class PanelStarter
             // Compared against the person's start-up entry, which has no --relaunched; Start adds that itself.
             var command = $"\"{path}\" {Quietly}";
 
-            if (!File.Exists(path) || !Wants(person, command)) return;
+            if (!File.Exists(path) || !Wants(person, command, stop)) return;
 
             lock (LaunchGate)
             {
-                if (IsRunningIn(session)) return;
+                if (stop.IsCancellationRequested || IsPanelRunningIn(session)) return;
 
-                WaitForDesktop(session);
-                if (IsRunningIn(session)) return;
+                WaitForDesktop(session, stop);
+                if (stop.IsCancellationRequested || IsPanelRunningIn(session)) return;
 
-                for (var attempt = 1; attempt <= LaunchAttempts; attempt++)
+                for (var attempt = 1; attempt <= LaunchAttempts && !stop.IsCancellationRequested; attempt++)
                 {
-                    var granted = Start(person, path, command, VerifyAliveMs, out var exitedCode);
+                    var granted = Start(person, path, command, VerifyAliveMs, out var exitedCode, out var processHandle);
                     if (exitedCode is null)
                     {
                         Log.Write($"Started the panel{(granted ? " with UIAccess" : "")} for session {session} on {occasion}.");
+                        WatchForCrash(session, processHandle);
                         return;
                     }
 
                     // Another copy (e.g. Explorer's Run entry) may have won the single-instance lock while we started.
-                    if (IsRunningIn(session)) return;
+                    if (exitedCode == 0 && IsRunningIn(session)) return;
 
-                    Log.Write($"Panel exited early (code {exitedCode}) on {occasion}, attempt {attempt}/{LaunchAttempts}.");
-                    if (attempt < LaunchAttempts) Thread.Sleep(RetryPause);
+                    Log.Write($"Panel exited early (code 0x{exitedCode.Value:X8}) on {occasion}, attempt {attempt}/{LaunchAttempts}.");
+                    if (attempt < LaunchAttempts && stop.WaitHandle.WaitOne(RetryPause)) return;
                 }
             }
         }
@@ -123,7 +142,7 @@ internal static class PanelStarter
     /// The caller's session is settled from the pipe, not sent in the request (see <see cref="PipeServer"/>), and the
     /// program started is always the Tsume.exe beside this helper.
     /// </summary>
-    /// <returns>Whether a copy was started.</returns>
+    /// <returns>Whether a copy was started (or a UIAccess copy was already running for a background request).</returns>
     public static bool StartForRequest(int session, StartPanel request)
     {
         if (session < 0 || !WTSQueryUserToken((uint)session, out var person)) return false;
@@ -133,9 +152,16 @@ internal static class PanelStarter
             var path = Path.Combine(AppContext.BaseDirectory, Panel);
             if (!File.Exists(path)) return false;
 
-            var granted = Start(person, path, BuildCommand(path, request), verifyAliveMs: 0, out _);
-            Log.Write($"Started the panel{(granted ? " with UIAccess" : "")} for session {session} on request.");
-            return true;
+            lock (LaunchGate)
+            {
+                // Avoid spawning a redundant copy when Explorer's Run entry arrives after the helper already started Tsume.
+                if (request.Background && IsPanelRunningIn(session)) return true;
+
+                var granted = Start(person, path, BuildCommand(path, request), verifyAliveMs: 0, out _, out var processHandle);
+                Log.Write($"Started the panel{(granted ? " with UIAccess" : "")} for session {session} on request.");
+                WatchForCrash(session, processHandle);
+                return true;
+            }
         }
         catch (Exception error) when (error is Win32Exception or IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
@@ -164,18 +190,18 @@ internal static class PanelStarter
     }
 
     /// <summary>True if the person's start-up entry asks for exactly this copy and Task Manager has not switched it off.</summary>
-    private static bool Wants(nint person, string command)
+    private static bool Wants(nint person, string command, CancellationToken stop)
     {
         string? account;
         using (var identity = new WindowsIdentity(person)) account = identity.User?.Value;
         if (account is null) return false;
 
-        for (var attempt = 0; attempt < SettingsAttempts; attempt++)
+        for (var attempt = 0; attempt < SettingsAttempts && !stop.IsCancellationRequested; attempt++)
         {
             using var settings = Registry.Users.OpenSubKey(account);
             if (settings is null)
             {
-                Thread.Sleep(SettingsPause);
+                if (stop.WaitHandle.WaitOne(SettingsPause)) return false;
                 continue;
             }
 
@@ -194,16 +220,73 @@ internal static class PanelStarter
     private static bool IsRunningIn(int session) => AnyProcessIn(session, "Tsume");
 
     /// <summary>
-    /// Waits briefly for the interactive session's compositor or shell host to appear before launching WPF.
-    /// On a cold boot straight into Xbox FSE, SessionLogon can fire before DWM/shell have finished setting up
-    /// the desktop; returning immediately when the session is already up adds zero delay.
+    /// Whether the panel is already running in <paramref name="session"/> with UIAccess (or any copy when
+    /// UIAccess cannot be granted). Ignores a non-UIAccess Explorer Run trampoline waiting on the pipe.
     /// </summary>
-    private static void WaitForDesktop(int session)
+    private static bool IsPanelRunningIn(int session) =>
+        TcbEnabled.Value ? IsUiAccessRunningIn(session) : IsRunningIn(session);
+
+    private static bool IsUiAccessRunningIn(int session)
     {
-        for (var attempt = 0; attempt < DesktopAttempts; attempt++)
+        var found = false;
+        var processes = Process.GetProcessesByName("Tsume");
+        foreach (var process in processes)
         {
-            if (AnyProcessIn(session, "sihost") || AnyProcessIn(session, "dwm")) return;
-            Thread.Sleep(DesktopPause);
+            using (process)
+            {
+                try
+                {
+                    if (process.SessionId != session) continue;
+                    if (HasUiAccess(process.Id)) found = true;
+                }
+                catch (Exception error) when (error is InvalidOperationException or Win32Exception) { }
+            }
+        }
+
+        return found;
+    }
+
+    private static bool HasUiAccess(int processId)
+    {
+        var proc = OpenProcess(ProcessQueryLimitedInformation, inheritHandle: false, unchecked((uint)processId));
+        if (proc == 0) return false;
+
+        try
+        {
+            if (!OpenProcessToken(proc, TokenQuery, out var token)) return false;
+            try
+            {
+                return GetTokenInformation(token, TokenUIAccess, out var uiAccess, sizeof(int), out _) && uiAccess != 0;
+            }
+            finally
+            {
+                CloseHandle(token);
+            }
+        }
+        finally
+        {
+            CloseHandle(proc);
+        }
+    }
+
+    /// <summary>
+    /// Waits briefly for the interactive session's shell host to appear before launching WPF.
+    /// On a cold boot (desktop or Xbox FSE), SessionLogon can fire while only pre-logon dwm.exe is running;
+    /// checking sihost/explorer/XboxPcApp ensures the user desktop exists without adding delay once up.
+    /// </summary>
+    private static void WaitForDesktop(int session, CancellationToken stop)
+    {
+        for (var attempt = 0; attempt < DesktopAttempts && !stop.IsCancellationRequested; attempt++)
+        {
+            if (AnyProcessIn(session, "sihost")
+                || AnyProcessIn(session, "explorer")
+                || AnyProcessIn(session, "XboxPcApp")
+                || AnyProcessIn(session, "XboxPcAppCE"))
+            {
+                return;
+            }
+
+            if (stop.WaitHandle.WaitOne(DesktopPause)) return;
         }
     }
 
@@ -226,11 +309,130 @@ internal static class PanelStarter
         return found;
     }
 
+    /// <summary>
+    /// Watches a helper-started panel process with zero dedicated threads. If it exits abnormally (non-zero
+    /// crash code, not a normal Quit or session logoff), restarts it quietly with UIAccess (rate-limited).
+    /// Takes ownership of <paramref name="processHandle"/>.
+    /// </summary>
+    private static void WatchForCrash(int session, nint processHandle)
+    {
+        if (processHandle == 0) return;
+
+        var waitEvent = new ManualResetEvent(false)
+        {
+            SafeWaitHandle = new SafeWaitHandle(processHandle, ownsHandle: true),
+        };
+
+        var waitGate = new Lock();
+        RegisteredWaitHandle? registration = null;
+        var completed = false;
+
+        var reg = ThreadPool.RegisterWaitForSingleObject(
+            waitEvent,
+            (_, _) =>
+            {
+                uint exitCode = 0;
+                try
+                {
+                    GetExitCodeProcess(waitEvent.SafeWaitHandle.DangerousGetHandle(), out exitCode);
+                }
+                catch (ObjectDisposedException) { }
+                finally
+                {
+                    lock (waitGate)
+                    {
+                        completed = true;
+                        registration?.Unregister(null);
+                    }
+                    waitEvent.Dispose();
+                }
+
+                // Exit code 0 is a clean Quit or single-instance handoff; 0x40010004 is Windows session logoff/shutdown.
+                if (exitCode is 0 or DbgTerminateProcess || _serviceStop.IsCancellationRequested)
+                    return;
+
+                if (!RecordCrashWithinBudget(session))
+                {
+                    Log.Write($"Panel crashed (exit code 0x{exitCode:X8}) too often in session {session}; not restarting again.");
+                    return;
+                }
+
+                Log.Write($"Panel crashed (exit code 0x{exitCode:X8}) in session {session}; restarting.");
+                _ = Task.Run(() => RestartAfterCrash(session, _serviceStop));
+            },
+            state: null,
+            millisecondsTimeOutInterval: Timeout.Infinite,
+            executeOnlyOnce: true);
+
+        lock (waitGate)
+        {
+            registration = reg;
+            if (completed) reg.Unregister(null);
+        }
+    }
+
+    private static bool RecordCrashWithinBudget(int session)
+    {
+        var now = DateTime.UtcNow;
+        lock (CrashGate)
+        {
+            if (!RecentCrashes.TryGetValue(session, out var times))
+                RecentCrashes[session] = times = new Queue<DateTime>();
+
+            while (times.Count > 0 && now - times.Peek() > CrashWindow)
+                times.Dequeue();
+
+            if (times.Count >= MaxCrashRestartsInWindow) return false;
+            times.Enqueue(now);
+            return true;
+        }
+    }
+
+    private static void RestartAfterCrash(int session, CancellationToken stop)
+    {
+        // Give WER / Windows a moment to finish tearing down the crashed process and release its mutex.
+        if (stop.WaitHandle.WaitOne(CrashRestartDelay)) return;
+        if (session < 0 || !WTSQueryUserToken((uint)session, out var person)) return;
+
+        try
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, Panel);
+            if (!File.Exists(path)) return;
+
+            var command = $"\"{path}\" {Quietly}";
+
+            lock (LaunchGate)
+            {
+                if (stop.IsCancellationRequested || IsPanelRunningIn(session)) return;
+
+                var granted = Start(person, path, command, VerifyAliveMs, out var exitedCode, out var processHandle);
+                if (exitedCode is null)
+                {
+                    Log.Write($"Restarted the panel{(granted ? " with UIAccess" : "")} for session {session} after crash.");
+                    WatchForCrash(session, processHandle);
+                }
+                else
+                {
+                    Log.Write($"Panel exited early (code 0x{exitedCode.Value:X8}) after crash restart.");
+                }
+            }
+        }
+        catch (Exception error) when (error is Win32Exception or IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            Log.Write($"Could not restart the panel after crash: {error.Message}");
+        }
+        finally
+        {
+            CloseHandle(person);
+        }
+    }
+
     // Every copy the helper starts carries --relaunched, whether or not UIAccess took, so a grant that quietly
     // failed can never send the copy back to ask again and set off a loop of launches.
-    private static bool Start(nint person, string path, string command, uint verifyAliveMs, out int? exitedCode)
+    private static bool Start(nint person, string path, string command, uint verifyAliveMs, out int? exitedCode, out nint processHandle)
     {
         exitedCode = null;
+        processHandle = 0;
         command = $"{command} {Relaunched}";
 
         var uiAccess = GrantUiAccess(person);
@@ -250,15 +452,16 @@ internal static class PanelStarter
                     throw new Win32Exception();
                 }
 
-                try
+                CloseHandle(started.Thread);
+
+                if (verifyAliveMs > 0 && WaitForSingleObject(started.Process, verifyAliveMs) == WaitObject0)
                 {
-                    if (verifyAliveMs > 0 && WaitForSingleObject(started.Process, verifyAliveMs) == WaitObject0)
-                        exitedCode = GetExitCodeProcess(started.Process, out var code) ? unchecked((int)code) : -1;
-                }
-                finally
-                {
-                    CloseHandle(started.Thread);
+                    exitedCode = GetExitCodeProcess(started.Process, out var code) ? unchecked((int)code) : -1;
                     CloseHandle(started.Process);
+                }
+                else
+                {
+                    processHandle = started.Process;
                 }
 
                 return uiAccess != 0;
@@ -415,6 +618,8 @@ internal static class PanelStarter
 
     private const uint UnicodeEnvironment = 0x0400;   // CREATE_UNICODE_ENVIRONMENT
     private const uint WaitObject0 = 0x0000_0000;     // WAIT_OBJECT_0
+    private const uint DbgTerminateProcess = 0x4001_0004;
+    private const uint ProcessQueryLimitedInformation = 0x1000;
     private const int StartfUseShowWindow = 0x0001;   // STARTF_USESHOWWINDOW
     private const short SwShowMinNoActive = 7;        // SW_SHOWMINNOACTIVE
 
@@ -499,6 +704,9 @@ internal static class PanelStarter
     [DllImport("advapi32.dll", SetLastError = true)]
     private static extern bool AdjustTokenPrivileges(nint token, bool disableAll, ref TokenPrivileges newState,
         int bufferLength, nint previous, nint returnLength);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern nint OpenProcess(uint desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, uint processId);
 
     [DllImport("kernel32.dll")]
     private static extern nint GetCurrentProcess();

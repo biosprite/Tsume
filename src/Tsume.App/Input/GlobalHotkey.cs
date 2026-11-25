@@ -17,11 +17,18 @@ public sealed class GlobalHotkey : IDisposable
     public event Action? Pressed;
 
     /// <summary>False when another program already owns the shortcut.</summary>
-    public bool IsRegistered { get; }
+    public bool IsRegistered { get; private set; }
 
     public GlobalHotkey()
     {
         _sink.AddHook(OnMessage);
+        EnsureRegistered();
+    }
+
+    /// <summary>Retries shortcut registration if an earlier attempt (e.g. early boot) failed.</summary>
+    public void EnsureRegistered()
+    {
+        if (IsRegistered) return;
         IsRegistered = User32.RegisterHotKey(_sink.Handle, Id, Modifiers, (uint)KeyInterop.VirtualKeyFromKey(Letter));
     }
 

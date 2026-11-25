@@ -481,6 +481,36 @@ public sealed class DedicatedActionHook : IDisposable
         return true;
     }
 
+    /// <summary>Clears tracked key/latch state (e.g. before lock or suspend).</summary>
+    public void ResetState()
+    {
+        if (_disposed) return;
+        if (_dispatcher.CheckAccess()) ClearTracking();
+        else _dispatcher.BeginInvoke(ClearTracking);
+    }
+
+    /// <summary>Clears stuck key state and reinstalls the hook if active (recovers silently dropped LL hooks after wake/unlock).</summary>
+    public void ResetAndReinstall()
+    {
+        if (_disposed) return;
+        if (_dispatcher.CheckAccess()) ReinstallIfWanted();
+        else _dispatcher.BeginInvoke(ReinstallIfWanted);
+    }
+
+    private void ClearTracking()
+    {
+        _downKeys.Clear();
+        _latched.Clear();
+        _swallowingVk = null;
+    }
+
+    private void ReinstallIfWanted()
+    {
+        if (_disposed) return;
+        Uninstall();
+        if (_bindings.Length > 0) Install();
+    }
+
     private void ApplyBindings(CompiledBinding[] bindings)
     {
         if (_disposed) return;

@@ -38,7 +38,9 @@ public sealed class HelperService : ServiceBase
     protected override void OnStart(string[] args)
     {
         _stop = new CancellationTokenSource();
-        _serving = Task.Run(() => ServeAsync(_stop.Token));
+        var stop = _stop.Token;
+        PanelStarter.SetServiceStop(stop);
+        _serving = Task.Run(() => ServeAsync(stop));
 
         // Modern standby: the machine idles with the screen off and Windows sends no wake message,
         // so the screen coming back on stands in for one.
@@ -46,7 +48,7 @@ public sealed class HelperService : ServiceBase
         _screenWatch = RegisterPowerSettingNotification(ServiceHandle, ref screenState, ToAService);
 
         // Someone may have signed in before the service was listening (a fast boot, or an update of Tsume).
-        Task.Run(() => PanelStarter.StartFor(PanelStarter.ScreenSession, "start-up"));
+        Task.Run(() => PanelStarter.StartFor(PanelStarter.ScreenSession, "start-up", stop));
     }
 
     /// <summary>Starts the panel as someone signs in or unlocks, ahead of Windows' own start-up apps.</summary>
@@ -62,7 +64,8 @@ public sealed class HelperService : ServiceBase
         if (occasion is null) return;
 
         var session = change.SessionId;
-        Task.Run(() => PanelStarter.StartFor(session, occasion));
+        var stop = _stop?.Token ?? CancellationToken.None;
+        Task.Run(() => PanelStarter.StartFor(session, occasion, stop));
     }
 
     protected override void OnStop() => StopServing();
@@ -71,16 +74,19 @@ public sealed class HelperService : ServiceBase
 
     /// <summary>
     /// On waking from hibernation, and whenever the screen goes on or off, re-checks the firmware against
-    /// what was chosen. The check is cheap: three register reads.
+    /// what was chosen. On wake, also makes sure the panel is still running (handles wake without sign-in).
     /// </summary>
     protected override bool OnPowerEvent(PowerBroadcastStatus status)
     {
-        var occasion = status switch
-        {
-            PowerBroadcastStatus.ResumeAutomatic or PowerBroadcastStatus.ResumeSuspend or PowerBroadcastStatus.ResumeCritical => "wake",
-            (PowerBroadcastStatus)PowerSettingChanged => "screen on or off",
-            _ => null,
-        };
+        var isWake = status is PowerBroadcastStatus.ResumeAutomatic
+            or PowerBroadcastStatus.ResumeSuspend
+            or PowerBroadcastStatus.ResumeCritical;
+
+        var occasion = isWake
+            ? "wake"
+            : status == (PowerBroadcastStatus)PowerSettingChanged
+                ? "screen on or off"
+                : null;
 
         // Answer Windows at once; the firmware is talked to on another thread.
         if (occasion is not null && _keeper is { } keeper && _charge is { } charge)
@@ -89,6 +95,12 @@ public sealed class HelperService : ServiceBase
                 keeper.RestoreIfForgotten(occasion);
                 charge.RestoreIfForgotten(occasion);
             });
+
+        if (isWake)
+        {
+            var stop = _stop?.Token ?? CancellationToken.None;
+            Task.Run(() => PanelStarter.EnsureRunningAfterWake(PanelStarter.ScreenSession, stop));
+        }
 
         return true;
     }
@@ -130,21 +142,39 @@ public sealed class HelperService : ServiceBase
 
     private async Task ServeOnceAsync(CancellationToken stop)
     {
+        var handler = new RequestHandler();
+        IDevice? ownedDevice = null;
+
+        // Start the pipe immediately so UIAccess panel launches never time out waiting on slow early-boot WMI.
+        var hardwareReady = Task.Run(async () =>
+        {
+            try
+            {
+                var (machine, found) = await OpenDeviceAsync(stop);
+                ownedDevice = found;
+                if (stop.IsCancellationRequested) return;
+
+                Log.Write($"Running as a service on {machine}{(found is null ? " — not a supported device; every request will be refused" : $": {found.Profile.Name}")}.");
+
+                var keeper = found is null ? null : new ModeKeeper(found);
+                var charge = found is null ? null : new ChargeKeeper(found);
+
+                keeper?.RestoreIfForgotten("start-up");
+                charge?.RestoreIfForgotten("start-up");
+                _charge = charge;
+                _keeper = keeper;
+                handler.SetHardware(machine, found, keeper, charge);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception error)
+            {
+                Log.Write($"Hardware discovery failed: {error}");
+            }
+        }, stop);
+
         try
         {
-            var (machine, found) = await OpenDeviceAsync(stop);
-            using var device = found;
-            Log.Write($"Running as a service on {machine}{(device is null ? " — not a supported device; every request will be refused" : $": {device.Profile.Name}")}.");
-
-            var keeper = device is null ? null : new ModeKeeper(device);
-            var charge = device is null ? null : new ChargeKeeper(device);
-
-            keeper?.RestoreIfForgotten("start-up");
-            charge?.RestoreIfForgotten("start-up");
-            _charge = charge;
-            _keeper = keeper;
-
-            await new PipeServer(new RequestHandler(machine, device, keeper, charge)).RunAsync(stop);
+            await new PipeServer(handler).RunAsync(stop);
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
@@ -156,6 +186,9 @@ public sealed class HelperService : ServiceBase
         {
             _keeper = null;
             _charge = null;
+            try { await hardwareReady; }
+            catch (OperationCanceledException) { }
+            ownedDevice?.Dispose();
         }
     }
 

@@ -105,6 +105,9 @@ public partial class OverlayWindow
         RightOfWay.Claim();   // first, so everything below already runs ahead of the game
         OpenTrace.Begin();
 
+        // Notify isolation before tile refreshes start so Mode 1 -> Mode 4 capture wins the vendor HID channel.
+        OpenChanged?.Invoke(true);
+
         PlaceOnScreen();
         _panel.OnOpening();
 
@@ -133,7 +136,6 @@ public partial class OverlayWindow
         PlayIn();
 
         Dispatcher.BeginInvoke(DispatcherPriority.Input, FocusFirstControl);
-        OpenChanged?.Invoke(true);
     }
 
     /// <summary>
@@ -186,12 +188,16 @@ public partial class OverlayWindow
     /// </summary>
     private void PlaceOnScreen()
     {
-        Height = ScreenHeight();
+        var height = ScreenHeight();
+        var width = ScreenWidth();
+        if (height <= 0 || width <= 0) return;
+
+        Height = height;
         FitTo(Height);
 
         // Leave 24 design units on the inner edge for the drop shadow and 12 on the screen edge.
         Stage.Margin = IsRightSide ? new Thickness(24, 12, 12, 12) : new Thickness(12, 12, 24, 12);
-        Left = IsRightSide ? Math.Max(0, ScreenWidth() - Width) : 0;
+        Left = IsRightSide ? Math.Max(0, width - Width) : 0;
         Top = 0;
     }
 
@@ -343,6 +349,7 @@ public partial class OverlayWindow
     {
         if (!IsOpen) return _closing?.Task ?? Task.CompletedTask;
         IsOpen = false;
+        _settling.Stop();
 
         var closing = _closing = new TaskCompletionSource();
         OpenChanged?.Invoke(false);
@@ -351,28 +358,68 @@ public partial class OverlayWindow
         Controls.KeyDropdown.CloseIfOpen();
         _panel.CloseLayers();
 
+        var finished = false;
+        var fallback = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+
+        void Finish()
+        {
+            if (finished) return;
+            finished = true;
+            fallback.Stop();
+
+            if (!IsOpen)   // not reopened mid-flight
+            {
+                ForgetFocus();
+                _zOrderChanges.Stop();
+                if (IsVisible) Hide();
+                DisplayClock.KeepAwake(false);
+                RightOfWay.Yield();
+                _panel.OnClosed();
+            }
+
+            closing.TrySetResult();
+        }
+
+        // If DWM stops ticking frames (e.g. entering sleep/hibernate), the fallback still hides and completes CloseAsync.
+        fallback.Tick += (_, _) => Finish();
+        fallback.Start();
+
         Stage.Animate(OpacityProperty, 0, Motion.Smooth, Motion.Depart);
         Slide.Animate(TranslateTransform.XProperty, OffscreenX / 2, Motion.Smooth, Motion.Depart, then: () =>
         {
             // Windows flashes a hidden window's last frame when it is next shown, so wait
             // until the fully transparent frame is on screen before hiding.
-            Motion.AfterFrames(2, () =>
-            {
-                if (!IsOpen)   // not reopened mid-flight
-                {
-                    ForgetFocus();
-                    _zOrderChanges.Stop();
-                    Hide();
-                    DisplayClock.KeepAwake(false);
-                    RightOfWay.Yield();
-                    _panel.OnClosed();
-                }
-
-                closing.TrySetResult();
-            });
+            Motion.AfterFrames(2, Finish);
         });
 
         return closing.Task;
+    }
+
+    /// <summary>Immediately hides the panel and stops background presentation helpers before system suspend.</summary>
+    public void ForceCloseForSuspend()
+    {
+        var wasOpen = IsOpen;
+        IsOpen = false;
+        _settling.Stop();
+        _zOrderChanges.Stop();
+        DisplayClock.KeepAwake(false);
+        RightOfWay.Yield();
+
+        if (wasOpen)
+        {
+            OpenChanged?.Invoke(false);
+            Controls.KeyDropdown.CloseIfOpen();
+            _panel.CloseLayers();
+        }
+
+        if (wasOpen || IsVisible)
+        {
+            ForgetFocus();
+            if (IsVisible) Hide();
+            _panel.OnClosed();
+        }
+
+        _closing?.TrySetResult();
     }
 
     /// <summary>

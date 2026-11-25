@@ -12,6 +12,7 @@ public sealed class SavedState
         Core.DataFolder.Path, "state.json");
 
     private static readonly JsonSerializerOptions Format = new() { WriteIndented = true };
+    private static readonly Lock SaveGate = new();
 
     public PerformanceMode Mode { get; set; } = PerformanceMode.Balanced;
 
@@ -98,14 +99,19 @@ public sealed class SavedState
 
     public void Save()
     {
-        try
+        lock (SaveGate)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(File)!);
-            System.IO.File.WriteAllText(File, JsonSerializer.Serialize(this, Format));
-        }
-        catch (IOException)
-        {
-            // Losing a preference is better than crashing the panel.
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(File)!);
+                var temp = File + ".tmp";
+                System.IO.File.WriteAllText(temp, JsonSerializer.Serialize(this, Format));
+                System.IO.File.Move(temp, File, overwrite: true);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                // Losing a preference is better than crashing the panel.
+            }
         }
     }
 }

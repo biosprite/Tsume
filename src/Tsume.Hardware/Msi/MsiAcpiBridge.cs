@@ -21,7 +21,7 @@ public sealed class MsiAcpiBridge(Board machine, MsiBoard? verified) : IMsiFirmw
     /// <summary>Serialises all <c>MSI_ACPI</c> WMI calls process-wide so device control and read-only discovery never overlap.</summary>
     internal static readonly Lock AcpiCallGate = new();
 
-    private readonly ManagementObject _acpi = new(Scope, Instance, null);
+    private ManagementObject _acpi = new(Scope, Instance, null);
 
     /// <summary>Opens the bridge on this machine, verified or not: reads are allowed anywhere so the probe can learn a new board.</summary>
     public static MsiAcpiBridge Open()
@@ -63,14 +63,35 @@ public sealed class MsiAcpiBridge(Board machine, MsiBoard? verified) : IMsiFirmw
     {
         lock (AcpiCallGate)
         {
-            using var output = package is null
-                ? _acpi.InvokeMethod(method, null, null)
-                : InvokeWithPackage(method, package);
-
-            return output?["Data"] is ManagementBaseObject { } data && data["Bytes"] is byte[] { Length: > 1 } bytes
-                ? new FirmwareReply(Accepted: bytes[0] != 0, Data: bytes[1..])
-                : FirmwareReply.Empty;
+            try
+            {
+                return InvokeCore(method, package);
+            }
+            catch (Exception error) when (error is ManagementException or System.Runtime.InteropServices.COMException)
+            {
+                // WMI proxies can go stale after hibernation or a Winmgmt restart; reconnect once before failing.
+                ReconnectLocked();
+                return InvokeCore(method, package);
+            }
         }
+    }
+
+    private FirmwareReply InvokeCore(string method, byte[]? package)
+    {
+        using var output = package is null
+            ? _acpi.InvokeMethod(method, null, null)
+            : InvokeWithPackage(method, package);
+
+        return output?["Data"] is ManagementBaseObject { } data && data["Bytes"] is byte[] { Length: > 1 } bytes
+            ? new FirmwareReply(Accepted: bytes[0] != 0, Data: bytes[1..])
+            : FirmwareReply.Empty;
+    }
+
+    private void ReconnectLocked()
+    {
+        try { _acpi.Dispose(); }
+        catch (Exception) { }
+        _acpi = new ManagementObject(Scope, Instance, null);
     }
 
     private ManagementBaseObject InvokeWithPackage(string method, byte[] package)
@@ -85,5 +106,8 @@ public sealed class MsiAcpiBridge(Board machine, MsiBoard? verified) : IMsiFirmw
         return _acpi.InvokeMethod(method, input, null);
     }
 
-    public void Dispose() => _acpi.Dispose();
+    public void Dispose()
+    {
+        lock (AcpiCallGate) _acpi.Dispose();
+    }
 }

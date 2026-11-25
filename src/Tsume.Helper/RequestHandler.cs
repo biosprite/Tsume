@@ -7,14 +7,32 @@ namespace Tsume.Helper;
 /// Turns one request into one reply. This is Tsume's whole privileged surface: an unelevated process can do
 /// nothing that is not listed here. Anything outside the device's profile is refused before the device is called.
 /// </summary>
-/// <param name="machine">The board found at start-up.</param>
-/// <param name="device">Null on a machine Tsume does not know.</param>
-/// <param name="keeper">Null exactly when <paramref name="device"/> is.</param>
-/// <param name="charge">Null exactly when <paramref name="device"/> is.</param>
-public sealed class RequestHandler(Board machine, IDevice? device, ModeKeeper? keeper, ChargeKeeper? charge)
+public sealed class RequestHandler
 {
+    private sealed record HardwareState(Board Machine, IDevice? Device, ModeKeeper? Keeper, ChargeKeeper? Charge);
+
+    private volatile HardwareState? _hardware;
+
+    /// <summary>Creates a handler whose hardware is not yet ready; <see cref="SetHardware"/> populates it once WMI answers.</summary>
+    public RequestHandler() { }
+
+    /// <param name="machine">The board found at start-up.</param>
+    /// <param name="device">Null on a machine Tsume does not know.</param>
+    /// <param name="keeper">Null exactly when <paramref name="device"/> is.</param>
+    /// <param name="charge">Null exactly when <paramref name="device"/> is.</param>
+    public RequestHandler(Board machine, IDevice? device, ModeKeeper? keeper, ChargeKeeper? charge) =>
+        _hardware = new HardwareState(machine, device, keeper, charge);
+
+    public void SetHardware(Board machine, IDevice? device, ModeKeeper? keeper, ChargeKeeper? charge) =>
+        _hardware = new HardwareState(machine, device, keeper, charge);
+
     public HelperReply Handle(HelperRequest request)
     {
+        if (_hardware is not { } hardware)
+            return HelperReply.Failure("The helper is still starting up.");
+
+        var (machine, device, keeper, charge) = hardware;
+
         // On an unknown machine even a snapshot would read the wrong registers, so everything is refused.
         if (device is null)
             return HelperReply.NotSupported($"{machine}");

@@ -66,6 +66,36 @@ public sealed class GameBarButtonHook : IDisposable
         ReconcileHook();
     }
 
+    /// <summary>Clears tracked modifier/swallow state (e.g. before lock or suspend).</summary>
+    public void ResetState()
+    {
+        if (_disposed) return;
+        if (_dispatcher.CheckAccess()) ClearTracking();
+        else _dispatcher.BeginInvoke(ClearTracking);
+    }
+
+    /// <summary>Clears stuck key state and reinstalls the hook if active (recovers silently dropped LL hooks after wake/unlock).</summary>
+    public void ResetAndReinstall()
+    {
+        if (_disposed) return;
+        if (_dispatcher.CheckAccess()) ReinstallIfWanted();
+        else _dispatcher.BeginInvoke(ReinstallIfWanted);
+    }
+
+    private void ClearTracking()
+    {
+        _lWinDown = false;
+        _rWinDown = false;
+        _swallowingVk = null;
+    }
+
+    private void ReinstallIfWanted()
+    {
+        if (_disposed) return;
+        Uninstall();
+        if (_enabled && _triggers.Length > 0) Install();
+    }
+
     private void ReconcileHook()
     {
         if (_disposed) return;
