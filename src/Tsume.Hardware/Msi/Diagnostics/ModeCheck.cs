@@ -131,7 +131,7 @@ public static class ModeCheck
         public static Registers For(MsiBoard board, PerformanceMode mode)
         {
             var limits = board.Profile.LimitsFor(mode, default) ?? throw new ArgumentOutOfRangeException(nameof(mode));
-            return new Registers(board.Shift.Encode(mode), (byte)limits.Sustained, (byte)limits.Boost);
+            return new Registers(board.Shift.Encode(MsiDevice.ShiftModeFor(board, mode)), (byte)limits.Sustained, (byte)limits.Boost);
         }
 
         public static Registers? Read(MsiAcpiBridge acpi, MsiBoard board)

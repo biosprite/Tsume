@@ -798,7 +798,7 @@
   <!-- Controls & layout screen -->
 
   <data name="ControlsAndLayout" xml:space="preserve"><value>Controls &amp; Layout</value></data>
-  <data name="ControlsAndLayoutDetail" xml:space="preserve"><value>Panel side, quick tiles, dedicated buttons, and back-button bindings</value></data>
+  <data name="ControlsAndLayoutDetail" xml:space="preserve"><value>Quick tiles, system layout &amp; buttons</value></data>
 
   <data name="PanelPositionHeading" xml:space="preserve"><value>PANEL SIDE</value></data>
   <data name="OpenOnRight" xml:space="preserve"><value>Open from right side</value></data>

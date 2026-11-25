@@ -1,4 +1,5 @@
 using Tsume.Core.Ipc;
+using Tsume.Core.Telemetry;
 using Tsume.Hardware;
 
 namespace Tsume.Helper;
@@ -15,11 +16,15 @@ public sealed class ModeKeeper(IDevice device)
         Core.DataFolder.Path, "chosen-mode.json");
 
     private readonly Lock _gate = new();
+    private SetPerformance? _last;
+    private bool _loaded;
 
     public void Remember(SetPerformance chosen)
     {
         lock (_gate)
         {
+            _last = chosen;
+            _loaded = true;
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(Memory)!);
@@ -32,6 +37,29 @@ public sealed class ModeKeeper(IDevice device)
                 Log.Write($"Could not remember the chosen mode: {error.Message}");
             }
         }
+    }
+
+    /// <summary>
+    /// Maps a hardware snapshot back to the user's logical preset mode when the firmware uses
+    /// <see cref="Core.Performance.PerformanceMode.Manual"/> to enforce preset watt limits and
+    /// the registers still hold the exact mode and limits Tsume wrote.
+    /// </summary>
+    public HardwareSnapshot Resolve(HardwareSnapshot snapshot)
+    {
+        SetPerformance? chosen;
+        lock (_gate) chosen = CurrentLocked();
+
+        if (chosen is null || !device.Profile.Offers(chosen.Mode)) return snapshot;
+
+        var expectedHardwareMode = device.HardwareModeFor(chosen.Mode);
+        if (expectedHardwareMode == chosen.Mode) return snapshot;
+
+        var manual = device.Profile.ManualRange?.Clamp(chosen.Manual) ?? chosen.Manual;
+        var wanted = device.Profile.LimitsFor(chosen.Mode, manual, chosen.Custom);
+
+        return snapshot.Mode == expectedHardwareMode && snapshot.Limits == wanted
+            ? snapshot with { Mode = chosen.Mode }
+            : snapshot;
     }
 
     /// <param name="occasion">Why now — "start-up", "wake" — for the log.</param>
@@ -48,16 +76,20 @@ public sealed class ModeKeeper(IDevice device)
 
             try
             {
-                if (Recall() is not { } chosen || !device.Profile.Offers(chosen.Mode) || device.MakerToolIsRunning) return;
+                if (CurrentLocked() is not { } chosen || !device.Profile.Offers(chosen.Mode) || device.MakerToolIsRunning) return;
 
                 var manual = device.Profile.ManualRange?.Clamp(chosen.Manual) ?? chosen.Manual;
                 var wanted = device.Profile.LimitsFor(chosen.Mode, manual, chosen.Custom);
+                var expectedHardwareMode = device.HardwareModeFor(chosen.Mode);
                 var (mode, limits) = device.Performance();
 
-                if (mode == chosen.Mode && limits == wanted) return;
+                if (mode == expectedHardwareMode && limits == wanted) return;
 
                 device.SetPerformance(chosen.Mode, manual, chosen.Custom);
-                Log.Write($"On {occasion} the firmware had {mode}, {limits}. Put back {chosen.Mode}, {wanted}.");
+                var applied = expectedHardwareMode == chosen.Mode
+                    ? $"{chosen.Mode}"
+                    : $"{chosen.Mode} (shift {expectedHardwareMode})";
+                Log.Write($"On {occasion} the firmware had {mode}, {limits}. Put back {applied}, {wanted}.");
             }
             catch (Exception error) when (error is FirmwareException or ArgumentOutOfRangeException or System.Management.ManagementException or System.Runtime.InteropServices.COMException)
             {
@@ -66,15 +98,32 @@ public sealed class ModeKeeper(IDevice device)
         }
     }
 
-    private static SetPerformance? Recall()
+    private SetPerformance? CurrentLocked()
+    {
+        if (!_loaded && TryRecall(out var recalled))
+        {
+            _last = recalled;
+            _loaded = true;
+        }
+        return _last;
+    }
+
+    private static bool TryRecall(out SetPerformance? chosen)
     {
         try
         {
-            return File.Exists(Memory) ? HelperJson.ReadRequest(File.ReadAllText(Memory)) as SetPerformance : null;
+            chosen = File.Exists(Memory) ? HelperJson.ReadRequest(File.ReadAllText(Memory)) as SetPerformance : null;
+            return true;
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or NotSupportedException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            return null;   // unreadable is treated as absent
+            chosen = null;
+            return false;   // transient I/O failure — retry next time instead of latching null
+        }
+        catch (Exception error) when (error is System.Text.Json.JsonException or NotSupportedException)
+        {
+            chosen = null;
+            return true;    // unreadable JSON is treated as absent
         }
     }
 }

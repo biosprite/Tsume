@@ -31,6 +31,13 @@ public interface IDevice : IDisposable
     /// <summary>The mode and limits in force right now. Cheap: asked on every wake.</summary>
     (PerformanceMode Mode, PowerLimits Limits) Performance();
 
+    /// <summary>
+    /// The mode the firmware register itself holds when <paramref name="mode"/> is applied.
+    /// Defaults to <paramref name="mode"/>; boards whose EC ignores power-limit registers in
+    /// built-in shift modes return <see cref="PerformanceMode.Manual"/> instead.
+    /// </summary>
+    PerformanceMode HardwareModeFor(PerformanceMode mode) => mode;
+
     void SetFan(FanMode mode);
 
     /// <summary>Stops charging at this level, which must be one of the profile's <see cref="DeviceProfile.ChargeLimits"/>.</summary>

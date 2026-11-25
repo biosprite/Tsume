@@ -45,7 +45,7 @@ public sealed class RequestHandler
             {
                 case GetSnapshot:
                     // The only reply that also carries the device profile.
-                    return HelperReply.Success(device.Snapshot()) with { Device = profile };
+                    return HelperReply.Success(SnapshotFor(device, keeper)) with { Device = profile };
 
                 case GetReadings:
                     return HelperReply.Success(device.Readings());
@@ -81,12 +81,18 @@ public sealed class RequestHandler
                     return HelperReply.Failure($"Unknown request: {request.GetType().Name}");
             }
 
-            return HelperReply.Success(device.Snapshot());
+            return HelperReply.Success(SnapshotFor(device, keeper));
         }
         catch (Exception error)
         {
             Log.Write($"{request.GetType().Name} failed: {error.Message}");
             return HelperReply.Failure(error.Message);
         }
+    }
+
+    private static Core.Telemetry.HardwareSnapshot SnapshotFor(IDevice device, ModeKeeper? keeper)
+    {
+        var snapshot = device.Snapshot();
+        return keeper is null ? snapshot : keeper.Resolve(snapshot);
     }
 }

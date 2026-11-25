@@ -37,14 +37,27 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board) : IDevice
         }
     }
 
+    /// <summary>
+    /// The shift mode written to register <c>0xD2</c>. MSI's EC ignores the power-limit registers
+    /// (<c>0x50</c>/<c>0x51</c>) in its built-in shift modes (Endurance/Balanced/Performance) and
+    /// enforces its own hardcoded table instead, so boards that support Manual use Manual shift mode
+    /// whenever Tsume applies watts.
+    /// </summary>
+    public static PerformanceMode ShiftModeFor(MsiBoard board, PerformanceMode mode) =>
+        board.Shift.Codes.ContainsKey(PerformanceMode.Manual) ? PerformanceMode.Manual : mode;
+
+    public PerformanceMode HardwareModeFor(PerformanceMode mode) => ShiftModeFor(board, mode);
+
     public void SetPerformance(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null)
     {
         var limits = Profile.LimitsFor(mode, manual, custom)
             ?? throw new ArgumentOutOfRangeException(nameof(mode), mode, "This device does not offer that mode.");
 
+        var shiftMode = ShiftModeFor(board, mode);
+
         lock (_oneIntentionAtATime)
         {
-            Write(_at.ShiftMode, nameof(_at.ShiftMode), board.Shift.Encode(mode));
+            Write(_at.ShiftMode, nameof(_at.ShiftMode), board.Shift.Encode(shiftMode));
 
             // MSI's order: sustained to the floor first, so boost is never below sustained mid-change.
             Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), board.PowerFloor);
