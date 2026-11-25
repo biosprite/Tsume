@@ -116,10 +116,10 @@ changes. The panel says so on the Lighting screen. See
 
 ## Status
 
-| Feature | Status | Capture |
-|---|---|---|
-| Read the mode and the whole profile | Checked 2026-11-10 | [controller read](controller-read-2026-11-10.txt) |
-| Lighting write | Checked 2026-11-10: written, read back, restored | [lighting check](lighting-check-2026-11-10.txt) |
-| Mode switch | Checked 2026-11-11: Cursor and back, each confirmed in about 40 ms | [pad mode check](pad-mode-check-2026-11-11.txt) |
-| Back buttons | Built, no capture recorded | |
-| Vibration, gyro, triggers, stick settings | Not built | |
+| Feature | Status |
+|---|---|
+| Read the mode and the whole profile | Checked 2026-11-10 |
+| Lighting write | Checked 2026-11-10: written, read back, restored |
+| Mode switch | Checked 2026-11-11: Cursor and back, each confirmed in about 40 ms |
+| Back buttons | Built, not yet checked |
+| Vibration, gyro, triggers, stick settings | Not built |

@@ -223,14 +223,14 @@ It stands back while MSI Center M is running. See
 
 Done on one Claw 8 EX AI+ (BIOS E1T91IMS.10E, interface version 2.9).
 
-| Check | Date | Result | Capture |
-|---|---|---|---|
-| Read every register | 2026-11-10 | All values as expected | [probe](probe-2026-11-10.txt) |
-| Rewrite each register with its own value | 2026-11-10 | Accepted and read back | [write check](write-check-2026-11-10.txt) |
-| Change the mode, measure power under load, restore | 2026-11-10 | Values held and were restored exactly. Processor power followed the boost limit: 20.0 W at a 20 W limit. | [mode check](mode-check-2026-11-10-boost-on.txt) |
-| Set the charge limit to 80 %, 90 % and 100 % | 2026-11-14 | Each kept. At 80 % with a full battery, the battery neither charged nor drained. | |
+| Check | Date | Result |
+|---|---|---|
+| Read every register | 2026-11-10 | All values as expected |
+| Rewrite each register with its own value | 2026-11-10 | Accepted and read back |
+| Change the mode, measure power under load, restore | 2026-11-10 | Values held and were restored exactly. Processor power followed the boost limit: 20.0 W at a 20 W limit. |
+| Set the charge limit to 80 %, 90 % and 100 % | 2026-11-14 | Each kept. At 80 % with a full battery, the battery neither charged nor drained. |
 
-An [earlier mode check](mode-check-2026-11-10.txt) showed nothing about power,
+An earlier mode check showed nothing about power,
 because Windows had processor boost switched off that day.
 
 Still open:

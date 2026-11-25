@@ -1,9 +1,0 @@
-── Mode check: change the mode, read it back, measure, restore ──
-  step                 shift   sustained  boost    registers   package power under load
-  as found             0xC6    33 W       36 W                   7.2 W
-  Balanced             0xC1    25 W       37 W     ok            7.6 W
-  Endurance            0xC2    15 W       20 W     ok            7.3 W
-  restored             0xC6    33 W       36 W     ok            7.2 W
-
-  Both modes were written and held.
-  The starting state is back exactly as found.
