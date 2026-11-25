@@ -94,22 +94,16 @@
 
         </StackPanel>
 
-        <!-- Hidden on a machine whose power limits cannot be set. -->
-        <StackPanel DataContext="{Binding PerformancePresets}" Visibility="{Binding Card}">
-
-          <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.PerformanceHeading}"
-                     Margin="4,12,0,10" />
-
-          <controls:Tile Style="{StaticResource Tile.Link}"
-                         Glyph="{x:Static theme:Glyphs.Sustained}"
-                         Label="{x:Static lang:Strings.PerformancePresets}"
-                         Detail="{x:Static lang:Strings.PerformancePresetsDetail}"
-                         Command="{Binding Open}" />
-
-        </StackPanel>
-
-        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.AppearanceHeading}"
+        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.CustomizationHeading}"
                    Margin="4,12,0,10" />
+
+        <!-- Hidden on a machine whose power limits cannot be set. -->
+        <controls:Tile Style="{StaticResource Tile.Link}"
+                       Visibility="{Binding PerformancePresets.Card}"
+                       Glyph="{x:Static theme:Glyphs.Sustained}"
+                       Label="{x:Static lang:Strings.PerformancePresets}"
+                       Detail="{x:Static lang:Strings.PerformancePresetsDetail}"
+                       Command="{Binding PerformancePresets.Open}" />
 
         <controls:Tile Style="{StaticResource Tile.Link}"
                        Glyph="{x:Static theme:Glyphs.Customize}"
@@ -117,33 +111,11 @@
                        Detail="{x:Static lang:Strings.CustomizationDetail}"
                        Command="{Binding Customization.Open}" />
 
-        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.ControlsHeading}"
-                   Margin="4,12,0,10" />
-
         <controls:Tile Style="{StaticResource Tile.Link}"
                        Glyph="{x:Static theme:Glyphs.Gamepad}"
                        Label="{x:Static lang:Strings.ControlsAndLayout}"
                        Detail="{x:Static lang:Strings.ControlsAndLayoutDetail}"
                        Command="{Binding Controls.Open}" />
-
-        <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.FeaturesHeading}"
-                   Margin="4,12,0,10" />
-
-        <controls:Tile Style="{StaticResource Tile.Switch}"
-                       Glyph="{x:Static theme:Glyphs.Upscaling}"
-                       Label="{x:Static lang:Strings.ShowOptiScaler}"
-                       Tag="{x:Static lang:Strings.Experimental}"
-                       Detail="{x:Static lang:Strings.ShowOptiScalerDetail}"
-                       IsOn="{Binding ShowsOptiScaler}"
-                       Command="{Binding ToggleOptiScaler}" />
-
-        <controls:Tile Style="{StaticResource Tile.Switch}"
-                       Glyph="{x:Static theme:Glyphs.Overlay}"
-                       Label="{x:Static lang:Strings.ShowRtss}"
-                       Tag="{x:Static lang:Strings.Experimental}"
-                       Detail="{x:Static lang:Strings.ShowRtssDetail}"
-                       IsOn="{Binding ShowsRtss}"
-                       Command="{Binding ToggleRtss}" />
 
         <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.MsiCenterHeading}"
                    Margin="4,12,0,10" />

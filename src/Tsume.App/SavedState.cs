@@ -39,6 +39,12 @@ public sealed class SavedState
     /// <summary>True to slide the panel in from the right edge of the screen instead of the left.</summary>
     public bool OpenOnRight { get; set; }
 
+    /// <summary>Ordered main-screen tile IDs (see <see cref="ViewModels.MainTileId"/>). Null uses the default layout.</summary>
+    public List<string>? MainTiles { get; set; }
+
+    /// <summary>Number of columns (2, 3, or 4) in the main-screen quick-tile grid.</summary>
+    public int MainTileColumns { get; set; } = 4;
+
     /// <summary>True to embed read-only hardware discovery data inside Share Logs bundles even on supported devices.</summary>
     public bool IncludeHardwareInLogs { get; set; }
 

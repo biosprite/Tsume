@@ -2,58 +2,24 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Tsume.App.Controls"
-             xmlns:theme="clr-namespace:Tsume.App.Theme"
-             xmlns:lang="clr-namespace:Tsume.App.Language"
              Focusable="False">
 
-  <UniformGrid Columns="4" Margin="-4">
+  <ItemsControl ItemsSource="{Binding Actions.VisibleTiles}" Focusable="False" Margin="-4">
+    <ItemsControl.ItemsPanel>
+      <ItemsPanelTemplate>
+        <UniformGrid Columns="{Binding Actions.Columns}" />
+      </ItemsPanelTemplate>
+    </ItemsControl.ItemsPanel>
 
-    <controls:Tile Glyph="{x:Static theme:Glyphs.RefreshRate}" Label="{x:Static lang:Strings.RefreshRate}"
-                   Detail="{Binding Actions.RefreshRateDetail}"
-                   IsOn="{Binding Actions.IsHighRefreshRate}"
-                   Command="{Binding Actions.CycleRefreshRate}" />
-
-    <controls:Tile Glyph="{x:Static theme:Glyphs.Fan}" Label="{x:Static lang:Strings.Fans}"
-                   Detail="{Binding Performance.FanDetail}"
-                   IsOn="{Binding Performance.IsFanMax}"
-                   Command="{Binding Performance.CycleFan}" />
-
-    <controls:Tile Glyph="{x:Static theme:Glyphs.Lighting}" Label="{x:Static lang:Strings.Lighting}"
-                   Detail="{Binding Lighting.TileDetail}"
-                   IsOn="{Binding Lighting.IsLit}"
-                   Command="{Binding Lighting.Open}" />
-
-    <!-- Gamepad or mouse; the icon shows the current mode. -->
-    <controls:Tile Glyph="{Binding PadMode.Glyph}" Label="{x:Static lang:Strings.Controller}"
-                   Detail="{Binding PadMode.Detail}"
-                   IsOn="{Binding PadMode.IsCursor}"
-                   Command="{Binding PadMode.Toggle}" />
-
-    <controls:Tile Glyph="{x:Static theme:Glyphs.Keyboard}" Label="{x:Static lang:Strings.Keyboard}"
-                   Command="{Binding Actions.Keyboard}" />
-
-    <controls:Tile Glyph="{x:Static theme:Glyphs.Screenshot}" Label="{x:Static lang:Strings.Screenshot}"
-                   Command="{Binding Actions.Screenshot}" />
-
-    <controls:Tile Glyph="{x:Static theme:Glyphs.TaskManager}" Label="{x:Static lang:Strings.TaskManager}"
-                   Command="{Binding Actions.TaskManager}" />
-
-    <controls:Tile Glyph="{x:Static theme:Glyphs.Desktop}" Label="{x:Static lang:Strings.Desktop}"
-                   Command="{Binding Actions.Desktop}" />
-
-    <!-- Optional: Settings can hide these. -->
-    <controls:Tile Glyph="{x:Static theme:Glyphs.Upscaling}" Label="{x:Static lang:Strings.OptiScaler}"
-                   Detail="{Binding Upscaling.TileDetail}"
-                   IsOn="{Binding Upscaling.IsInUse}"
-                   Visibility="{Binding Settings.OptiScalerTile}"
-                   Command="{Binding Upscaling.Open}" />
-
-    <controls:Tile Glyph="{x:Static theme:Glyphs.Overlay}" Label="{x:Static lang:Strings.Rtss}"
-                   Detail="{Binding Rtss.TileDetail}"
-                   IsOn="{Binding Rtss.IsActive}"
-                   Visibility="{Binding Settings.RtssTile}"
-                   Command="{Binding Rtss.Open}" />
-
-  </UniformGrid>
+    <ItemsControl.ItemTemplate>
+      <DataTemplate>
+        <controls:Tile Glyph="{Binding Glyph}"
+                       Label="{Binding Label}"
+                       Detail="{Binding Detail}"
+                       IsOn="{Binding IsOn}"
+                       Command="{Binding Command}" />
+      </DataTemplate>
+    </ItemsControl.ItemTemplate>
+  </ItemsControl>
 
 </UserControl>

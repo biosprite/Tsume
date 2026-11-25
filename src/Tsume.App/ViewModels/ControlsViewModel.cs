@@ -10,14 +10,17 @@ using Tsume.Core.Devices;
 
 namespace Tsume.App.ViewModels;
 
-/// <summary>Controls &amp; layout page: panel side, Dedicated Actions, and System Buttons.</summary>
+/// <summary>Controls &amp; layout page: panel side, Quick tiles, Dedicated Actions, and System Buttons.</summary>
 public sealed class ControlsViewModel : LayerViewModel, IDisposable
 {
     private readonly SavedState _state;
     private bool _absorbing;
     private bool _disposed;
 
-    public ControlsViewModel(PerformanceViewModel performance, SavedState state)
+    public ControlsViewModel(
+        PerformanceViewModel performance,
+        SavedState state,
+        Action<bool>? onRtssVisibilityChanged = null)
     {
         _state = state;
 
@@ -26,6 +29,9 @@ public sealed class ControlsViewModel : LayerViewModel, IDisposable
         _absorbing = true;
         OpenOnRight = state.OpenOnRight;
         _absorbing = false;
+
+        MainTilesPage = new MainTilesViewModel(state);
+        MainTilesPage.RtssTileChanged += enabled => onRtssVisibilityChanged?.Invoke(enabled);
 
         DedicatedActionsPage = new DedicatedActionsViewModel(state);
         DedicatedActionsPage.BindingsChanged += () => DedicatedActionsChanged?.Invoke();
@@ -46,6 +52,8 @@ public sealed class ControlsViewModel : LayerViewModel, IDisposable
             _state.Save();
         }
     }
+
+    public MainTilesViewModel MainTilesPage { get; }
 
     public DedicatedActionsViewModel DedicatedActionsPage { get; }
 

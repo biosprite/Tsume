@@ -8,9 +8,9 @@ using Tsume.Core;
 namespace Tsume.App.ViewModels;
 
 /// <summary>
-/// The settings screen: startup, charge limit, performance presets, colours, the OptiScaler tile,
+/// The settings screen: startup, charge limit, performance presets, colours, controls &amp; layout,
 /// pausing MSI Center M, and troubleshooting (sharing logs and opening the data folder).
-/// Performance presets and colours each open a page of their own.
+/// Performance presets, colours, and controls &amp; layout each open a page of their own.
 /// </summary>
 public sealed class SettingsViewModel : LayerViewModel
 {
@@ -24,31 +24,11 @@ public sealed class SettingsViewModel : LayerViewModel
         Action<bool>? onRtssVisibilityChanged = null)
     {
         _helper = helper;
-        _state = state;
         ChargeLimit = new ChargeLimitViewModel(helper, state);
         PerformancePresets = new PerformancePresetsViewModel(performance, state);
         Customization = new CustomizationViewModel(state);
-        Controls = new ControlsViewModel(performance, state);
+        Controls = new ControlsViewModel(performance, state, onRtssVisibilityChanged);
         Developer = new DeveloperViewModel(helper, state, dismiss);
-
-        ToggleOptiScaler = new Command(() =>
-        {
-            _state.ShowOptiScaler = !_state.ShowOptiScaler;
-            _state.Save();
-
-            Notify(nameof(ShowsOptiScaler));
-            Notify(nameof(OptiScalerTile));
-        });
-
-        ToggleRtss = new Command(() =>
-        {
-            _state.ShowRtss = !_state.ShowRtss;
-            _state.Save();
-
-            Notify(nameof(ShowsRtss));
-            Notify(nameof(RtssTile));
-            onRtssVisibilityChanged?.Invoke(_state.ShowRtss);
-        });
 
         ToggleStartWithWindows = new Command(() => StartsWithWindows = !StartsWithWindows);
         ToggleStartMenu = new Command(() => IsInStartMenu = !IsInStartMenu);
@@ -137,30 +117,12 @@ public sealed class SettingsViewModel : LayerViewModel
     public DeveloperViewModel Developer { get; }
 
     private readonly Tsume.Core.Ipc.HelperClient _helper;
-    private readonly SavedState _state;
     private bool _sharing;
-
-    public ICommand ToggleOptiScaler { get; }
-    public ICommand ToggleRtss { get; }
 
     public ICommand ShareLogs { get; }
     public ICommand OpenDataFolder { get; }
 
     public string ShareLogsDetail { get; private set => Set(ref field, value); } = Strings.ShareLogsDetail;
-
-    /// <summary>Whether the OptiScaler tile is on the main screen.</summary>
-    public bool ShowsOptiScaler => _state.ShowOptiScaler;
-
-    public System.Windows.Visibility OptiScalerTile => ShowsOptiScaler
-        ? System.Windows.Visibility.Visible
-        : System.Windows.Visibility.Collapsed;
-
-    /// <summary>Whether the RTSS overlay tile is on the main screen.</summary>
-    public bool ShowsRtss => _state.ShowRtss;
-
-    public System.Windows.Visibility RtssTile => ShowsRtss
-        ? System.Windows.Visibility.Visible
-        : System.Windows.Visibility.Collapsed;
 
     public ICommand ToggleMsiCenter { get; }
 

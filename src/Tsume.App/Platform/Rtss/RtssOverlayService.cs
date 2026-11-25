@@ -82,7 +82,7 @@ public sealed class RtssOverlayService : IDisposable
     /// <summary>Non-None when AIDA64, Winhanced, or another app already owns <c>AIDA64_SensorValues</c>.</summary>
     public AidaConflictKind SharedMemoryConflict => _aida.Conflict;
 
-    /// <summary>True when the FPS Overlay feature is enabled in Settings.</summary>
+    /// <summary>True when the FPS Overlay tile is shown on the main screen.</summary>
     public bool IsFeatureEnabled => _state.ShowRtss;
 
     private bool IsOverlayPluginWanted => _state.ShowRtss && _settings.UseTsumeOverlay && _settings.OverlayClaimed;
@@ -324,7 +324,7 @@ public sealed class RtssOverlayService : IDisposable
         if (install is not null) _ = Task.Run(() => SyncOverlayPluginAsync(autoStartIfWanted: true));
     }
 
-    /// <summary>Hands the overlay back to the user's own setup, or takes it again, when the RTSS tile is hidden or shown in Settings.</summary>
+    /// <summary>Hands the overlay back to the user's own setup, or takes it again, when the RTSS tile is hidden or shown in Quick tiles.</summary>
     public void SetFeatureEnabled(bool enabled)
     {
         ApplyLiveLevelState();

@@ -142,9 +142,8 @@ public static class Strings
     public static string KeepRunning => Find();
 
     public static string OptiScaler => Find();
-    public static string FeaturesHeading => Find();
 
-    public static string AppearanceHeading => Find();
+    public static string CustomizationHeading => Find();
     public static string Customization => Find();
     public static string CustomizationDetail => Find();
     public static string CustomizationSaved => Find();
@@ -164,11 +163,6 @@ public static class Strings
     public static string PresetRose => Find();
     public static string PresetMono => Find();
     public static string PresetDaylight => Find();
-    public static string ShowOptiScaler => Find();
-    public static string ShowOptiScalerDetail => Find();
-    public static string ShowRtss => Find();
-    public static string ShowRtssDetail => Find();
-    public static string Experimental => Find();
 
     public static string PerformancePresets => Find();
     public static string PerformancePresetsDetail => Find();
@@ -563,12 +557,35 @@ public static class Strings
     public static string RtssSavedNote => Find();
     public static string RtssRunningSavedNote(string version) => string.IsNullOrWhiteSpace(version) ? Find("RtssSavedNote") : Fill(Find(), version);
 
-    public static string ControlsHeading => Find();
     public static string ControlsAndLayout => Find();
     public static string ControlsAndLayoutDetail => Find();
     public static string PanelPositionHeading => Find();
     public static string OpenOnRight => Find();
     public static string OpenOnRightDetail => Find();
+    public static string MainTilesHeading => Find();
+    public static string MainTilesTitle => Find();
+    public static string MainTilesSummary(int shown, int total, int columns) => Fill(Find(), shown, total, columns);
+    public static string MainTilesSummaryNone => Find();
+    public static string MainTilesPreviewHeading => Find();
+    public static string MainTilesCountBadge(int shown, int total) => Fill(Find(), shown, total);
+    public static string MainTilesEmptyPreview => Find();
+    public static string MainTilesSelectedPosition(int position, int total) => Fill(Find(), position, total);
+    public static string MainTilesMoveLeft => Find();
+    public static string MainTilesMoveRight => Find();
+    public static string MainTilesHide => Find();
+    public static string MainTilesRemoveTile => Find();
+    public static string MainTilesColumnsHeading => Find();
+    public static string MainTilesColumnsChoice(int columns) => Fill(Find(), columns);
+    public static string MainTilesAvailableHeading => Find();
+    public static string MainTilesAvailableHint => Find();
+    public static string MainTilesAllShown => Find();
+    public static string MainTilesReset => Find();
+    public static string MainTilesFooterHint => Find();
+    public static string TileMute => Find();
+    public static string TileMuted => Find();
+    public static string TileSoundOn => Find();
+    public static string TileSteam => Find();
+    public static string TileGameBar => Find();
     public static string HardwareButtonsHeading => Find();
     public static string GameBarButton => Find();
     public static string GameBarDefault => Find();

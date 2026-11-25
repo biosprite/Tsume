@@ -35,7 +35,12 @@ public sealed class PanelViewModel : IDisposable
         Rtss = new RtssViewModel(_rtssService, dismiss);
         Quit = new QuitViewModel(quit);
 
-        Layers = [Power, Settings, Settings.PerformancePresets, Settings.Customization, Settings.Controls, Settings.Controls.DedicatedActionsPage, Settings.Controls.SystemButtonsPage, Settings.Developer, Lighting, Upscaling, .. Upscaling.Pages, Upscaling.RestoreAll, Rtss, Rtss.Download, Quit];
+        Actions.InitializeTiles(Performance, Lighting, PadMode, Upscaling, Rtss, Levels);
+        var mainTiles = Settings.Controls.MainTilesPage;
+        mainTiles.LayoutChanged += Actions.ApplyLayout;
+        Actions.ApplyLayout(mainTiles.ActiveIds, mainTiles.Columns);
+
+        Layers = [Power, Settings, Settings.PerformancePresets, Settings.Customization, Settings.Controls, Settings.Controls.MainTilesPage, Settings.Controls.DedicatedActionsPage, Settings.Controls.SystemButtonsPage, Settings.Developer, Lighting, Upscaling, .. Upscaling.Pages, Upscaling.RestoreAll, Rtss, Rtss.Download, Quit];
 
         _tick.Tick += async (_, _) =>
         {

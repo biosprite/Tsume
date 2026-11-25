@@ -67,7 +67,7 @@
               <StackPanel x:Name="Sections">
                 <panel:PerformanceView />
                 <panel:LevelsView Margin="0,16,0,0" />
-                <panel:ActionsView Margin="0,16,0,0" />
+                <panel:ActionsView Margin="0,16,0,0" Visibility="{Binding Actions.GridVisibility}" />
               </StackPanel>
             </ScrollViewer>
 
@@ -92,6 +92,10 @@
 
           <controls:Screen x:Name="ControlsScreen" Margin="18,16,18,16" IsOpen="{Binding Settings.Controls.IsOpen}">
             <panel:ControlsScreen />
+          </controls:Screen>
+
+          <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Settings.Controls.MainTilesPage.IsOpen}">
+            <panel:MainTilesScreen />
           </controls:Screen>
 
           <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Settings.Controls.DedicatedActionsPage.IsOpen}">

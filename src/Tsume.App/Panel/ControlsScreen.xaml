@@ -6,7 +6,7 @@
              xmlns:lang="clr-namespace:Tsume.App.Language"
              Focusable="False">
 
-  <!-- Panel side, Dedicated Actions, and System Buttons. Opened from Settings. -->
+  <!-- Panel side, Quick tiles, Dedicated Actions, and System Buttons. Opened from Settings. -->
 
   <DockPanel DataContext="{Binding Settings.Controls}">
 
@@ -41,6 +41,19 @@
                        Detail="{x:Static lang:Strings.OpenOnRightDetail}"
                        IsOn="{Binding OpenOnRight}"
                        Command="{Binding ToggleOpenOnRight}" />
+
+        <!-- Main screen quick tiles (live preview grid, reordering, and column density) -->
+        <StackPanel>
+          <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.MainTilesHeading}"
+                     Margin="4,16,0,10" />
+
+          <controls:Tile Style="{StaticResource Tile.Link}"
+                         Glyph="{x:Static theme:Glyphs.Tiles}"
+                         Label="{x:Static lang:Strings.MainTilesTitle}"
+                         Detail="{Binding MainTilesPage.SummaryDetail}"
+                         IsOn="{Binding MainTilesPage.IsCustomized}"
+                         Command="{Binding MainTilesPage.Open}" />
+        </StackPanel>
 
         <!-- Dedicated actions (opens a categorized, compact shortcuts screen) -->
         <StackPanel>

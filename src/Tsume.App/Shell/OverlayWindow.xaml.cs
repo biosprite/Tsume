@@ -442,7 +442,8 @@ public partial class OverlayWindow
         if (layer.IsOpen) _focusBeneath.Push(Keyboard.FocusedElement);
 
         Main.IsEnabled = !_panel.IsCovered;
-        var onControlsSubpage = _panel.Settings.Controls.DedicatedActionsPage.IsOpen
+        var onControlsSubpage = _panel.Settings.Controls.MainTilesPage.IsOpen
+            || _panel.Settings.Controls.DedicatedActionsPage.IsOpen
             || _panel.Settings.Controls.SystemButtonsPage.IsOpen;
         var onAPage = _panel.Settings.Customization.IsOpen
             || _panel.Settings.PerformancePresets.IsOpen

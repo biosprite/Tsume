@@ -1,0 +1,303 @@
+<UserControl x:Class="Tsume.App.Panel.MainTilesScreen"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Tsume.App.Controls"
+             xmlns:theme="clr-namespace:Tsume.App.Theme"
+             xmlns:lang="clr-namespace:Tsume.App.Language"
+             Focusable="False">
+
+  <!-- Interactive Main Screen Quick-Tiles customizer: live grid preview, drag-to-reorder,
+       contextual reorder/hide dock, column density, and an available-tiles tray.
+       Opened from Controls & Layout. -->
+
+  <UserControl.Resources>
+    <!-- Tiny top-right '-' quick-remove badge on active preview tiles (mouse & touch; non-focusable for D-pad). -->
+    <Style x:Key="Badge.QuickRemove" TargetType="Button">
+      <Setter Property="Width" Value="18" />
+      <Setter Property="Height" Value="18" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="Margin" Value="0,8,8,0" />
+      <Setter Property="Opacity" Value="0.58" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Grid>
+              <Ellipse x:Name="Circle" Fill="{DynamicResource Surface.Hover}" />
+              <TextBlock x:Name="Glyph" Style="{StaticResource Text.Icon}" FontSize="8.5"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Foreground="{DynamicResource Text.Muted}" Text="{x:Static theme:Glyphs.Minus}" />
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Opacity" Value="1" />
+                <Setter TargetName="Circle" Property="Fill" Value="#48FF5D5D" />
+                <Setter TargetName="Glyph" Property="Foreground" Value="{StaticResource Signal.Danger}" />
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Circle" Property="Fill" Value="#75FF5D5D" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </UserControl.Resources>
+
+  <DockPanel DataContext="{Binding Settings.Controls.MainTilesPage}">
+
+    <!-- Header -->
+    <DockPanel DockPanel.Dock="Top" Height="46" Margin="0,0,0,16">
+      <controls:Tile DockPanel.Dock="Left" Style="{StaticResource Tile.Icon}"
+                     Glyph="{x:Static theme:Glyphs.Back}"
+                     AutomationProperties.Name="{x:Static lang:Strings.Back}"
+                     Command="{Binding Close}" />
+
+      <WrapPanel VerticalAlignment="Center" Margin="14,0,0,0" MaxHeight="46">
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Style="{StaticResource Text.ScreenCrumb}" Text="{x:Static lang:Strings.Settings}" />
+          <TextBlock Style="{StaticResource Text.ScreenCrumbSeparator}" Text="&gt;" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Style="{StaticResource Text.ScreenCrumb}" Text="{x:Static lang:Strings.ControlsAndLayout}" />
+          <TextBlock Style="{StaticResource Text.ScreenCrumbSeparator}" Text="&gt;" />
+        </StackPanel>
+        <TextBlock Style="{StaticResource Text.ScreenTitle}" Text="{x:Static lang:Strings.MainTilesTitle}" />
+      </WrapPanel>
+    </DockPanel>
+
+    <!-- Footer hint -->
+    <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+               Text="{x:Static lang:Strings.MainTilesFooterHint}" Margin="4,10,0,0" />
+
+    <!-- Scrollable editor body -->
+    <ScrollViewer x:Name="List" Focusable="False"
+                  VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
+      <StackPanel>
+
+        <!-- 1. Live Main Screen Preview Card -->
+        <Border Background="{DynamicResource Sheet.Fill}"
+                BorderBrush="{DynamicResource Panel.Edge}" BorderThickness="1"
+                CornerRadius="{StaticResource Radius.Control}"
+                Padding="10,10,10,10">
+          <StackPanel>
+
+            <!-- Preview micro-header -->
+            <DockPanel Margin="4,0,2,10">
+              <Border DockPanel.Dock="Right" Background="{DynamicResource Surface}"
+                      CornerRadius="8" Padding="8,2" VerticalAlignment="Center">
+                <TextBlock Style="{StaticResource Text.Caption}" FontSize="11"
+                           Foreground="{DynamicResource Text.Muted}"
+                           Text="{Binding ActiveCountBadge}" />
+              </Border>
+
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Ellipse Width="6" Height="6" Fill="{x:Static theme:Accent.Brush}"
+                         VerticalAlignment="Center" Margin="0,0,7,0" />
+                <TextBlock Style="{StaticResource Text.Heading}" Margin="0" VerticalAlignment="Center"
+                           Text="{x:Static lang:Strings.MainTilesPreviewHeading}" />
+              </StackPanel>
+            </DockPanel>
+
+            <!-- Interactive grid + floating drag ghost -->
+            <Grid x:Name="PreviewStage">
+
+              <ItemsControl x:Name="ActiveGrid"
+                            ItemsSource="{Binding ActiveTiles}"
+                            Visibility="{Binding ActiveGridVisibility}"
+                            controls:Screen.TakesFocus="True"
+                            Focusable="False" Margin="-3"
+                            PreviewMouseLeftButtonDown="OnActiveGridMouseDown"
+                            PreviewMouseMove="OnActiveGridMouseMove"
+                            PreviewMouseLeftButtonUp="OnActiveGridMouseUp"
+                            LostMouseCapture="OnActiveGridLostMouseCapture">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <UniformGrid Columns="{Binding Columns}" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Grid>
+                      <Grid.Style>
+                        <Style TargetType="Grid">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsDragging}" Value="True">
+                              <Setter Property="Opacity" Value="0.28" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </Grid.Style>
+
+                      <controls:Tile Style="{StaticResource Tile.PickerActive}"
+                                     Glyph="{Binding Glyph}"
+                                     Label="{Binding Label}"
+                                     Detail="{Binding SlotLabel}"
+                                     IsOn="{Binding IsSelected}"
+                                     Command="{Binding PrimaryAction}" />
+
+                      <Button x:Name="RemoveBadge" Style="{StaticResource Badge.QuickRemove}"
+                              ToolTip="{x:Static lang:Strings.MainTilesRemoveTile}"
+                              AutomationProperties.Name="{x:Static lang:Strings.MainTilesRemoveTile}"
+                              Click="OnQuickRemoveClick"
+                              Command="{Binding QuickRemove}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <!-- Shown when all tiles have been hidden -->
+              <Border Visibility="{Binding EmptyActiveVisibility}"
+                      CornerRadius="14" Padding="18,24" Margin="2"
+                      Background="{DynamicResource Surface}">
+                <TextBlock Style="{StaticResource Text.Caption}" TextAlignment="Center"
+                           TextWrapping="Wrap" TextTrimming="None"
+                           Foreground="{DynamicResource Text.Muted}"
+                           Text="{x:Static lang:Strings.MainTilesEmptyPreview}" />
+              </Border>
+
+              <!-- Floating ghost tile rendered while dragging -->
+              <Canvas x:Name="DragOverlay" IsHitTestVisible="False">
+                <Border x:Name="DragGhost" Visibility="Collapsed"
+                        Background="{DynamicResource Sheet.Fill}"
+                        BorderBrush="{x:Static theme:Accent.Brush}" BorderThickness="1.5"
+                        CornerRadius="14" Opacity="0.94">
+                  <Border.Effect>
+                    <DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.5" Color="Black" />
+                  </Border.Effect>
+                  <Grid>
+                    <Border Background="{x:Static theme:Accent.Wash}" CornerRadius="13" />
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="6,4">
+                      <TextBlock x:Name="DragGhostGlyph" Style="{StaticResource Text.Icon}" FontSize="18"
+                                 Foreground="{x:Static theme:Accent.Brush}" HorizontalAlignment="Center" />
+                      <TextBlock x:Name="DragGhostLabel" Style="{StaticResource Text.Caption}" FontSize="11"
+                                 Foreground="{DynamicResource Text}" HorizontalAlignment="Center" Margin="0,5,0,0" />
+                    </StackPanel>
+                  </Grid>
+                </Border>
+              </Canvas>
+
+            </Grid>
+
+          </StackPanel>
+        </Border>
+
+        <!-- 2. Contextual Inspector / Action Dock for the selected active tile -->
+        <controls:Reveal IsOpen="{Binding HasSelectedTile}">
+          <Border Background="{x:Static theme:Accent.Tint}"
+                  BorderBrush="{x:Static theme:Accent.Wash}" BorderThickness="1"
+                  CornerRadius="14" Padding="12,8,10,8" Margin="0,8,0,0">
+            <DockPanel>
+
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <controls:Tile x:Name="MoveLeftButton" Style="{StaticResource Tile.MiniIcon}"
+                               Glyph="{x:Static theme:Glyphs.ChevronLeft}"
+                               ToolTip="{x:Static lang:Strings.MainTilesMoveLeft}"
+                               AutomationProperties.Name="{x:Static lang:Strings.MainTilesMoveLeft}"
+                               IsEnabled="{Binding CanMoveLeft}"
+                               Click="OnMoveSelectedClick"
+                               Command="{Binding MoveSelectedLeft}" />
+
+                <controls:Tile x:Name="MoveRightButton" Style="{StaticResource Tile.MiniIcon}"
+                               Margin="4,0,0,0"
+                               Glyph="{x:Static theme:Glyphs.ChevronRight}"
+                               ToolTip="{x:Static lang:Strings.MainTilesMoveRight}"
+                               AutomationProperties.Name="{x:Static lang:Strings.MainTilesMoveRight}"
+                               IsEnabled="{Binding CanMoveRight}"
+                               Click="OnMoveSelectedClick"
+                               Command="{Binding MoveSelectedRight}" />
+
+                <controls:Tile x:Name="HideSelectedButton" Style="{StaticResource Tile.Mini}"
+                               Height="34" Margin="6,0,0,0"
+                               Foreground="{StaticResource Signal.Danger}"
+                               Glyph="{x:Static theme:Glyphs.Hide}"
+                               Label="{x:Static lang:Strings.MainTilesHide}"
+                               Click="OnHideSelectedClick"
+                               Command="{Binding RemoveSelected}" />
+              </StackPanel>
+
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+                <TextBlock Style="{StaticResource Text.Icon}" FontSize="17"
+                           Foreground="{x:Static theme:Accent.Brush}"
+                           VerticalAlignment="Center" Margin="2,0,10,0"
+                           Text="{Binding SelectedTile.Glyph}" />
+
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock Style="{StaticResource Text.Body}" FontSize="13" FontWeight="SemiBold"
+                             Text="{Binding SelectedTile.Label}" />
+                  <TextBlock Style="{StaticResource Text.Caption}" FontSize="11"
+                             Text="{Binding SelectedPositionText}" />
+                </StackPanel>
+              </StackPanel>
+
+            </DockPanel>
+          </Border>
+        </controls:Reveal>
+
+        <!-- 3. Tiles per row (column density) -->
+        <TextBlock Style="{StaticResource Text.Heading}"
+                   Text="{x:Static lang:Strings.MainTilesColumnsHeading}"
+                   Margin="4,16,0,8" />
+
+        <controls:SegmentedControl x:Name="ColumnsPicker" Height="40"
+                                   AutomationProperties.Name="{x:Static lang:Strings.MainTilesColumnsHeading}"
+                                   Segments="{Binding ColumnChoices}"
+                                   SelectedIndex="{Binding ColumnsIndex}" />
+
+        <!-- 4. Available Tiles Tray (visual grid, one tap to add) -->
+        <DockPanel Margin="4,18,4,8">
+          <TextBlock DockPanel.Dock="Right" Style="{StaticResource Text.Caption}" FontSize="11"
+                     Foreground="{DynamicResource Text.Faint}" VerticalAlignment="Center"
+                     Visibility="{Binding AvailableGridVisibility}"
+                     Text="{x:Static lang:Strings.MainTilesAvailableHint}" />
+          <TextBlock Style="{StaticResource Text.Heading}" Margin="0" VerticalAlignment="Center"
+                     Text="{x:Static lang:Strings.MainTilesAvailableHeading}" />
+        </DockPanel>
+
+        <ItemsControl x:Name="AvailableGrid"
+                      ItemsSource="{Binding AvailableTiles}"
+                      Visibility="{Binding AvailableGridVisibility}"
+                      Focusable="False" Margin="-3">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <UniformGrid Columns="4" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <controls:Tile Style="{StaticResource Tile.PickerAvailable}"
+                             Glyph="{Binding Glyph}"
+                             Label="{Binding Label}"
+                             Click="OnAvailableTileClick"
+                             Command="{Binding PrimaryAction}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Border Style="{StaticResource Card.Note}" Padding="16,12" Margin="0"
+                Visibility="{Binding EmptyAvailableVisibility}">
+          <TextBlock Style="{StaticResource Text.Caption}" TextAlignment="Center"
+                     TextWrapping="Wrap" TextTrimming="None"
+                     Foreground="{DynamicResource Text.Faint}"
+                     Text="{x:Static lang:Strings.MainTilesAllShown}" />
+        </Border>
+
+        <!-- 5. Reset to defaults (revealed only when customized) -->
+        <controls:Reveal IsOpen="{Binding IsCustomized}">
+          <controls:Tile Style="{StaticResource Tile.Row}" Margin="0,14,0,0"
+                         Glyph="{x:Static theme:Glyphs.Update}"
+                         Label="{x:Static lang:Strings.MainTilesReset}"
+                         Click="OnResetClick"
+                         Command="{Binding ResetToDefaults}" />
+        </controls:Reveal>
+
+      </StackPanel>
+    </ScrollViewer>
+
+  </DockPanel>
+
+</UserControl>

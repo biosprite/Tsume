@@ -221,8 +221,8 @@
     <comment>{0} = a mode's name, {1} = "Sustained" or "Boost"</comment>
   </data>
 
-  <data name="AppearanceHeading" xml:space="preserve"><value>APPEARANCE</value></data>
-  <data name="Customization" xml:space="preserve"><value>Customization</value></data>
+  <data name="CustomizationHeading" xml:space="preserve"><value>CUSTOMIZATION</value></data>
+  <data name="Customization" xml:space="preserve"><value>App Colors</value></data>
   <data name="CustomizationDetail" xml:space="preserve"><value>Colors for the whole of Tsume</value></data>
   <data name="CustomizationSaved" xml:space="preserve"><value>Changes show at once and are kept.</value></data>
   <data name="PresetsHeading" xml:space="preserve"><value>PRESETS</value></data>
@@ -243,12 +243,6 @@
   <data name="PresetDaylight" xml:space="preserve"><value>Daylight</value></data>
 
   <data name="OptiScaler" xml:space="preserve"><value>OptiScaler</value></data>
-  <data name="FeaturesHeading" xml:space="preserve"><value>FEATURES</value></data>
-  <data name="ShowOptiScaler" xml:space="preserve"><value>OptiScaler tile</value></data>
-  <data name="Experimental" xml:space="preserve"><value>EXPERIMENTAL</value></data>
-  <data name="ShowOptiScalerDetail" xml:space="preserve"><value>Better upscaling in your games. Nothing is downloaded until you ask.</value></data>
-  <data name="ShowRtss" xml:space="preserve"><value>FPS Overlay tile</value></data>
-  <data name="ShowRtssDetail" xml:space="preserve"><value>FPS Overlay and frame-rate cap. Installs RTSS via winget.</value></data>
   <data name="GamesWithOptiScaler" xml:space="preserve">
     <value>{0} games</value>
     <comment>{0} = how many games have OptiScaler installed</comment>
@@ -803,13 +797,49 @@
 
   <!-- Controls & layout screen -->
 
-  <data name="ControlsHeading" xml:space="preserve"><value>CONTROLS</value></data>
   <data name="ControlsAndLayout" xml:space="preserve"><value>Controls &amp; Layout</value></data>
-  <data name="ControlsAndLayoutDetail" xml:space="preserve"><value>Panel side, dedicated buttons, and back-button bindings</value></data>
+  <data name="ControlsAndLayoutDetail" xml:space="preserve"><value>Panel side, quick tiles, dedicated buttons, and back-button bindings</value></data>
 
   <data name="PanelPositionHeading" xml:space="preserve"><value>PANEL SIDE</value></data>
   <data name="OpenOnRight" xml:space="preserve"><value>Open from right side</value></data>
   <data name="OpenOnRightDetail" xml:space="preserve"><value>Slide Tsume in from the right edge of the screen instead of the left</value></data>
+
+  <data name="MainTilesHeading" xml:space="preserve"><value>MAIN SCREEN</value></data>
+  <data name="MainTilesTitle" xml:space="preserve"><value>Quick tiles</value></data>
+  <data name="MainTilesSummary" xml:space="preserve">
+    <value>{0} of {1} tiles · {2} per row</value>
+    <comment>{0} = active count, {1} = total available tiles, {2} = columns per row</comment>
+  </data>
+  <data name="MainTilesSummaryNone" xml:space="preserve"><value>No tiles shown · Tap to customize</value></data>
+  <data name="MainTilesPreviewHeading" xml:space="preserve"><value>ON MAIN SCREEN</value></data>
+  <data name="MainTilesCountBadge" xml:space="preserve">
+    <value>{0} / {1}</value>
+    <comment>{0} = active tile count, {1} = total tile count</comment>
+  </data>
+  <data name="MainTilesEmptyPreview" xml:space="preserve"><value>No quick tiles on the main screen. Pick tiles below to add them.</value></data>
+  <data name="MainTilesSelectedPosition" xml:space="preserve">
+    <value>Slot {0} of {1}</value>
+    <comment>{0} = 1-based slot index, {1} = active tile count</comment>
+  </data>
+  <data name="MainTilesMoveLeft" xml:space="preserve"><value>Move earlier</value></data>
+  <data name="MainTilesMoveRight" xml:space="preserve"><value>Move later</value></data>
+  <data name="MainTilesHide" xml:space="preserve"><value>Hide</value></data>
+  <data name="MainTilesRemoveTile" xml:space="preserve"><value>Hide tile</value></data>
+  <data name="MainTilesColumnsHeading" xml:space="preserve"><value>TILES PER ROW</value></data>
+  <data name="MainTilesColumnsChoice" xml:space="preserve">
+    <value>{0} columns</value>
+    <comment>{0} = 2, 3, or 4</comment>
+  </data>
+  <data name="MainTilesAvailableHeading" xml:space="preserve"><value>AVAILABLE TILES</value></data>
+  <data name="MainTilesAvailableHint" xml:space="preserve"><value>Select a tile to add it to the main screen</value></data>
+  <data name="MainTilesAllShown" xml:space="preserve"><value>All available tiles are on the main screen.</value></data>
+  <data name="MainTilesReset" xml:space="preserve"><value>Reset tiles to default</value></data>
+  <data name="MainTilesFooterHint" xml:space="preserve"><value>Changes apply right away. Drag tiles or select one to move or hide.</value></data>
+  <data name="TileMute" xml:space="preserve"><value>Mute</value></data>
+  <data name="TileMuted" xml:space="preserve"><value>Muted</value></data>
+  <data name="TileSoundOn" xml:space="preserve"><value>Sound on</value></data>
+  <data name="TileSteam" xml:space="preserve"><value>Steam</value></data>
+  <data name="TileGameBar" xml:space="preserve"><value>Game Bar</value></data>
 
   <data name="HardwareButtonsHeading" xml:space="preserve"><value>DEDICATED BUTTONS</value></data>
   <data name="GameBarButton" xml:space="preserve"><value>Game Bar button</value></data>

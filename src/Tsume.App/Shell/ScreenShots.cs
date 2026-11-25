@@ -93,6 +93,17 @@ public static class ScreenShots
                 controlsScroll.ScrollToTop();
             }
 
+            var mainTiles = panel.Settings.Controls.MainTilesPage;
+            mainTiles.IsOpen = true;
+            await Shot("2g-main-tiles");
+            if (mainTiles.ActiveTiles.Count > 2)
+            {
+                mainTiles.ActiveTiles[2].PrimaryAction.Execute(null);
+                await Shot("2g-main-tiles-selected");
+                mainTiles.ActiveTiles[2].PrimaryAction.Execute(null);
+            }
+            mainTiles.IsOpen = false;
+
             var dedicated = panel.Settings.Controls.DedicatedActionsPage;
             dedicated.IsOpen = true;
             await Shot("2f-dedicated-active");
