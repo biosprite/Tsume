@@ -103,6 +103,8 @@ public sealed class PerformanceViewModel : Observable
         Notify(nameof(ShowsLimitSliders));
         Notify(nameof(FanDetail));
         NotifyLimits();
+        Notify(nameof(BatteryCapNote));
+        ReadPowerSource();
 
         _absorbing = before;
     }
@@ -170,13 +172,32 @@ public sealed class PerformanceViewModel : Observable
     /// <summary>True on 3-tier AMD devices that expose an independent Fast Boost (FPPT) slider.</summary>
     public bool HasFastBoost => Device.ManualRange?.HasFastBoost == true;
 
-    // Slider ranges, as doubles to bind to Slider.Minimum/Maximum.
+    // Slider ranges, as doubles to bind to Slider.Minimum/Maximum. On battery on a machine with a battery cap the
+    // maxima stop at the cap, as MSI Center M's battery sliders do; on every other machine they never move.
     public double MinWatts => Device.ManualRange?.Min ?? 0;
     public double MinBoostWatts => Device.ManualRange?.MinBoost ?? 0;
     public double MinFastBoostWatts => Device.ManualRange?.MinFastBoost ?? 0;
-    public double MaxSustainedWatts => Device.ManualRange?.EffectiveMaxSustained ?? 1;
-    public double MaxBoostWatts => Device.ManualRange?.EffectiveMaxBoost ?? 1;
-    public double MaxFastBoostWatts => Device.ManualRange?.MaxFastBoost ?? 1;
+    public double MaxSustainedWatts => SliderCap is { } cap
+        ? Math.Min(Device.ManualRange?.EffectiveMaxSustained ?? 1, cap.Sustained)
+        : Device.ManualRange?.EffectiveMaxSustained ?? 1;
+    public double MaxBoostWatts => SliderCap is { } cap
+        ? Math.Min(Device.ManualRange?.EffectiveMaxBoost ?? 1, cap.Boost)
+        : Device.ManualRange?.EffectiveMaxBoost ?? 1;
+    public double MaxFastBoostWatts => SliderCap is { FastBoost: { } capFast }
+        ? Math.Min(Device.ManualRange?.MaxFastBoost ?? 1, capFast)
+        : Device.ManualRange?.MaxFastBoost ?? 1;
+
+    /// <summary>The battery cap while the sliders are held to it; null on wall power and on a machine without one.</summary>
+    private PowerLimits? SliderCap => _onBattery ? Device.BatteryCap : null;
+
+    // What the user chose. The sliders show these, lowered to the battery cap while it applies, and the helper
+    // is always sent these and lowers them the same way, so wall-power choices survive a spell on battery.
+    private double _sustained;
+    private double _boost;
+    private double _fastBoost;
+
+    /// <summary>What the sliders show while the battery cap applies: what the helper writes for the user's limits.</summary>
+    private PowerLimits Shown => Device.CapForBattery(Manual);
 
     private double MinBoostFor(double sustained) =>
         Device.ManualRange is { } range ? range.MinBoostFor((int)sustained) : sustained;
@@ -186,20 +207,33 @@ public sealed class PerformanceViewModel : Observable
 
     public double Sustained
     {
-        get;
+        get => SliderCap is null ? _sustained : Shown.Sustained;
         set
         {
             var rounded = Math.Round(value);
             if (Device.ManualRange is { } range)
                 rounded = Math.Clamp(rounded, range.Min, range.EffectiveMaxSustained);
 
-            if (!Set(ref field, rounded))
+            // Only for the user's own moves: a value adopted from the helper or a new profile is stored as it is.
+            if (SliderCap is not null && !_absorbing)
+            {
+                // The user cannot go past the battery slider's end, and a value equal to the one already shown
+                // (the user's own, capped) is not a new choice: their wall-power value stays.
+                rounded = Math.Min(rounded, MaxSustainedWatts);
+                if (rounded == Sustained)
+                {
+                    if (rounded != value) Notify();
+                    return;
+                }
+            }
+
+            if (!Set(ref _sustained, rounded))
             {
                 if (rounded != value) Notify();
                 return;
             }
 
-            var minBoost = MinBoostFor(field);
+            var minBoost = MinBoostFor(_sustained);
             if (Boost < minBoost) Boost = minBoost;
             OnManualChanged();
         }
@@ -207,7 +241,7 @@ public sealed class PerformanceViewModel : Observable
 
     public double Boost
     {
-        get;
+        get => SliderCap is null ? _boost : Shown.Boost;
         set
         {
             var rounded = Math.Round(value);
@@ -216,7 +250,17 @@ public sealed class PerformanceViewModel : Observable
                 ? Math.Clamp(rounded, floor, range.EffectiveMaxBoost)
                 : Math.Max(rounded, floor);
 
-            if (!Set(ref field, clamped))
+            if (SliderCap is not null && !_absorbing)
+            {
+                clamped = Math.Min(clamped, MaxBoostWatts);
+                if (clamped == Boost)
+                {
+                    if (clamped != value) Notify();
+                    return;
+                }
+            }
+
+            if (!Set(ref _boost, clamped))
             {
                 if (clamped != value) Notify();
                 return;
@@ -224,7 +268,7 @@ public sealed class PerformanceViewModel : Observable
 
             if (HasFastBoost)
             {
-                var minFast = MinFastBoostFor(field);
+                var minFast = MinFastBoostFor(_boost);
                 if (FastBoost < minFast) FastBoost = minFast;
             }
             OnManualChanged();
@@ -233,7 +277,7 @@ public sealed class PerformanceViewModel : Observable
 
     public double FastBoost
     {
-        get;
+        get => SliderCap is null ? _fastBoost : Shown.FastBoost ?? _fastBoost;
         set
         {
             var rounded = Math.Round(value);
@@ -241,16 +285,27 @@ public sealed class PerformanceViewModel : Observable
                 ? Math.Clamp(rounded, range.MinFastBoostFor((int)Boost), maxFast)
                 : rounded;
 
-            if (Set(ref field, clamped))
+            if (SliderCap is not null && !_absorbing)
+            {
+                clamped = Math.Min(clamped, MaxFastBoostWatts);
+                if (clamped == FastBoost)
+                {
+                    if (clamped != value) Notify();
+                    return;
+                }
+            }
+
+            if (Set(ref _fastBoost, clamped))
                 OnManualChanged();
             else if (clamped != value)
                 Notify();
         }
     }
 
+    /// <summary>The user's own limits, as saved and as sent to the helper: never the battery-capped ones shown.</summary>
     private PowerLimits Manual => HasFastBoost
-        ? new((int)Sustained, (int)Boost, (int)FastBoost)
-        : new((int)Sustained, (int)Boost);
+        ? new((int)_sustained, (int)_boost, (int)_fastBoost)
+        : new((int)_sustained, (int)_boost);
 
     private void OnManualChanged()
     {
@@ -280,7 +335,76 @@ public sealed class PerformanceViewModel : Observable
         Apply();
     }
 
-    private PowerLimits? InForce => Device.LimitsFor(Mode, Manual, CustomFor(Mode));
+    /// <summary>
+    /// The helper's limits for the mode: the user's, lowered to the battery cap while it applies (as the helper
+    /// lowers what it writes; <see cref="DeviceProfile.CapForBattery"/>).
+    /// </summary>
+    private PowerLimits? InForce
+    {
+        get
+        {
+            var limits = Device.LimitsFor(Mode, Manual, CustomFor(Mode));
+            return limits is { } found && _onBattery ? Device.CapForBattery(found) : limits;
+        }
+    }
+
+    /// <summary>True while on battery on a machine with a battery cap; never set on any other machine.</summary>
+    private bool _onBattery;
+
+    /// <summary>Asks Windows for the power source, only on a machine with a battery cap.</summary>
+    private void ReadPowerSource()
+    {
+        var onBattery = Device.BatteryCap is not null && Battery.IsOnBattery();
+        if (onBattery == _onBattery) return;
+
+        // The sliders' ends and values move together. Whatever the controls push back meanwhile is not a user
+        // choice. Values first when the range shrinks, range first when it grows, so a value is never outside it.
+        var before = _absorbing;
+        _absorbing = true;
+        _onBattery = onBattery;
+        if (onBattery)
+        {
+            NotifySliderValues();
+            NotifySliderMaxima();
+        }
+        else
+        {
+            NotifySliderMaxima();
+            NotifySliderValues();
+        }
+        _absorbing = before;
+
+        NotifyLimits();
+        Notify(nameof(BatteryCapNote));
+        Notify(nameof(ShowsBatteryCapNote));
+    }
+
+    private void NotifySliderValues()
+    {
+        Notify(nameof(Sustained));
+        Notify(nameof(Boost));
+        Notify(nameof(FastBoost));
+    }
+
+    private void NotifySliderMaxima()
+    {
+        Notify(nameof(MaxSustainedWatts));
+        Notify(nameof(MaxBoostWatts));
+        Notify(nameof(MaxFastBoostWatts));
+    }
+
+    /// <summary>E.g. "Limited to 35 W on battery".</summary>
+    public string BatteryCapNote => Device.BatteryCap is { } cap
+        ? Strings.BatteryCapNote(cap.FastBoost ?? Math.Max(cap.Sustained, cap.Boost))
+        : string.Empty;
+
+    /// <summary>
+    /// The note shows only while the helper is lowering this mode's limits to the battery cap; collapsed in a mode
+    /// the cap does not touch, while the helper is offline, and on every machine without a cap.
+    /// </summary>
+    public bool ShowsBatteryCapNote =>
+        _onBattery && IsHelperOnline
+        && Device.LimitsFor(Mode, Manual, CustomFor(Mode)) is { } own && Device.CapForBattery(own) != own;
 
     /// <summary>The power limits currently in force, or null when the device has none.</summary>
     public PowerLimits? ActiveLimits => InForce;
@@ -299,6 +423,7 @@ public sealed class PerformanceViewModel : Observable
     {
         Notify(nameof(SustainedInForce));
         Notify(nameof(BoostInForce));
+        if (Device.BatteryCap is not null) Notify(nameof(ShowsBatteryCapNote));   // it depends on the mode's limits
     }
 
     /// <summary>Processor temperature, e.g. "61 °C", or a dash when the firmware did not answer.</summary>
@@ -387,7 +512,11 @@ public sealed class PerformanceViewModel : Observable
 
         var reply = await _helper.SendAsync(new GetReadings());
 
-        if (reply.Readings is { } readings) Show(readings.CpuTemperature, readings.FanRpm);
+        if (reply.Readings is { } readings)
+        {
+            Show(readings.CpuTemperature, readings.FanRpm);
+            ReadPowerSource();   // nothing on a machine without a battery cap
+        }
         else Absorb(reply);   // no readings means the helper is gone
     }
 
@@ -400,6 +529,13 @@ public sealed class PerformanceViewModel : Observable
         Absorb(await _helper.SendAsync(new SetPerformance(Mode, Manual, CustomFor(Mode))));
     }
 
+    /// <summary>
+    /// True on a machine with a battery cap when <paramref name="read"/> is the sliders' limits lowered to it.
+    /// Not tied to the power source right now: for a moment after plugging in, the firmware still holds the capped values.
+    /// </summary>
+    private bool IsBatteryCapOf(PowerLimits read) =>
+        Device.BatteryCap is not null && Device.ManualRange is { } range && read == Device.CapForBattery(range.Clamp(Manual));
+
     /// <summary>Shows a helper reply. The mode and manual limits are taken from it only when <paramref name="adoptMode"/> is set.</summary>
     private void Absorb(HelperReply reply, bool adoptMode = false)
     {
@@ -407,18 +543,22 @@ public sealed class PerformanceViewModel : Observable
 
         IsUnsupported = reply.Unsupported;
         IsHelperOnline = reply.Snapshot is not null;
+        if (Device.BatteryCap is not null) Notify(nameof(ShowsBatteryCapNote));   // it hides while the helper is offline
 
         if (reply.Snapshot is not { } snapshot) return;
 
         Fan = snapshot.Fan;
         Show(snapshot.CpuTemperature, snapshot.FanRpm);
+        ReadPowerSource();   // nothing on a machine without a battery cap
 
         if (!adoptMode) return;
 
         // Something else (MSI Center M, a previous session) may have changed the mode.
         _absorbing = true;
         Mode = snapshot.Mode;
-        if (snapshot.Mode == PerformanceMode.Manual)
+        // On battery the helper writes the user's Manual limits lowered to the cap and keeps the user's own for
+        // wall power, so a read-back equal to them capped is not a new choice: the sliders keep the user's.
+        if (snapshot.Mode == PerformanceMode.Manual && !IsBatteryCapOf(snapshot.Limits))
         {
             var limits = Device.ManualRange is { } range ? range.Clamp(snapshot.Limits) : snapshot.Limits;
             Sustained = limits.Sustained;

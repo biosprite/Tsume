@@ -28,15 +28,26 @@ public interface IDevice : IDisposable
     /// </summary>
     void SetPerformance(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null);
 
+    /// <summary>
+    /// The limits <see cref="SetPerformance"/> would write right now for these arguments — the one answer every
+    /// caller that compares the firmware with a choice must use, or it would see a difference that is not there.
+    /// Null when the machine does not offer the mode. Defaults to <see cref="DeviceProfile.LimitsFor"/>; a device
+    /// may lower it (e.g. to <see cref="DeviceProfile.BatteryCap"/> while on battery).
+    /// </summary>
+    PowerLimits? LimitsToApply(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null) =>
+        Profile.LimitsFor(mode, manual, custom);
+
     /// <summary>The mode and limits in force right now. Cheap: asked on every wake.</summary>
     (PerformanceMode Mode, PowerLimits Limits) Performance();
 
     /// <summary>
-    /// The mode the firmware register itself holds when <paramref name="mode"/> is applied.
+    /// The mode the firmware register itself holds when <paramref name="mode"/> is applied with
+    /// <paramref name="limits"/> (the limits <see cref="LimitsToApply"/> resolves for it).
     /// Defaults to <paramref name="mode"/>; boards whose EC ignores power-limit registers in
-    /// built-in shift modes return <see cref="PerformanceMode.Manual"/> instead.
+    /// built-in shift modes return <see cref="PerformanceMode.Manual"/> instead, and some boards
+    /// pick a shift mode from the limits themselves.
     /// </summary>
-    PerformanceMode HardwareModeFor(PerformanceMode mode) => mode;
+    PerformanceMode HardwareModeFor(PerformanceMode mode, PowerLimits limits) => mode;
 
     void SetFan(FanMode mode);
 

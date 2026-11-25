@@ -74,7 +74,8 @@ public sealed class HelperService : ServiceBase
 
     /// <summary>
     /// On waking from hibernation, and whenever the screen goes on or off, re-checks the firmware against
-    /// what was chosen. On wake, also makes sure the panel is still running (handles wake without sign-in).
+    /// what was chosen. On wake, also makes sure the panel is still running (handles wake without sign-in). On a
+    /// board with a battery cap, also on a switch between wall power and battery.
     /// </summary>
     protected override bool OnPowerEvent(PowerBroadcastStatus status)
     {
@@ -95,6 +96,11 @@ public sealed class HelperService : ServiceBase
                 keeper.RestoreIfForgotten(occasion);
                 charge.RestoreIfForgotten(occasion);
             });
+
+        // A switch between wall power and battery (Windows sends this for battery level changes too). Only boards
+        // with a battery cap apply different limits on battery; on any other board nothing is done here.
+        if (status == PowerBroadcastStatus.PowerStatusChange && _keeper is { FollowsPowerSource: true } sourceKeeper)
+            Task.Run(sourceKeeper.OnPowerStatusChange);
 
         if (isWake)
         {

@@ -2,8 +2,9 @@
 
 How the Claw's built-in gamepad is configured: mode switching, button remaps,
 RGB, vibration, gyro. Derived by reading MSI Center M's own control module
-(`API_ControlMode` v1.0.2609.2901) on this device. Nothing here has been
-replayed against the hardware yet — see **Status** at the bottom.
+(`API_ControlMode` v1.0.2609.2901) on this device. Only some of it has been
+replayed against the hardware, on one Claw 8 EX AI+ (controller firmware 4.19) —
+see **Status** at the bottom. Other models and firmware branches are inferred.
 
 Multi-byte values are big-endian unless noted.
 
@@ -63,7 +64,7 @@ acknowledged by *any* incoming report except `0x0A`, `0x27`, `0x30` and `0xF4`.
 | **F0** | Firmware update transport (JieLi DFU). A bad packet can brick the controller. |
 | **F4** | Unknown. MSI only ever ignores it. |
 | 24 with mode 5 or 6 | "BIOS" and "TESTING" modes. MSI never sends them. |
-| 01 03 07 08 0B | Legacy commands with unknown behaviour. |
+| 01 03 07 08 0B | Legacy commands with unknown behavior. |
 
 Also avoid pulsing both rumble motors at speeds `77 83 73 65 80 80` ("MSIAPP",
 20 ms on / 5 ms off): MSI uses that XInput pattern as a firmware trigger.
@@ -104,6 +105,14 @@ save    0F 00 00 3C 22
 
 Reads use profile index 0 and writes use index 1. That asymmetry is MSI's, and
 is unexplained.
+
+MSI's code uses this one layout for every model and every firmware version
+(`ProfileInfo.Parse`, no version branch). Tsume's legacy-layout write guard
+(`ClawController.UsesLegacyProfileLayout`: `<= 0x0163`, `0x0200..0x0216`) does
+not come from MSI's code. An older layout does exist per the Linux kernel
+`hid-msi` driver (formerly `hid-msi-claw`), which keeps separate old/new address
+tables (RGB `0x01FA` old vs `0x024A` new); the exact version cutoffs Tsume uses
+are not confirmed by any source here.
 
 | Offset | Len | Content |
 |---|---|---|
@@ -151,11 +160,11 @@ Nine LEDs: left stick ring (0–3), right stick ring (4–7), ABXY (8).
 589                 speed byte = 20 − speed
 590                 brightness 0–100
 591                 8 keyframes × 9 LEDs × R G B
-807   animation 1   (firmware-stored colour cycle, by inference)
+807   animation 1   (firmware-stored color cycle, by inference)
 ```
 
-The controller interpolates between keyframes: one keyframe is a steady colour,
-two (colour, black) is a breathing effect, six is a colour cycle.
+The controller interpolates between keyframes: one keyframe is a steady color,
+two (color, black) is a breathing effect, six is a color cycle.
 
 **Solid red at full brightness** — a single write of 32 bytes at offset 0x024A:
 
@@ -172,7 +181,7 @@ FF 00 00  FF 00 00  FF 00 00  FF 00 00  FF 00 00  FF 00 00  FF 00 00  FF 00 00  
 
 - Logs every packet in hex to `%ProgramData%\MSI\MSI_Center_M\Log\API\GamePad\`. That log is the reference to validate Tsume's packets against.
 - Stores its own copy of the profile in `%ProgramData%\MSI\MSI_Center_M\Control Mode\profile.rec`.
-- Rewrites stick deadzones and saves to flash every time the controller reports a mode change. While MSI Center M runs, it will fight any other writer.
+- Rewrites stick deadzones and saves to flash (`SaveProfile`, which always ends in `22` SyncToROM) every time it receives a `27` GamepadModeAck reporting XInput or Desktop mode (`MSIGamePad.ControlModeUpdated`). That includes, by inference, the replies to Tsume's own `26` reads, since every open handle receives the controller's input reports. While MSI Center M runs, it will fight any other writer.
 
 ## Status
 
@@ -180,7 +189,7 @@ FF 00 00  FF 00 00  FF 00 00  FF 00 00  FF 00 00  FF 00 00  FF 00 00  FF 00 00  
 |---|---|
 | Protocol read from MSI's code | done |
 | Read-only handshake on this device (mode read, full profile read) | **done** 2026-11-10 — firmware 4.19, mode 1, 1478 bytes in 108 ms (`controller-read-2026-11-10.txt`) |
-| Profile layout confirmed by read-back | **lighting block confirmed**: animation 0 at 586 (index), 587 count, 588 = 9, 589 speed, 590 brightness, 591 keyframes. Animations 1 and 3 sit 220 bytes apart (807, 1247); animation 2 at 1027 has a byte the layout does not explain (brightness reads 0x80). Tsume writes animation 0 only |
+| Profile layout confirmed by read-back | **lighting block confirmed**: animation 0 at 586 (index), 587 count, 588 = 9, 589 speed, 590 brightness, 591 keyframes. Animations 1 and 3 sit on the 220-byte stride (807, 1247); animation 2 at 1027 has a byte the layout does not explain (brightness reads 0x80). Tsume writes animation 0 only |
 | Lighting write | **done** — 0x21 to working memory acknowledged in 5 ms, read back equal, original restored and read back equal (`lighting-check-2026-11-10.txt`). Not yet confirmed by eye |
 | Mode switching | **done** 2026-11-11 — `24 04 00` read back as mode 4 after 40 ms, `24 01 00` as mode 1 after 34 ms (`pad-mode-check-2026-11-11.txt`). The pad **stays on the bus**: same five HID collections under `PID_1901`, same handle, XInput slot 0 still answering in mode 4. What the buttons and sticks send in mode 4 has **not been observed** (needs presses). Whether the mode survives sleep or a restart is not known. Tsume sends modes 1 and 4 only |
 | Vibration, remaps | not yet |

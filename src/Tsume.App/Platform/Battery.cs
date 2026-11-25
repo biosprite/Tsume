@@ -24,6 +24,13 @@ public static class Battery
     /// <param name="EstimatedMinutes">Estimated remaining runtime in minutes while draining, or null when unknown.</param>
     public readonly record struct Reading(int Percent, bool PluggedIn, double? Watts, Flow Flow, int? EstimatedMinutes = null);
 
+    /// <summary>
+    /// True only when Windows reports the AC line offline — the helper's and MSI Center M's test for applying
+    /// battery limits. An unknown line or a failed call counts as wall power.
+    /// </summary>
+    public static bool IsOnBattery() =>
+        Kernel32.GetSystemPowerStatus(out var status) && status.ACLineStatus == 0;
+
     public static Reading? Read()
     {
         var size = (uint)Marshal.SizeOf<PowrProf.SYSTEM_BATTERY_STATE>();

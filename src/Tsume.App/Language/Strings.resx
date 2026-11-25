@@ -47,6 +47,10 @@
     <value>{0}/{1} W</value>
     <comment>{0} = boost (SPPT) watts, {1} = fast boost (FPPT) watts on 3-tier AMD devices</comment>
   </data>
+  <data name="BatteryCapNote" xml:space="preserve">
+    <value>Limited to {0} W on battery</value>
+    <comment>Under the limits in force, only while on battery on a device whose limits are lower on battery; {0} = the highest limit allowed, in watts</comment>
+  </data>
   <data name="Temperature" xml:space="preserve">
     <value>{0} °C</value>
     <comment>{0} = degrees Celsius</comment>

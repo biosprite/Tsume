@@ -5,8 +5,10 @@ using Tsume.Core.Performance;
 namespace Tsume.Hardware.Msi;
 
 /// <summary>
-/// The MSI boards whose maps are verified against the real machine (docs/hardware/firmware.md); Tsume writes
-/// to no others. Add a board only after the probe, write check and mode check have been run and recorded on it.
+/// The MSI boards Tsume knows (docs/hardware/firmware.md); Tsume writes to no others. Only MS-1T91 has been
+/// probed, write-checked and mode-checked on a real unit (<see cref="MsiBoard.CheckedOnDevice"/>). The other
+/// maps come from decompiled MSI Center M, plus BIOS/ACPI images for MS-1T52 and MS-1T8K only, and writes to
+/// them are guarded by the WMI interface check in <see cref="MsiAcpiBridge"/>.
 /// </summary>
 public static class MsiBoards
 {
@@ -18,6 +20,7 @@ public static class MsiBoards
     public static readonly MsiBoard Claw8 = new()
     {
         Model = "MS-1T91",
+        CheckedOnDevice = true,
 
         Registers = new()
         {
@@ -98,6 +101,10 @@ public static class MsiBoards
     {
         Model = "MS-1T52",
 
+        // MSI Center M never runs PL1 = 8 W under 0xC4: in Manual with PL1 == 8 it switches to its Super
+        // Battery scenario, whose shift code is 0x02 / 0xC2 (UserScenarioX.SetManualPower, SetScenario_Value(3)).
+        SustainedShift = new(SustainedWatts: 8, PerformanceMode.Endurance),
+
         Registers = new()
         {
             PowerLimitSustained = 0x50,
@@ -161,7 +168,9 @@ public static class MsiBoards
                     ProfileLength = 1478,
                     BlockLength = 8,
                     MaxSimultaneousKeys = 3,
-                    MinFirmwareVersion = 0x0217,   // fw 2.11 used legacy profile offsets; 2.17+ matches 186 / 355
+                    // The legacy layout is not in MSI Center M (it has one layout); it exists per the Linux
+                    // kernel hid-msi driver. This cutoff is unconfirmed.
+                    MinFirmwareVersion = 0x0217,
                     Buttons =
                     [
                         new("M1", "M1", "Left back button", Offset: 186),
@@ -174,12 +183,16 @@ public static class MsiBoards
 
     /// <summary>
     /// Claw 7 AI+ / A7 (A2VM, Intel Core Ultra 7 258V / Lunar Lake, 7" 1080p). Identical to the Claw 8 AI+
-    /// (MS-1T52) across WMI, EC registers, shift mode (Manual = 0x04 / 0xC4), PL1/PL2 limits (8–30 W / 8–37 W,
-    /// PL2 &gt;= PL1 + 1), fan control, charge limit, WMI events, and 2.xx controller firmware.
+    /// (MS-1T52) in MSI Center M's power, shift (Manual = 0x04 / 0xC4), fan and battery handling, and Tsume
+    /// uses the same PL1/PL2 limits (8–30 W / 8–37 W, PL2 &gt;= PL1 + 1) and 2.xx controller firmware.
+    /// That its WMI interface and EC registers match MS-1T52 is inferred: there is no MS-1T42 BIOS image.
     /// </summary>
     public static readonly MsiBoard Claw7AiPlus = new()
     {
         Model = "MS-1T42",
+
+        // As on MS-1T52: MSI Center M uses its Super Battery shift code 0x02 / 0xC2 whenever PL1 == 8.
+        SustainedShift = new(SustainedWatts: 8, PerformanceMode.Endurance),
 
         Registers = new()
         {
@@ -244,7 +257,9 @@ public static class MsiBoards
                     ProfileLength = 1478,
                     BlockLength = 8,
                     MaxSimultaneousKeys = 3,
-                    MinFirmwareVersion = 0x0217,   // 2.xx branch: < 2.17 used legacy profile offsets
+                    // 2.xx branch. The legacy layout is not in MSI Center M (it has one layout); it exists per
+                    // the Linux kernel hid-msi driver. This cutoff is unconfirmed.
+                    MinFirmwareVersion = 0x0217,
                     Buttons =
                     [
                         new("M1", "M1", "Left back button", Offset: 186),
@@ -256,9 +271,15 @@ public static class MsiBoards
     };
 
     /// <summary>
-    /// Claw A1M (Intel Core Ultra 5 135H / Ultra 7 155H Meteor Lake, 7" 1080p). Same MSI_ACPI WMI bridge
-    /// and EC register map, with Manual shift mode 0x04 (0xC4), PowerFloor 15 W, Manual range 20–40 W PL1 /
-    /// 20–45 W PL2 (PL2 &gt;= PL1), and 1.xx controller firmware (legacy layout cutoff &lt;= 1.63).
+    /// Claw A1M (Intel Core Ultra 5 135H / Ultra 7 155H Meteor Lake, 7" 1080p). Manual shift mode 0x04 (0xC4),
+    /// PowerFloor 15 W, and 1.xx controller firmware. That it has the same MSI_ACPI WMI bridge and EC register
+    /// map is inferred: there is no MS-1T41 BIOS image. MSI's own Manual sliders are 20–40 W for both PL1 and
+    /// PL2 on AC and 20–35 W on battery (UC_UserScenario.xaml), and its presets differ on AC and battery
+    /// (Performance 43/45 W on AC, 35/35 W on battery; UserScenarioX), re-applied on every AC/battery change.
+    /// Rule: on AC, Manual goes as far as the highest MSI itself applies on each tier: its Performance preset,
+    /// 43/45 W (its Manual sliders stop at 40 W). Performance is that preset. On battery everything is held to
+    /// MSI's battery limit, the battery cap of 35 W on both tiers: its battery sliders' end and its Performance
+    /// preset on battery.
     /// </summary>
     public static readonly MsiBoard ClawA1M = new()
     {
@@ -296,11 +317,12 @@ public static class MsiBoards
             [
                 new(PerformanceMode.Endurance,   new PowerLimits(Sustained: 20, Boost: 20)),
                 new(PerformanceMode.Balanced,    new PowerLimits(Sustained: 30, Boost: 35)),
-                new(PerformanceMode.Performance, new PowerLimits(Sustained: 40, Boost: 45)),
+                new(PerformanceMode.Performance, new PowerLimits(Sustained: 43, Boost: 45)),
                 new(PerformanceMode.Manual),
             ],
-            ManualRange = new PowerRange(Min: 20, MaxSustained: 40, MaxBoost: 45),
+            ManualRange = new PowerRange(Min: 20, MaxSustained: 43, MaxBoost: 45),
             ManualDefault = new PowerLimits(Sustained: 30, Boost: 35),
+            BatteryCap = new PowerLimits(Sustained: 35, Boost: 35),
             FanModes = [FanMode.Auto, FanMode.Max],
             ChargeLimits = [80, 90, 100],
             ChargeResumeGap = 10,
@@ -328,7 +350,9 @@ public static class MsiBoards
                     ProfileLength = 1478,
                     BlockLength = 8,
                     MaxSimultaneousKeys = 3,
-                    MinFirmwareVersion = 0x0164,   // 1.xx branch: <= 1.63 used legacy profile offsets
+                    // 1.xx branch. The legacy layout is not in MSI Center M (it has one layout); it exists per
+                    // the Linux kernel hid-msi driver. This cutoff is unconfirmed.
+                    MinFirmwareVersion = 0x0164,
                     Buttons =
                     [
                         new("M1", "M1", "Left back button", Offset: 186),
@@ -342,8 +366,13 @@ public static class MsiBoards
     /// <summary>
     /// Claw A8 (BZ2EM, AMD Ryzen Z2 Extreme, ITE EC 1T8KIMS1). Uses the same MSI_ACPI WMI bridge (the DSDT
     /// routes EC RAM through MMIO 0xFEDF1400 when ECID == 'I') and writes 3-tier AMD power limits directly
-    /// to EC 0x50 (SPL, 7–35 W), 0x51 (SPPT, 9–50 W), and 0x52 (FPPT, 11–60 W) in MSI's safe order:
+    /// to EC 0x50 (SPL, 7–35 W), 0x51 (SPPT, 9–45 W), and 0x52 (FPPT, 11–55 W) in MSI's safe order:
     /// 0x50=7 -&gt; 0x51=9 -&gt; 0x52=FPPT -&gt; 0x51=SPPT -&gt; 0x50=SPL. Manual shift mode is 0x04 (0xC4).
+    /// Rule: Manual goes as far as the highest MSI itself applies on each tier without STAMP boost: SPL 35 W (its
+    /// Manual slider, UC_UserScenario_1T8K.xaml), SPPT 45 / FPPT 55 W (its Performance preset, 28/45/55 W; its
+    /// Manual sliders stop at 40 / 48 W). So Manual can reach 35/45/55 W, a mix MSI's own UI does not offer but
+    /// inside its driver clamps of 35 / 50 / 60 W (UserScenarioX), which its AI mode reaches with STAMP on.
+    /// MSI applies the same watts on AC and battery on this board, so there is no battery cap.
     /// </summary>
     public static readonly MsiBoard ClawA8 = new()
     {
@@ -388,9 +417,9 @@ public static class MsiBoards
                 new(PerformanceMode.Manual),
             ],
             ManualRange = new PowerRange(
-                Min: 7, MaxSustained: 35, MaxBoost: 50,
+                Min: 7, MaxSustained: 35, MaxBoost: 45,
                 MinBoostHeadroom: 0, MinBoostFloor: 9,
-                MaxFastBoost: 60, MinFastBoostHeadroom: 0, MinFastBoostFloor: 11),
+                MaxFastBoost: 55, MinFastBoostHeadroom: 0, MinFastBoostFloor: 11),
             ManualDefault = new PowerLimits(Sustained: 20, Boost: 33, FastBoost: 43),
             FanModes = [FanMode.Auto, FanMode.Max],
             ChargeLimits = [80, 90, 100],
@@ -424,18 +453,13 @@ public static class MsiBoards
         },
     };
 
-    /// <summary>
-    /// Claw 7 AMD (MS-1T7K). Shares the MS-1T8K AMD platform and 3.xx controller firmware lineage in MSI Center M.
-    /// </summary>
-    public static readonly MsiBoard Claw7Amd = ClawA8 with
-    {
-        Model = "MS-1T7K",
-        Profile = ClawA8.Profile with { Name = "MSI Claw 7 AMD (MS-1T7K)" },
-    };
+    // MS-1T7K is deliberately absent: it is recognized by MSI's software but not supported by Tsume yet. MSI
+    // Center M names it only in its compatibility whitelist and one OSD helper; its power code sends it down
+    // the 1T91 path. Its power path, EC and marketing name are unconfirmed, so it needs a probe from a real
+    // unit before it gets a map. Until then it is an unknown board (read-only discovery).
+    private static readonly MsiBoard[] Known = [Claw8, Claw8AiPlus, Claw7AiPlus, ClawA1M, ClawA8];
 
-    private static readonly MsiBoard[] Verified = [Claw8, Claw8AiPlus, Claw7AiPlus, ClawA1M, ClawA8, Claw7Amd];
-
-    /// <summary>The verified map for a board, or null if it has none.</summary>
+    /// <summary>The map for a board, or null if Tsume has none.</summary>
     public static MsiBoard? Find(Board board) =>
-        Verified.FirstOrDefault(known => known.Model.Equals(board.Model, StringComparison.OrdinalIgnoreCase));
+        Known.FirstOrDefault(known => known.Model.Equals(board.Model, StringComparison.OrdinalIgnoreCase));
 }

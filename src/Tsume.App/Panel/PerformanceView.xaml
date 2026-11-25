@@ -113,6 +113,11 @@
       </Grid>
     </Border>
 
+    <!-- Only while on battery on a machine whose limits are lower there; collapsed everywhere else. -->
+    <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,0" TextAlignment="Center"
+               Text="{Binding BatteryCapNote}"
+               Visibility="{Binding ShowsBatteryCapNote, Converter={StaticResource VisibleWhenTrue}}" />
+
   </StackPanel>
 
 </UserControl>

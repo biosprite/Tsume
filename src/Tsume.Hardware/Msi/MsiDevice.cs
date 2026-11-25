@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Management;
+using System.Runtime.InteropServices;
 using System.Text;
 using Tsume.Core.Cooling;
 using Tsume.Core.Devices;
@@ -38,22 +40,40 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board) : IDevice
     }
 
     /// <summary>
-    /// The shift mode written to register <c>0xD2</c>. MSI's EC ignores the power-limit registers
-    /// (<c>0x50</c>/<c>0x51</c>) in its built-in shift modes (Endurance/Balanced/Performance) and
-    /// enforces its own hardcoded table instead, so boards that support Manual use Manual shift mode
-    /// whenever Tsume applies watts.
+    /// The shift mode written to register <c>0xD2</c> when <paramref name="limits"/> are applied. On MS-1T91
+    /// the EC was observed to ignore the power-limit registers (<c>0x50</c>/<c>0x51</c>) in its built-in shift
+    /// modes (Endurance/Balanced/Performance) and enforce its own table instead; this is not confirmed on other
+    /// boards. So boards that support Manual use Manual shift mode whenever Tsume applies watts, except where
+    /// the board's <see cref="MsiBoard.SustainedShift"/> rule matches the sustained limit.
     /// </summary>
-    public static PerformanceMode ShiftModeFor(MsiBoard board, PerformanceMode mode) =>
-        board.Shift.Codes.ContainsKey(PerformanceMode.Manual) ? PerformanceMode.Manual : mode;
+    public static PerformanceMode ShiftModeFor(MsiBoard board, PerformanceMode mode, PowerLimits limits)
+    {
+        if (board.SustainedShift is { } rule && limits.Sustained == rule.SustainedWatts)
+            return rule.Mode;
 
-    public PerformanceMode HardwareModeFor(PerformanceMode mode) => ShiftModeFor(board, mode);
+        return board.Shift.Codes.ContainsKey(PerformanceMode.Manual) ? PerformanceMode.Manual : mode;
+    }
+
+    public PerformanceMode HardwareModeFor(PerformanceMode mode, PowerLimits limits) => ShiftModeFor(board, mode, limits);
+
+    /// <summary>
+    /// The profile's limits, lowered to its <see cref="DeviceProfile.BatteryCap"/> while on battery, as MSI Center M
+    /// lowers its own. The power source is asked only on a board that has a cap.
+    /// </summary>
+    public PowerLimits? LimitsToApply(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null)
+    {
+        var limits = Profile.LimitsFor(mode, manual, custom);
+        return limits is { } found && Profile.BatteryCap is not null && PowerSource.IsOnBattery()
+            ? Profile.CapForBattery(found)
+            : limits;
+    }
 
     public void SetPerformance(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null)
     {
-        var limits = Profile.LimitsFor(mode, manual, custom)
+        var limits = LimitsToApply(mode, manual, custom)
             ?? throw new ArgumentOutOfRangeException(nameof(mode), mode, "This device does not offer that mode.");
 
-        var shiftMode = ShiftModeFor(board, mode);
+        var shiftMode = ShiftModeFor(board, mode, limits);
 
         lock (_oneIntentionAtATime)
         {
@@ -62,13 +82,40 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board) : IDevice
             if (_at.PowerLimitFastBoost is { } fastBoostReg)
             {
                 var fppt = limits.FastBoost ?? limits.Boost;
-                // MSI's AMD order (UserScenarioX.setPowerLimit_AMD):
-                // SPL -> floor (7 W), SPPT -> floor (9 W), then FPPT -> SPPT -> SPL.
-                Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), board.PowerFloor);
-                Write(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost), board.BoostFloor ?? board.PowerFloor);
-                Write(fastBoostReg, nameof(_at.PowerLimitFastBoost), (byte)fppt);
-                Write(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost), (byte)limits.Boost);
-                Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), (byte)limits.Sustained);
+
+                // The sequence drops SPL and SPPT to their floors first, so a write refused part-way would leave
+                // the APU capped there. Read what is in force now to put it back if that happens.
+                PowerLimits? before;
+                try
+                {
+                    before = ReadLimits();
+                }
+                catch (Exception error) when (error is FirmwareException or ManagementException or COMException)
+                {
+                    before = null;   // cannot read: go ahead as before, just without the rollback
+                }
+
+                try
+                {
+                    // MSI's AMD order (UserScenarioX.setPowerLimit_AMD):
+                    // SPL -> floor (7 W), SPPT -> floor (9 W), then FPPT -> SPPT -> SPL.
+                    Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), board.PowerFloor);
+                    Write(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost), board.BoostFloor ?? board.PowerFloor);
+                    Write(fastBoostReg, nameof(_at.PowerLimitFastBoost), (byte)fppt);
+                    Write(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost), (byte)limits.Boost);
+                    Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), (byte)limits.Sustained);
+                }
+                catch (Exception) when (before is { } original)
+                {
+                    // Best effort, in the same safe order as the change itself (floors first, then highest limit
+                    // first) so no limit is ever written below the one under it; then the original error.
+                    TryWrite(_at.PowerLimitSustained, board.PowerFloor);
+                    TryWrite(_at.PowerLimitBoost, board.BoostFloor ?? board.PowerFloor);
+                    TryWrite(fastBoostReg, (byte)(original.FastBoost ?? original.Boost));
+                    TryWrite(_at.PowerLimitBoost, (byte)original.Boost);
+                    TryWrite(_at.PowerLimitSustained, (byte)original.Sustained);
+                    throw;
+                }
             }
             else
             {
@@ -78,18 +125,36 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board) : IDevice
                 Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), (byte)limits.Sustained);
             }
 
-            // Clear AMD STAMP boost after writing limits (mirrors UserScenarioX.setPowerLimit_AMDSTAMP(false)):
-            // bit 7 = supported, bit 0 = reset/off, bit 1 = on (cleared so both bits are never set together).
+            // Turn AMD STAMP boost off after writing limits, exactly as UserScenarioX.setPowerLimit_AMDSTAMP(false):
+            // if bit 7 (supported) reads set, write the byte back with bit 0 set — always, other bits as read.
             if (_at.AmdStamp is { } stampReg)
             {
-                var stamp = Read(stampReg, nameof(_at.AmdStamp));
-                if ((stamp & _at.AmdStampSupported) != 0)
+                try
                 {
-                    var cleared = (byte)((stamp & ~_at.AmdStampActive) | _at.AmdStampReset);
-                    if (cleared != stamp)
-                        Write(stampReg, nameof(_at.AmdStamp), cleared);
+                    var stamp = Read(stampReg, nameof(_at.AmdStamp));
+                    if ((stamp & _at.AmdStampSupported) != 0)
+                        Write(stampReg, nameof(_at.AmdStamp), (byte)(stamp | _at.AmdStampReset));
+                }
+                catch (Exception error) when (error is FirmwareException or ManagementException or COMException)
+                {
+                    // Best effort: the limits are already written, so a failed STAMP read or write must not fail
+                    // the change (the helper would report failure and not remember the choice). Tsume.Hardware has
+                    // no log to record it in.
                 }
             }
+        }
+    }
+
+    /// <summary>One write whose failure is ignored — for putting limits back after another write failed.</summary>
+    private void TryWrite(byte register, byte value)
+    {
+        try
+        {
+            firmware.Set("Set_Data", register, [value]);
+        }
+        catch (Exception error) when (error is FirmwareException or ManagementException or COMException)
+        {
+            // The original failure is what gets reported.
         }
     }
 
@@ -143,6 +208,12 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board) : IDevice
 
         lock (_oneIntentionAtATime)
         {
+            // MSI Center M treats bit 7 as a capability bit and changes the byte only when it already reads set
+            // (API_Battery ComponentLoader.WriteECBatteryMode_WMIACPI_2). Boards not checked on a real unit follow it.
+            if (!board.CheckedOnDevice
+                && (Read(_at.ChargeLimit, nameof(_at.ChargeLimit)) & _at.ChargeLimitOn) == 0)
+                throw new FirmwareException("This device's firmware does not offer a charge limit.");
+
             var wanted = (byte)(_at.ChargeLimitOn | percent);
             Write(_at.ChargeLimit, nameof(_at.ChargeLimit), wanted);
 

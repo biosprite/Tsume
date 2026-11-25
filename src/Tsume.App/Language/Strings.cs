@@ -37,6 +37,9 @@ public static class Strings
     /// <summary>"45/55 W"</summary>
     public static string WattsPair(int boost, int fastBoost) => Fill(Find(), boost, fastBoost);
 
+    /// <summary>"Limited to 35 W on battery"</summary>
+    public static string BatteryCapNote(int watts) => Fill(Find(), watts);
+
     /// <summary>"61 °C"</summary>
     public static string Temperature(int celsius) => Fill(Find(), celsius);
 

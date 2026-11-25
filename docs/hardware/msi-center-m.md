@@ -10,7 +10,7 @@ replace it later. Read from the decompiled assemblies of MSI Center M
 |---|---|---|
 | `MSI_Center_M_Server.exe` | Supervisor, elevated. Spawns and respawns everything below. | Scheduled task `MSI_Center_M_Server` (logon + boot) |
 | `MSI_Center_M_Launcher.exe` | Listens for the hardware buttons; activates the Game Bar widget. | Server |
-| `MSI_Center_M_Server_<Feature>.exe` | One host per feature (UserScenario, ControlMode, Battery, MysticLight, AiEngine, …). | Server, respawned 1 s after exit |
+| `MSI_Center_M_Server_<Feature>.exe` | One host per feature (UserScenario, ControlMode, Battery, MysticLight, …). AI Engine has no host of its own: it runs inside the UserScenario host. | Server, respawned 1 s after exit |
 | `Command Center.exe` | Elevated backend for the Quick Settings widget. | Server |
 | `Gamebar_Widget.exe` | The Quick Settings widget itself, hosted by Xbox Game Bar. | Game Bar |
 | `MSIAPService.exe` | "MSI Foundation Service", LocalSystem. Proxies registry and WMI writes. | Service manager |
@@ -41,6 +41,12 @@ ms-gamebar://launch/activate/9426MICRO-STARINTERNATION.MSIQuickSettings_kzh8wxbd
 Consequence: stopping MSI Center M does not stop Game Bar from opening on the
 Quick Settings button. Only a keyboard hook that swallows Win+G does.
 
+On the other boards the same check depends on the BIOS version: Win+G from
+firmware is assumed on MS-1T8K from BIOS 260, MS-1T41 above 270, and MS-1T42 /
+MS-1T52 above 269. How MSI turns the BIOS string into that number is in the
+Launcher's constructor, which did not decompile, so the exact cut-over is not
+known. MS-1T7K is not in the check at all.
+
 ## Settings Tsume can use to steer it (side-by-side mode)
 
 All under `HKLM\SOFTWARE\WOW6432Node\MSI\MSI Center M`. MSI watches these values
@@ -53,7 +59,7 @@ and reacts on its own.
 | `Component\User Scenario` | `Fan` = 1 auto · 2 cooler boost · 3 advanced | Read on the next mode change |
 | `Component\User Scenario` | `AutoSwitchMode` = 0 | Stops MSI flipping the controller between gamepad and desktop mode when the foreground app changes |
 | `Battery` | `BatteryLevel` = 0 (100 %) · 1 (80 %) · 2 (60 %) | Must match EC `0xD7` or MSI rewrites the EC |
-| `OsdEditor` | `LightingBrightness` = 0 / 1 | LEDs off / on |
+| `OsdEditor` | `LightingBrightness` = 0 / 1 | LEDs off / on. Mystic Light watches it only on 8" boards (MS-1T52, MS-1T8K, MS-1T91) |
 
 Battery charge-limit bytes MSI writes to `0xD7`: `0xE4` (100 %), `0xD0` (80 %), `0xBC` (60 %).
 
@@ -64,7 +70,7 @@ MSI has no free-running timer that re-asserts EC values. It reacts to events:
 | Trigger | What it rewrites |
 |---|---|
 | Resume from sleep | Whole scenario: shift mode, fans, power limits, Windows power mode |
-| AC ↔ battery | FPS limit |
+| AC ↔ battery | FPS limit. On MS-1T41 also the power limits, from its separate AC and DC values |
 | Its registry `Mode` / `ManualPL*` changing | Shift mode, fans, power limits |
 | Foreground window changing (AI Engine) | **Controller mode** — XInput ↔ Desktop. Suppressed by `AutoSwitchMode` = 0. |
 | Battery host starting | EC `0xD7` forced back to `BatteryLevel` |
@@ -86,10 +92,12 @@ Server re-creates its own tasks only when it runs, so step 1 holds.
 
 ## Not yet understood
 
-These Quick Settings tiles live in binaries not yet decompiled
-(`Command Center.exe`, the widget, `MSI_Center_M_Server_OsdEditor.exe`):
-refresh rate, FPS limiter, XeSS frame generation, "Embedded controller", free
-up memory, end task, screenshot, record.
+These Quick Settings tiles have not been traced yet: refresh rate, FPS
+limiter, XeSS frame generation, "Embedded controller", free up memory, end
+task, screenshot, record. Their handlers are in `Command Center.exe`
+(decompiled, `MSICenterM_OSD`, not yet read for these) and the Game Bar widget
+(not in the dump). There is no `MSI_Center_M_Server_OsdEditor.exe` in
+3.0.2610.0701.
 
 What is known: the 30 FPS cap MSI applies on battery in Super Battery mode uses
 `intelGEDll.dll` → `setEGControlMode(2, 2)` (on) / `(0, 2)` (off) — presumably

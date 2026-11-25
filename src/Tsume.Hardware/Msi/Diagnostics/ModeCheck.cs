@@ -6,10 +6,11 @@ namespace Tsume.Hardware.Msi.Diagnostics;
 
 /// <summary>
 /// Switches performance mode, checks the registers hold, measures package power under full load to confirm
-/// the processor obeys, then restores the starting state. Only MSI's stock Balanced and Endurance are applied.
+/// the processor obeys, then restores the starting state. Applies Tsume's own Balanced and Endurance presets
+/// through <see cref="MsiDevice"/>, so with the shift code it uses for watts (Manual on most boards).
 /// </summary>
-// Endurance is the telling one: its 20 W boost ceiling shows at once, whereas Balanced's 37 W boost
-// can hide the 25 W sustained limit for as long as the chip may burst.
+// Endurance is the telling one: its boost ceiling is the lowest, so it shows at once, whereas Balanced's
+// higher boost can hide its sustained limit for as long as the chip may burst.
 public static class ModeCheck
 {
     private static readonly TimeSpan Settle = TimeSpan.FromSeconds(2);
@@ -27,10 +28,13 @@ public static class ModeCheck
             return report.AppendLine("  Could not read the starting state. Nothing was written.").ToString();
 
         var hasFastBoost = board.Registers.PowerLimitFastBoost is not null;
-        byte? originalStamp = board.Registers.AmdStamp is { } stampReg
-            && acpi.Get("Get_Data", stampReg) is { Accepted: true } stampReply
-                ? stampReply.Data[0]
-                : null;
+        byte? originalStamp = null;
+        if (board.Registers.AmdStamp is { } stampReg)
+        {
+            if (acpi.Get("Get_Data", stampReg) is not { Accepted: true } stampReply)
+                return report.AppendLine("  Could not read the starting STAMP register. Nothing was written.").ToString();
+            originalStamp = stampReply.Data[0];
+        }
 
         report.AppendLine(hasFastBoost
             ? "  step                 shift   sustained  boost    fast     registers   package power under load"
@@ -50,7 +54,7 @@ public static class ModeCheck
             {
                 device.SetPerformance(mode, default);
 
-                var expected = Registers.For(board, mode);
+                var expected = Registers.For(device, board, mode);
                 var watts = UnderLoad(power);
 
                 // Read after the load, to also catch anything that puts the old values back within seconds.
@@ -68,13 +72,21 @@ public static class ModeCheck
         }
         finally
         {
-            Registers.Restore(acpi, board, original);
-            if (board.Registers.AmdStamp is { } restoreStampReg
-                && originalStamp is { } stampBefore
-                && acpi.Get("Get_Data", restoreStampReg) is { Accepted: true } stampNow
-                && stampNow.Data[0] != stampBefore)
+            try
             {
-                acpi.Set("Set_Data", restoreStampReg, [stampBefore]);
+                Registers.Restore(acpi, board, original);
+            }
+            finally
+            {
+                // Runs even if putting the other registers back threw, and never hides that failure with its
+                // own: a STAMP that could not be put back shows in the verdict below instead.
+                try
+                {
+                    RestoreStamp(acpi, board, originalStamp);
+                }
+                catch (FirmwareException)
+                {
+                }
             }
         }
 
@@ -82,15 +94,43 @@ public static class ModeCheck
         var back = restored == original;
         report.AppendLine(Line("restored", restored, hasFastBoost, back, UnderLoad(power)));
 
+        // Intel boards have no STAMP register: null here, and the report reads exactly as before.
+        bool? stampBack = null;
+        string? stampLine = null;
+        if (board.Registers.AmdStamp is { } checkStampReg && originalStamp is { } stampFound)
+        {
+            byte? stampAfter = acpi.Get("Get_Data", checkStampReg) is { Accepted: true } stampReply ? stampReply.Data[0] : null;
+            stampBack = stampAfter == stampFound;
+            stampLine = stampBack == true
+                ? $"  STAMP 0x{checkStampReg:X2} is back as found (0x{stampFound:X2})."
+                : $"  STAMP 0x{checkStampReg:X2} WAS NOT RESTORED: it was 0x{stampFound:X2}, reads {(stampAfter is { } a ? $"0x{a:X2}" : "--")}.";
+        }
+
         report.AppendLine();
         report.AppendLine(allHeld
             ? "  Both modes were written and held."
             : "  AT LEAST ONE MODE DID NOT HOLD — see the 'registers' column.");
-        report.AppendLine(back
+        report.AppendLine(back && stampBack != false
             ? "  The starting state is back exactly as found."
-            : $"  THE STARTING STATE WAS NOT RESTORED. It was: {original}");
+            : back
+                ? "  The power and shift registers are back as found, but STAMP is not (see below)."
+                : $"  THE STARTING STATE WAS NOT RESTORED. It was: {original}");
+        if (stampLine is not null)
+            report.AppendLine(stampLine);
 
         return report.ToString();
+    }
+
+    /// <summary>Puts the AMD STAMP register back if it changed. Nothing on boards without one.</summary>
+    private static void RestoreStamp(MsiAcpiBridge acpi, MsiBoard board, byte? originalStamp)
+    {
+        if (board.Registers.AmdStamp is { } stampReg
+            && originalStamp is { } stampBefore
+            && acpi.Get("Get_Data", stampReg) is { Accepted: true } stampNow
+            && stampNow.Data[0] != stampBefore)
+        {
+            acpi.Set("Set_Data", stampReg, [stampBefore]);
+        }
     }
 
     /// <summary>
@@ -153,11 +193,12 @@ public static class ModeCheck
     /// <summary>The registers a mode is made of (three on Intel, four with FPPT on AMD).</summary>
     private readonly record struct Registers(byte ShiftMode, byte Sustained, byte Boost, byte? FastBoost = null)
     {
-        public static Registers For(MsiBoard board, PerformanceMode mode)
+        /// <summary>What <paramref name="device"/> writes for <paramref name="mode"/> right now (battery cap included).</summary>
+        public static Registers For(MsiDevice device, MsiBoard board, PerformanceMode mode)
         {
-            var limits = board.Profile.LimitsFor(mode, default) ?? throw new ArgumentOutOfRangeException(nameof(mode));
+            var limits = device.LimitsToApply(mode, default) ?? throw new ArgumentOutOfRangeException(nameof(mode));
             return new Registers(
-                board.Shift.Encode(MsiDevice.ShiftModeFor(board, mode)),
+                board.Shift.Encode(MsiDevice.ShiftModeFor(board, mode, limits)),
                 (byte)limits.Sustained,
                 (byte)limits.Boost,
                 limits.FastBoost is { } fppt ? (byte)fppt : null);

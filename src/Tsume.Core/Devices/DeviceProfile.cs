@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Tsume.Core.Cooling;
 using Tsume.Core.Performance;
 
@@ -23,6 +24,13 @@ public sealed record DeviceProfile
 
     /// <summary>Where the manual sliders start before anyone has touched them.</summary>
     public PowerLimits? ManualDefault { get; init; }
+
+    /// <summary>
+    /// The highest watts per tier while the machine runs on battery (see <see cref="CapForBattery"/>); null when
+    /// battery and wall power allow the same. Omitted from JSON when null, so profiles without one are sent as before.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PowerLimits? BatteryCap { get; init; }
 
     /// <summary>The fan settings it offers. Empty if the fans cannot be controlled.</summary>
     public IReadOnlyList<FanMode> FanModes { get; init; } = [];
@@ -68,6 +76,27 @@ public sealed record DeviceProfile
             _                       => ManualRange?.Clamp(manual),
         };
 
+    /// <summary>
+    /// <paramref name="limits"/> as applied on battery: each tier lowered to <see cref="BatteryCap"/>, never raised.
+    /// If that leaves a tier closer to the one above it than the manual range's headroom allows, the lower tier is
+    /// lowered further (the cap is a ceiling, so the upper one cannot go up). Unchanged without a cap.
+    /// </summary>
+    public PowerLimits CapForBattery(PowerLimits limits)
+    {
+        if (BatteryCap is not { } cap) return limits;
+
+        int? fast = limits.FastBoost is { } f ? Math.Min(f, cap.FastBoost ?? f) : null;
+
+        var boost = Math.Min(limits.Boost, cap.Boost);
+        if (fast is { } fastNow)
+            boost = Math.Min(boost, fastNow - Math.Max(0, ManualRange?.MinFastBoostHeadroom ?? 0));
+
+        var sustained = Math.Min(limits.Sustained, cap.Sustained);
+        sustained = Math.Min(sustained, boost - Math.Max(0, ManualRange?.MinBoostHeadroom ?? 0));
+
+        return new PowerLimits(sustained, boost, fast);
+    }
+
     /// <summary>Whether a mode's own limits can be replaced: it has some, and the machine takes limits by hand.</summary>
     public bool CanCustomize(PerformanceMode mode) =>
         ManualRange is not null && Modes.Any(preset => preset.Mode == mode && preset.Limits is not null);
@@ -78,6 +107,7 @@ public sealed record DeviceProfile
         && Modes.SequenceEqual(other.Modes)
         && ManualRange == other.ManualRange
         && ManualDefault == other.ManualDefault
+        && BatteryCap == other.BatteryCap
         && FanModes.SequenceEqual(other.FanModes)
         && ChargeLimits.SequenceEqual(other.ChargeLimits)
         && ChargeResumeGap == other.ChargeResumeGap

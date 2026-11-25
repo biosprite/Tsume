@@ -2,7 +2,8 @@ namespace Tsume.Hardware.Msi;
 
 /// <summary>
 /// One MSI board's embedded-controller register addresses. They differ between boards, so each board in
-/// <see cref="MsiBoards"/> states its own, confirmed against that machine.
+/// <see cref="MsiBoards"/> states its own. Only MS-1T91's are confirmed against a real machine; the others
+/// come from MSI Center M and, for MS-1T52 and MS-1T8K, their BIOS images.
 /// </summary>
 public sealed record MsiRegisters
 {
@@ -21,7 +22,10 @@ public sealed record MsiRegisters
     /// <summary>Holds the bit that pins the fans at full speed ("Cooler Boost").</summary>
     public required byte CoolerBoost { get; init; }
 
-    /// <summary>AMD STAMP boost control register (bit 7 supported, bit 0 reset/off, bit 1 on). Null on Intel boards.</summary>
+    /// <summary>
+    /// AMD STAMP boost control register. Bit 7 = supported; MSI Center M sets bit 0 to turn STAMP off and
+    /// bit 1 to turn it on, each over the byte as read. Null on Intel boards.
+    /// </summary>
     public byte? AmdStamp { get; init; }
 
     /// <summary>Performance ("shift") mode. See <see cref="MsiShiftModes"/>.</summary>
@@ -38,7 +42,6 @@ public sealed record MsiRegisters
     public byte ChargeLimitOn { get; init; } = 0b1000_0000;
     public byte AmdStampSupported { get; init; } = 0b1000_0000;
     public byte AmdStampReset { get; init; } = 0b0000_0001;
-    public byte AmdStampActive { get; init; } = 0b0000_0010;
 
     /// <summary>Every register by name, in address order — for the reports.</summary>
     public IEnumerable<(string Name, byte Address)> All
