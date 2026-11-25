@@ -8,7 +8,8 @@ kernel driver.
 
 | Board | Device | Processor | Power limits | Tested on a real unit |
 |---|---|---|---|---|
-| MS-1T91 | Claw 8 EX AI+ | Intel Core G3 Extreme | sustained, boost | **Yes** |
+| MS-1T91 | Claw 8 EX AI+ | Intel Arc G3 Extreme | sustained, boost | **Yes** |
+| MS-1T91 | Claw 8 EX AI+ | Intel Arc G3 | sustained, boost | No |
 | MS-1T52 | Claw 8 AI+ | Intel Core Ultra 7 258V | sustained, boost | No |
 | MS-1T42 | Claw 7 AI+ | Intel Core Ultra 7 258V | sustained, boost | No |
 | MS-1T41 | Claw A1M | Intel Core Ultra 5 135H / Ultra 7 155H | sustained, boost | No |
@@ -16,6 +17,12 @@ kernel driver.
 
 Tsume writes to no other board. Reading is allowed anywhere, so the probe can
 learn a new one.
+
+MS-1T91 is sold with two processors. Tsume tells them apart by the processor's
+name, and gives the Arc G3 lower limits than the Arc G3 Extreme. Everything
+else is the same for both, and where a table below says only MS-1T91, it means
+both. The board itself has been tested, so the precautions below apply to
+neither.
 
 On a board that has not been tested, Tsume takes two extra precautions:
 
@@ -95,7 +102,8 @@ MS-1T8K.
 
 | Board | Endurance | Balanced | Performance | Manual starts at |
 |---|---|---|---|---|
-| MS-1T91 | 12 / 15 | 25 / 28 | 32 / 36 | 25 / 28 |
+| MS-1T91, Arc G3 Extreme | 12 / 15 | 25 / 28 | 32 / 36 | 25 / 28 |
+| MS-1T91, Arc G3 | 12 / 15 | 25 / 28 | 30 / 37 | 25 / 28 |
 | MS-1T52, MS-1T42 | 8 / 12 | 17 / 20 | 30 / 37 | 17 / 20 |
 | MS-1T41 | 20 / 20 | 30 / 35 | 43 / 45 | 30 / 35 |
 | MS-1T8K | 15 / 28 / 33 | 20 / 33 / 43 | 28 / 45 / 55 | 20 / 33 / 43 |
@@ -106,7 +114,8 @@ Each preset can be changed in the panel, within the Manual range.
 
 | Board | Sustained | Boost | Fast boost | Rule |
 |---|---|---|---|---|
-| MS-1T91 | 8–35 W | 8–45 W | n/a | boost ≥ sustained |
+| MS-1T91, Arc G3 Extreme | 8–35 W | 8–45 W | n/a | boost ≥ sustained |
+| MS-1T91, Arc G3 | 8–30 W | 8–45 W | n/a | boost ≥ sustained |
 | MS-1T52, MS-1T42 | 8–30 W | 9–37 W | n/a | boost ≥ sustained + 1 W |
 | MS-1T41 | 20–43 W | 20–45 W | n/a | boost ≥ sustained |
 | MS-1T8K | 7–35 W | 9–45 W | 11–55 W | sustained ≤ boost ≤ fast boost |

@@ -36,7 +36,8 @@
 
 | | Device | Board |
 |---|---|---|
-| ✅ | MSI Claw 8 EX AI+ | MS-1T91 |
+| ✅ | MSI Claw 8 EX AI+ (Arc G3 Extreme) | MS-1T91 |
+| 🧪 | MSI Claw 8 EX AI+ (Arc G3) (beta) | MS-1T91 |
 | 🧪 | MSI Claw 8 AI+ (beta) | MS-1T52 |
 | 🧪 | MSI Claw 7 AI+ (beta) | MS-1T42 |
 | 🧪 | MSI Claw A1M (beta) | MS-1T41 |

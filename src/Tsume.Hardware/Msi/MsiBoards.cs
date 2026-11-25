@@ -13,9 +13,10 @@ namespace Tsume.Hardware.Msi;
 public static class MsiBoards
 {
     /// <summary>
-    /// Claw 8 EX AI+ (CG3EM). Intel: the limits are PL1 and PL2. Presets are tuned for the Core G3 Extreme
+    /// Claw 8 EX AI+ (CG3EM). Intel: the limits are PL1 and PL2. Presets are tuned for the Arc G3 Extreme
     /// (MSI Center M's own are 15/20, 25/37 and 30/37); MSI's names for the four shift codes (0x02, 0x01,
-    /// 0x04, 0x06) are ECO, Green, Sport and Manual.
+    /// 0x04, 0x06) are ECO, Green, Sport and Manual. The same board with the plain Arc G3 is
+    /// <see cref="Claw8ArcG3"/>.
     /// </summary>
     public static readonly MsiBoard Claw8 = new()
     {
@@ -88,6 +89,29 @@ public static class MsiBoards
                     ],
                 },
             },
+        },
+    };
+
+    /// <summary>
+    /// Claw 8 EX AI+ with the plain Arc G3 (CG3M) instead of the Arc G3 Extreme. Intel rates this chip for
+    /// 8–30 W where the Extreme is rated 8–35 W, so the sustained limit stops at 30 W. MSI Center M does not
+    /// tell the two chips apart; Performance here is its own preset for the board, 30/37 W, and boost keeps the
+    /// board's 45 W ceiling. Everything else, the charge limit included, is as on <see cref="Claw8"/>: it is
+    /// the same board, so it counts as checked. That this model reports MS-1T91 is assumed, not tested.
+    /// </summary>
+    public static readonly MsiBoard Claw8ArcG3 = Claw8 with
+    {
+        Profile = Claw8.Profile with
+        {
+            Name = "MSI Claw 8 EX AI+ (MS-1T91, Arc G3)",
+            Modes =
+            [
+                new(PerformanceMode.Endurance,   new PowerLimits(Sustained: 12, Boost: 15)),
+                new(PerformanceMode.Balanced,    new PowerLimits(Sustained: 25, Boost: 28)),
+                new(PerformanceMode.Performance, new PowerLimits(Sustained: 30, Boost: 37)),
+                new(PerformanceMode.Manual),
+            ],
+            ManualRange = new PowerRange(Min: 8, MaxSustained: 30, MaxBoost: 45),
         },
     };
 
@@ -185,7 +209,7 @@ public static class MsiBoards
     /// Claw 7 AI+ / A7 (A2VM, Intel Core Ultra 7 258V / Lunar Lake, 7" 1080p). Identical to the Claw 8 AI+
     /// (MS-1T52) in MSI Center M's power, shift (Manual = 0x04 / 0xC4), fan and battery handling, and Tsume
     /// uses the same PL1/PL2 limits (8–30 W / 8–37 W, PL2 &gt;= PL1 + 1) and 2.xx controller firmware.
-    /// That its WMI interface and EC registers match MS-1T52 is assumed, not tested.
+    /// Its BIOS (E1T42IMS.114) describes the same firmware interface as MS-1T52's; not tested on a real unit.
     /// </summary>
     public static readonly MsiBoard Claw7AiPlus = new()
     {
@@ -452,12 +476,25 @@ public static class MsiBoards
         },
     };
 
-    // MS-1T7K is deliberately absent: it is recognized by MSI's software but not supported by Tsume yet. Its
-    // power path, EC and marketing name are unconfirmed, so it needs a probe from a real unit before it gets a
-    // map. Until then it is an unknown board (read-only discovery).
     private static readonly MsiBoard[] Known = [Claw8, Claw8AiPlus, Claw7AiPlus, ClawA1M, ClawA8];
 
-    /// <summary>The map for a board, or null if Tsume has none.</summary>
-    public static MsiBoard? Find(Board board) =>
-        Known.FirstOrDefault(known => known.Model.Equals(board.Model, StringComparison.OrdinalIgnoreCase));
+    /// <summary>The map for this machine's board and the chip fitted to it, or null if Tsume has none.</summary>
+    public static MsiBoard? Find(Board board) => Find(board, Processor.Name());
+
+    /// <summary>The map for a board fitted with the chip of that name, or null if Tsume has none.</summary>
+    public static MsiBoard? Find(Board board, string processor)
+    {
+        var known = Known.FirstOrDefault(known => known.Model.Equals(board.Model, StringComparison.OrdinalIgnoreCase));
+
+        // MS-1T91 is sold with two chips, and the board's model is the same for both.
+        return ReferenceEquals(known, Claw8) && IsPlainArcG3(processor) ? Claw8ArcG3 : known;
+    }
+
+    /// <summary>
+    /// True only for a name that says Arc G3 without Extreme ("Intel(R) Arc(TM) G3"). An empty or unexpected
+    /// name is not one, so a machine whose chip cannot be read keeps the map checked on the Extreme.
+    /// </summary>
+    private static bool IsPlainArcG3(string processor) =>
+        processor.Contains("G3", StringComparison.OrdinalIgnoreCase)
+        && !processor.Contains("Extreme", StringComparison.OrdinalIgnoreCase);
 }
