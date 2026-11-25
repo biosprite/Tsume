@@ -18,13 +18,16 @@ public sealed class ModeKeeper(IDevice device)
     private readonly Lock _gate = new();
     private SetPerformance? _last;
     private bool _loaded;
+    private bool? _lastOnBattery;
 
-    public void Remember(SetPerformance chosen)
+    public void Remember(SetPerformance chosen, bool? onBattery = null)
     {
         lock (_gate)
         {
             _last = chosen;
             _loaded = true;
+            if (FollowsPowerSource)
+                _lastOnBattery = onBattery is { } applied && PowerSource.IsOnBattery() == applied ? applied : null;
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(Memory)!);
@@ -77,12 +80,14 @@ public sealed class ModeKeeper(IDevice device)
 
         // On boards where Manual shares its shift code with Performance (e.g. 0x04 on MS-1T41/1T42/1T52/1T8K),
         // MsiShiftModes.Decode always returns Manual. When there is no matching remembered choice (e.g. first
-        // launch or after MSI Center M switched modes), map an exact stock preset match back to its preset mode.
+        // launch or after MSI Center M switched modes), map an exact stock preset match (including any active
+        // battery cap) back to its preset mode.
         if (snapshot.Mode == Core.Performance.PerformanceMode.Manual)
         {
             foreach (var preset in device.Profile.Modes)
             {
-                if (preset.Limits is { } stock
+                if (preset.Limits is not null
+                    && device.LimitsToApply(preset.Mode, default) is { } stock
                     && device.HardwareModeFor(preset.Mode, stock) == Core.Performance.PerformanceMode.Manual
                     && snapshot.Limits == stock)
                 {
@@ -101,48 +106,16 @@ public sealed class ModeKeeper(IDevice device)
         lock (DiscoveryWorker.KeeperGate)
         lock (_gate)
         {
-            if (DiscoveryWorker.IsMutatingFirmwareCheckRunning)
-            {
-                Log.Write($"Skipped mode restore on {occasion}: a firmware check is running.");
-                return false;
-            }
-
-            try
-            {
-                if (CurrentLocked() is not { } chosen || !device.Profile.Offers(chosen.Mode) || device.MakerToolIsRunning) return false;
-
-                var manual = device.Profile.ManualRange?.Clamp(chosen.Manual) ?? chosen.Manual;
-                var wanted = device.LimitsToApply(chosen.Mode, manual, chosen.Custom);
-                // With no limits (unreachable for an offered mode) the comparison below fails and SetPerformance refuses.
-                var expectedHardwareMode = wanted is { } target ? device.HardwareModeFor(chosen.Mode, target) : chosen.Mode;
-                var (mode, limits) = device.Performance();
-
-                if (mode == expectedHardwareMode && limits == wanted) return true;
-
-                device.SetPerformance(chosen.Mode, manual, chosen.Custom);
-                var applied = expectedHardwareMode == chosen.Mode
-                    ? $"{chosen.Mode}"
-                    : $"{chosen.Mode} (shift {expectedHardwareMode})";
-                Log.Write($"On {occasion} the firmware had {mode}, {limits}. Put back {applied}, {wanted}.");
-                return true;
-            }
-            catch (Exception error) when (error is FirmwareException or ArgumentOutOfRangeException or System.Management.ManagementException or System.Runtime.InteropServices.COMException)
-            {
-                Log.Write($"Could not restore the chosen mode on {occasion}: {error.Message}");
-                return false;
-            }
+            return RestoreLocked(occasion, onlyIfSourceChanged: false);
         }
     }
 
     /// <summary>True when the limits applied depend on the power source, so a change of it must be acted on.</summary>
     public bool FollowsPowerSource => device.Profile.BatteryCap is not null;
 
-    private readonly Lock _sourceGate = new();
-    private bool? _lastOnBattery;
-
     /// <summary>
     /// Called on every power status notification. On a board with a battery cap, puts the chosen mode back
-    /// through <see cref="RestoreIfForgotten"/> — which rewrites only when the cap went on or came off — once per
+    /// through <see cref="RestoreLocked"/> — which rewrites only when the cap went on or came off — once per
     /// actual change of source; repeated notifications (battery level, duplicates) do nothing. Nothing otherwise.
     /// A source is counted as handled only once the firmware holds the right limits for it: if the restore was
     /// skipped (a firmware check, MSI Center M running, nothing chosen yet) or failed, the next notification tries again.
@@ -151,16 +124,54 @@ public sealed class ModeKeeper(IDevice device)
     {
         if (!FollowsPowerSource) return;
 
-        bool onBattery;
-        lock (_sourceGate)
+        lock (DiscoveryWorker.KeeperGate)
+        lock (_gate)
         {
-            onBattery = PowerSource.IsOnBattery();
-            if (_lastOnBattery == onBattery) return;
+            RestoreLocked("power source change", onlyIfSourceChanged: true);
+        }
+    }
+
+    private bool RestoreLocked(string occasion, bool onlyIfSourceChanged)
+    {
+        bool? onBattery = FollowsPowerSource ? PowerSource.IsOnBattery() : null;
+        if (onlyIfSourceChanged && _lastOnBattery == onBattery) return false;
+
+        if (DiscoveryWorker.IsMutatingFirmwareCheckRunning)
+        {
+            Log.Write($"Skipped mode restore on {occasion}: a firmware check is running.");
+            return false;
         }
 
-        if (!RestoreIfForgotten("power source change")) return;
+        try
+        {
+            if (CurrentLocked() is not { } chosen || !device.Profile.Offers(chosen.Mode) || device.MakerToolIsRunning) return false;
 
-        lock (_sourceGate) _lastOnBattery = onBattery;
+            var manual = device.Profile.ManualRange?.Clamp(chosen.Manual) ?? chosen.Manual;
+            var wanted = device.LimitsToApply(chosen.Mode, manual, chosen.Custom, onBattery);
+            // With no limits (unreachable for an offered mode) the comparison below fails and SetPerformance refuses.
+            var expectedHardwareMode = wanted is { } target ? device.HardwareModeFor(chosen.Mode, target) : chosen.Mode;
+            var (mode, limits) = device.Performance();
+
+            if (mode == expectedHardwareMode && limits == wanted)
+            {
+                if (FollowsPowerSource) _lastOnBattery = onBattery;
+                return true;
+            }
+
+            device.SetPerformance(chosen.Mode, manual, chosen.Custom, onBattery);
+            if (FollowsPowerSource) _lastOnBattery = onBattery;
+
+            var applied = expectedHardwareMode == chosen.Mode
+                ? $"{chosen.Mode}"
+                : $"{chosen.Mode} (shift {expectedHardwareMode})";
+            Log.Write($"On {occasion} the firmware had {mode}, {limits}. Put back {applied}, {wanted}.");
+            return true;
+        }
+        catch (Exception error) when (error is FirmwareException or ArgumentOutOfRangeException or System.Management.ManagementException or System.Runtime.InteropServices.COMException)
+        {
+            Log.Write($"Could not restore the chosen mode on {occasion}: {error.Message}");
+            return false;
+        }
     }
 
     private SetPerformance? CurrentLocked()

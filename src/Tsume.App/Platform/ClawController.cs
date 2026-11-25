@@ -62,9 +62,25 @@ public sealed class ClawController : IDisposable
     /// <summary>
     /// True when the controller firmware version is unknown (<c>0</c>) or an early launch firmware
     /// (A1M &lt;= 1.63, Claw 8 AI+ 2.xx &lt; 2.17) whose profile map sits at legacy offsets.
+    /// Prefer <see cref="IsUnsupportedProfileFirmware"/> when the board profile is known.
     /// </summary>
     public bool UsesLegacyProfileLayout =>
-        FirmwareVersionRaw <= 0x0163 || (FirmwareVersionRaw >= 0x0200 && FirmwareVersionRaw < 0x0217);
+        IsUnsupportedProfileFirmware(minFirmwareVersion: null, boardKnown: false);
+
+    /// <summary>
+    /// True when the controller's firmware version cannot be trusted with the 1478-byte profile map.
+    /// Version <c>0</c> (unreadable descriptor) is always rejected. When the board declares
+    /// <paramref name="minFirmwareVersion"/>, checks against that board's cutoff; when null on a known board
+    /// (e.g. Claw 8 EX AI+ or Claw A8), all non-zero versions are accepted. When the board is not yet known,
+    /// falls back to the conservative A1M / A2VM launch-firmware cutoffs.
+    /// </summary>
+    public bool IsUnsupportedProfileFirmware(ushort? minFirmwareVersion, bool boardKnown)
+    {
+        if (FirmwareVersionRaw == 0) return true;
+        if (minFirmwareVersion is { } min) return FirmwareVersionRaw < min;
+        if (boardKnown) return false;
+        return FirmwareVersionRaw <= 0x0163 || (FirmwareVersionRaw >= 0x0200 && FirmwareVersionRaw < 0x0217);
+    }
 
     /// <summary>
     /// Opens the Claw controller's vendor collection, or returns null if there is none.
@@ -189,9 +205,9 @@ public sealed class ClawController : IDisposable
     /// Writes bytes of the lighting block into the controller's working memory.
     /// The lights change at once; nothing is kept over a power cycle until <see cref="SaveAsync"/>.
     /// </summary>
-    public async Task<bool> WriteLightingAsync(int offset, ReadOnlyMemory<byte> data)
+    public async Task<bool> WriteLightingAsync(int offset, ReadOnlyMemory<byte> data, ushort? minFirmwareVersion = null, bool boardKnown = false)
     {
-        if (UsesLegacyProfileLayout) return false;
+        if (IsUnsupportedProfileFirmware(minFirmwareVersion, boardKnown)) return false;
 
         // Safety guard: nothing outside the lighting block may ever be written.
         if (offset < ProfileMap.LightingStart || offset + data.Length > ProfileMap.LightingEnd)
@@ -203,7 +219,7 @@ public sealed class ClawController : IDisposable
     /// <summary>Writes a back button's remap block to RAM; rejects offsets outside <paramref name="profile"/>.</summary>
     public Task<bool> WriteBackButtonAsync(BackButtonsProfile profile, BackButtonDefinition button, ReadOnlyMemory<byte> data)
     {
-        if (UsesLegacyProfileLayout) return Task.FromResult(false);
+        if (IsUnsupportedProfileFirmware(profile.MinFirmwareVersion, boardKnown: true)) return Task.FromResult(false);
 
         if (!profile.Buttons.Contains(button))
             throw new ArgumentOutOfRangeException(nameof(button), "Back button is not declared in this device's verified profile.");

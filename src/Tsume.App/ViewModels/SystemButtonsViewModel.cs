@@ -427,11 +427,25 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
 
     private async Task<IBackButtonController?> ConnectAsync(BackButtonsProfile profile)
     {
-        _controller ??= await Task.Run(() => BackButtonControllers.Open(profile));
+        if (_controller is null)
+        {
+            var result = await Task.Run(() => BackButtonControllers.Open(profile));
+            _controller = result.Controller;
 
-        IsControllerAvailable = _controller is not null;
-        if (_controller is null) Status = Strings.ControllerNotFound;
+            if (_controller is null)
+            {
+                IsControllerAvailable = false;
+                Status = result.Failure switch
+                {
+                    BackButtonOpenFailure.FirmwareTooOld => Strings.ControllerFirmwareTooOld(result.FirmwareVersion ?? ""),
+                    BackButtonOpenFailure.NotAnswering   => Strings.ControllerNotAnswering,
+                    _                                    => Strings.ControllerNotFound,
+                };
+                return null;
+            }
+        }
 
+        IsControllerAvailable = true;
         return _controller;
     }
 

@@ -14,14 +14,14 @@ namespace Tsume.Hardware.Msi;
 public sealed class MsiAcpiBridge(Board machine, MsiBoard? verified) : IMsiFirmware
 {
     private const string Scope = @"root\WMI";
-    private const string Instance = @"MSI_ACPI.InstanceName='ACPI\PNP0C14\0_0'";
+    private const string FallbackInstance = @"MSI_ACPI.InstanceName='ACPI\PNP0C14\0_0'";
     private const string PackageClass = "Package_32";
     private const int PackageSize = 32;
 
     /// <summary>Serialises all <c>MSI_ACPI</c> WMI calls process-wide so device control and read-only discovery never overlap.</summary>
     internal static readonly Lock AcpiCallGate = new();
 
-    private ManagementObject _acpi = new(Scope, Instance, null);
+    private ManagementObject? _acpi;
 
     /// <summary>Opens the bridge on this machine, verified or not: reads are allowed anywhere so the probe can learn a new board.</summary>
     public static MsiAcpiBridge Open()
@@ -124,9 +124,10 @@ public sealed class MsiAcpiBridge(Board machine, MsiBoard? verified) : IMsiFirmw
 
     private FirmwareReply InvokeCore(string method, byte[]? package)
     {
+        var acpi = _acpi ??= Connect();
         using var output = package is null
-            ? _acpi.InvokeMethod(method, null, null)
-            : InvokeWithPackage(method, package);
+            ? acpi.InvokeMethod(method, null, null)
+            : InvokeWithPackage(acpi, method, package);
 
         return output?["Data"] is ManagementBaseObject { } data && data["Bytes"] is byte[] { Length: > 1 } bytes
             ? new FirmwareReply(Accepted: bytes[0] != 0, Data: bytes[1..])
@@ -135,25 +136,61 @@ public sealed class MsiAcpiBridge(Board machine, MsiBoard? verified) : IMsiFirmw
 
     private void ReconnectLocked()
     {
-        try { _acpi.Dispose(); }
+        try { _acpi?.Dispose(); }
         catch (Exception) { }
-        _acpi = new ManagementObject(Scope, Instance, null);
+        _acpi = Connect();
     }
 
-    private ManagementBaseObject InvokeWithPackage(string method, byte[] package)
+    /// <summary>
+    /// Discovers the board's <c>MSI_ACPI</c> WMI instance dynamically instead of assuming <c>ACPI\PNP0C14\0_0</c>
+    /// (platforms with additional PNP0C14 devices, such as AMD PMF/WMI, may enumerate MSI_ACPI at another index).
+    /// Falls back to <see cref="FallbackInstance"/> if enumeration fails or returns nothing yet.
+    /// </summary>
+    private static ManagementObject Connect()
     {
-        using var input = _acpi.GetMethodParameters(method);
+        try
+        {
+            using var search = new ManagementObjectSearcher(Scope, "SELECT * FROM MSI_ACPI");
+            using var results = search.Get();
+            string? relativePath = null;
+            foreach (ManagementObject obj in results)
+            {
+                using (obj)
+                {
+                    if (relativePath is null && obj.Path?.RelativePath is { Length: > 0 } path)
+                        relativePath = path;
+                }
+            }
+
+            if (relativePath is not null)
+                return new ManagementObject(Scope, relativePath, null);
+        }
+        catch (Exception error) when (error is ManagementException or System.Runtime.InteropServices.COMException)
+        {
+            // Early in boot or while Winmgmt restarts; fall back so Invoke can retry via ReconnectLocked.
+        }
+
+        return new ManagementObject(Scope, FallbackInstance, null);
+    }
+
+    private static ManagementBaseObject InvokeWithPackage(ManagementObject acpi, string method, byte[] package)
+    {
+        using var input = acpi.GetMethodParameters(method);
         using var packageClass = new ManagementClass(Scope, PackageClass, null);
         using var instance = packageClass.CreateInstance();
 
         instance["Bytes"] = package;
         input["Data"] = instance;
 
-        return _acpi.InvokeMethod(method, input, null);
+        return acpi.InvokeMethod(method, input, null);
     }
 
     public void Dispose()
     {
-        lock (AcpiCallGate) _acpi.Dispose();
+        lock (AcpiCallGate)
+        {
+            _acpi?.Dispose();
+            _acpi = null;
+        }
     }
 }

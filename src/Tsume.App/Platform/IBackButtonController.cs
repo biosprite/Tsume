@@ -13,12 +13,25 @@ public interface IBackButtonController : IDisposable
     Task<bool> SaveAsync();
 }
 
+public enum BackButtonOpenFailure
+{
+    None,
+    NotFound,
+    FirmwareTooOld,
+    NotAnswering,
+}
+
+public readonly record struct BackButtonOpenResult(
+    IBackButtonController? Controller,
+    BackButtonOpenFailure Failure = BackButtonOpenFailure.None,
+    string? FirmwareVersion = null);
+
 public static class BackButtonControllers
 {
-    public static IBackButtonController? Open(BackButtonsProfile profile) => profile.Protocol switch
+    public static BackButtonOpenResult Open(BackButtonsProfile profile) => profile.Protocol switch
     {
         BackButtonsProfile.MsiHidV1 => MsiBackButtonController.Open(profile),
-        _ => null,
+        _ => new(null, BackButtonOpenFailure.NotFound),
     };
 
     public static IReadOnlyList<BackButtonKey> KeysFor(BackButtonsProfile? profile) => profile?.Protocol switch
@@ -46,18 +59,23 @@ internal sealed class MsiBackButtonController : IBackButtonController
 
     public IReadOnlyList<BackButtonKey> SupportedKeys => BackButtonKey.All;
 
-    public static MsiBackButtonController? Open(BackButtonsProfile profile)
+    public static BackButtonOpenResult Open(BackButtonsProfile profile)
     {
         var controller = ClawController.Find(profile.VendorId, profile.ProductIds);
-        if (controller is null) return null;
+        if (controller is null)
+            return new(null, BackButtonOpenFailure.NotFound);
 
-        if (profile.MinFirmwareVersion is { } min && controller.FirmwareVersionRaw < min)
+        if (controller.IsUnsupportedProfileFirmware(profile.MinFirmwareVersion, boardKnown: true))
         {
+            var raw = controller.FirmwareVersionRaw;
+            var version = controller.FirmwareVersion;
             controller.Dispose();
-            return null;
+            return raw == 0
+                ? new(null, BackButtonOpenFailure.NotAnswering)
+                : new(null, BackButtonOpenFailure.FirmwareTooOld, version);
         }
 
-        return new MsiBackButtonController(profile, controller);
+        return new(new MsiBackButtonController(profile, controller));
     }
 
     public async Task<BackButtonBinding?> ReadAsync(BackButtonDefinition button)

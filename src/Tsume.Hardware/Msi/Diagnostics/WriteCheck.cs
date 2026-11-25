@@ -31,7 +31,17 @@ public static class WriteCheck
             }
 
             var value = before.Data[0];
-            var write = acpi.Set("Set_Data", register, [value]);
+            FirmwareReply write;
+            try
+            {
+                write = acpi.Set("Set_Data", register, [value]);
+            }
+            catch (FirmwareException refused)
+            {
+                report.AppendLine($"  Stopped: {refused.Message}");
+                break;
+            }
+
             var after = acpi.Get("Get_Data", register);
 
             var unchanged = after.Accepted && after.Data[0] == value;

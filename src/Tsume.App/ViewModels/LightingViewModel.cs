@@ -3,6 +3,7 @@ using System.Windows.Media;
 using Tsume.App.Language;
 using Tsume.App.Mvvm;
 using Tsume.App.Platform;
+using Tsume.Core.Devices;
 using Tsume.Core.Lighting;
 
 namespace Tsume.App.ViewModels;
@@ -17,8 +18,10 @@ public sealed class LightingViewModel : LayerViewModel
         [LightingEffect.Off, LightingEffect.Steady, LightingEffect.Breathe, LightingEffect.Rainbow, LightingEffect.Spin];
 
     private ClawController? _controller;
+    private ushort? _minFirmwareVersion;
+    private bool _boardKnown;
 
-    public LightingViewModel()
+    public LightingViewModel(PerformanceViewModel performance)
     {
         ToggleSameOnBoth = new Command(() => SameOnBoth = !SameOnBoth);
         ToggleSticksLit = new Command(() => SticksLit = !SticksLit);
@@ -29,6 +32,12 @@ public sealed class LightingViewModel : LayerViewModel
         _absorbing = true;
         Show(current);
         _absorbing = false;
+
+        performance.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PerformanceViewModel.Device)) AdoptDevice(performance.Device);
+        };
+        AdoptDevice(performance.Device);
     }
 
     public IReadOnlyList<string> Effects { get; } =
@@ -250,12 +259,41 @@ public sealed class LightingViewModel : LayerViewModel
         ButtonsColour = Shown(LightingPalette.Snap(lighting.Buttons));
     }
 
+    private void AdoptDevice(DeviceProfile device)
+    {
+        var boardKnown = !ReferenceEquals(device, DeviceProfile.Unknown) && device.Controls is not null;
+        var minFirmware = device.Controls?.BackButtons?.MinFirmwareVersion;
+        if (_boardKnown == boardKnown && _minFirmwareVersion == minFirmware) return;
+
+        _boardKnown = boardKnown;
+        _minFirmwareVersion = minFirmware;
+
+        if (_controller is not null && _controller.IsUnsupportedProfileFirmware(_minFirmwareVersion, _boardKnown))
+        {
+            _controller.Dispose();
+            _controller = null;
+            _ = RefreshAfterAdoptAsync();
+        }
+        else if (_controller is null && !IsAvailable)
+        {
+            _ = RefreshAfterAdoptAsync();
+        }
+    }
+
+    private async Task RefreshAfterAdoptAsync()
+    {
+        if (_reading is { IsCompleted: false } pending)
+            await pending;
+
+        await RefreshAsync();
+    }
+
     private async Task<ClawController?> ConnectAsync()
     {
         if (_controller is null)
         {
             var found = await Task.Run(ClawController.Find);
-            if (found is { UsesLegacyProfileLayout: true })
+            if (found is not null && found.IsUnsupportedProfileFirmware(_minFirmwareVersion, _boardKnown))
             {
                 var version = found.FirmwareVersion;
                 var raw = found.FirmwareVersionRaw;
@@ -311,7 +349,7 @@ public sealed class LightingViewModel : LayerViewModel
                 var controller = await ConnectAsync();
                 if (controller is null) return;
 
-                if (await controller.WriteLightingAsync(ProfileMap.ActiveAnimation, setup.Encode()))
+                if (await controller.WriteLightingAsync(ProfileMap.ActiveAnimation, setup.Encode(), _minFirmwareVersion, _boardKnown))
                     _unsaved = true;
                 else
                     Lost();

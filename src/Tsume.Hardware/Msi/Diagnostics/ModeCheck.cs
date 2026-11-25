@@ -74,7 +74,13 @@ public static class ModeCheck
         {
             try
             {
-                Registers.Restore(acpi, board, original);
+                // Skip writing if nothing changed (for instance when RequireRegisterInterface refused the very first write).
+                if (Registers.Read(acpi, board) != original)
+                    Registers.Restore(acpi, board, original);
+            }
+            catch (FirmwareException restoreError)
+            {
+                report.AppendLine($"  Restore failed: {restoreError.Message}");
             }
             finally
             {

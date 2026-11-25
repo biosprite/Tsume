@@ -58,42 +58,45 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board) : IDevice
 
     /// <summary>
     /// The profile's limits, lowered to its <see cref="DeviceProfile.BatteryCap"/> while on battery, as MSI Center M
-    /// lowers its own. The power source is asked only on a board that has a cap.
+    /// lowers its own. The power source is asked only on a board that has a cap and when the caller did not supply it.
     /// </summary>
-    public PowerLimits? LimitsToApply(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null)
+    public PowerLimits? LimitsToApply(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null, bool? onBattery = null)
     {
         var limits = Profile.LimitsFor(mode, manual, custom);
-        return limits is { } found && Profile.BatteryCap is not null && PowerSource.IsOnBattery()
+        return limits is { } found && Profile.BatteryCap is not null && (onBattery ?? PowerSource.IsOnBattery())
             ? Profile.CapForBattery(found)
             : limits;
     }
 
-    public void SetPerformance(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null)
+    public void SetPerformance(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null, bool? onBattery = null)
     {
-        var limits = LimitsToApply(mode, manual, custom)
+        var limits = LimitsToApply(mode, manual, custom, onBattery)
             ?? throw new ArgumentOutOfRangeException(nameof(mode), mode, "This device does not offer that mode.");
 
         var shiftMode = ShiftModeFor(board, mode, limits);
 
         lock (_oneIntentionAtATime)
         {
-            Write(_at.ShiftMode, nameof(_at.ShiftMode), board.Shift.Encode(shiftMode));
-
             if (_at.PowerLimitFastBoost is { } fastBoostReg)
             {
                 var fppt = limits.FastBoost ?? limits.Boost;
 
-                // The sequence drops SPL and SPPT to their floors first, so a write refused part-way would leave
-                // the APU capped there. Read what is in force now to put it back if that happens.
-                PowerLimits? before;
+                // The sequence writes ShiftMode and drops SPL and SPPT to their floors first, so a write refused
+                // part-way would leave the APU shifted or capped there. Read the original state before writing
+                // anything so ShiftMode side effects cannot overwrite the snapshot we roll back to.
+                byte? beforeShift = null;
+                PowerLimits? beforeLimits = null;
                 try
                 {
-                    before = ReadLimits();
+                    beforeShift = Read(_at.ShiftMode, nameof(_at.ShiftMode));
+                    beforeLimits = ReadLimits();
                 }
                 catch (Exception error) when (error is FirmwareException or ManagementException or COMException)
                 {
-                    before = null;   // cannot read: go ahead as before, just without the rollback
+                    // Cannot read: go ahead without whatever part could not be read.
                 }
+
+                Write(_at.ShiftMode, nameof(_at.ShiftMode), board.Shift.Encode(shiftMode));
 
                 try
                 {
@@ -105,20 +108,28 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board) : IDevice
                     Write(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost), (byte)limits.Boost);
                     Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), (byte)limits.Sustained);
                 }
-                catch (Exception) when (before is { } original)
+                catch (Exception) when (beforeShift is not null || beforeLimits is not null)
                 {
-                    // Best effort, in the same safe order as the change itself (floors first, then highest limit
-                    // first) so no limit is ever written below the one under it; then the original error.
-                    TryWrite(_at.PowerLimitSustained, board.PowerFloor);
-                    TryWrite(_at.PowerLimitBoost, board.BoostFloor ?? board.PowerFloor);
-                    TryWrite(fastBoostReg, (byte)(original.FastBoost ?? original.Boost));
-                    TryWrite(_at.PowerLimitBoost, (byte)original.Boost);
-                    TryWrite(_at.PowerLimitSustained, (byte)original.Sustained);
+                    // Best effort, in the same safe order as the change itself (shift mode, then floors, then
+                    // highest limit first) so no limit is ever written below the one under it; then the original error.
+                    if (beforeShift is { } originalShift)
+                        TryWrite(_at.ShiftMode, originalShift);
+
+                    if (beforeLimits is { } original)
+                    {
+                        TryWrite(_at.PowerLimitSustained, board.PowerFloor);
+                        TryWrite(_at.PowerLimitBoost, board.BoostFloor ?? board.PowerFloor);
+                        TryWrite(fastBoostReg, (byte)(original.FastBoost ?? original.Boost));
+                        TryWrite(_at.PowerLimitBoost, (byte)original.Boost);
+                        TryWrite(_at.PowerLimitSustained, (byte)original.Sustained);
+                    }
                     throw;
                 }
             }
             else
             {
+                Write(_at.ShiftMode, nameof(_at.ShiftMode), board.Shift.Encode(shiftMode));
+
                 // MSI's Intel order: sustained to the floor first, so boost is never below sustained mid-change.
                 Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), board.PowerFloor);
                 Write(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost), (byte)limits.Boost);
