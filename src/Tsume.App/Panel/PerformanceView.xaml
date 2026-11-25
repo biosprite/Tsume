@@ -65,15 +65,15 @@
     </controls:Reveal>
 
     <!-- Read-only: the limits in force, then the live readings or a note that there are none.
-         The outer columns are wider because their labels are the longest. -->
+         Boost gets extra width so 3-tier AMD readings ("45/55 W Boost") fit without clipping. -->
     <Border Margin="0,8,0,0" Padding="0,5,0,6" IsHitTestVisible="False"
             Background="{DynamicResource Surface}" CornerRadius="14">
       <Grid>
         <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="1.1*" />
-          <ColumnDefinition Width="0.9*" />
-          <ColumnDefinition Width="0.9*" />
-          <ColumnDefinition Width="1.1*" />
+          <ColumnDefinition Width="1.05*" />
+          <ColumnDefinition Width="1.15*" />
+          <ColumnDefinition Width="0.75*" />
+          <ColumnDefinition Width="1.05*" />
         </Grid.ColumnDefinitions>
 
         <TextBlock Grid.Column="0" Style="{StaticResource Reading}">

@@ -33,7 +33,7 @@ public readonly record struct PowerRange(
     /// <summary>The highest boost limit that still leaves <see cref="MinFastBoostHeadroom"/> watts below <see cref="MaxFastBoost"/>.</summary>
     [JsonIgnore]
     public int EffectiveMaxBoost => MaxFastBoost is { } maxFast
-        ? Math.Min(MaxBoost, Math.Max(MinBoostFloor, maxFast - Math.Max(0, MinFastBoostHeadroom)))
+        ? Math.Min(MaxBoost, Math.Max(Math.Max(Min, MinBoostFloor), maxFast - Math.Max(0, MinFastBoostHeadroom)))
         : MaxBoost;
 
     /// <summary>The highest sustained limit that still leaves <see cref="MinBoostHeadroom"/> watts below <see cref="EffectiveMaxBoost"/>.</summary>

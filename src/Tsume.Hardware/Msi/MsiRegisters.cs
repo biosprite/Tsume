@@ -61,7 +61,10 @@ public sealed record MsiRegisters
         }
     }
 
-    /// <summary>Exactly the registers Tsume writes.</summary>
+    /// <summary>
+    /// The state registers Tsume writes and that are safe to rewrite with their own value in WriteCheck.
+    /// <see cref="AmdStamp"/> is excluded because it carries command/strobe bits (still read in <see cref="All"/>).
+    /// </summary>
     public IEnumerable<(string Name, byte Address)> Written
     {
         get

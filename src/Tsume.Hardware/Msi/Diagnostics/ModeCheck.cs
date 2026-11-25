@@ -26,7 +26,15 @@ public static class ModeCheck
         if (Registers.Read(acpi, board) is not { } original)
             return report.AppendLine("  Could not read the starting state. Nothing was written.").ToString();
 
-        report.AppendLine("  step                 shift   sustained  boost    registers   package power under load");
+        var hasFastBoost = board.Registers.PowerLimitFastBoost is not null;
+        byte? originalStamp = board.Registers.AmdStamp is { } stampReg
+            && acpi.Get("Get_Data", stampReg) is { Accepted: true } stampReply
+                ? stampReply.Data[0]
+                : null;
+
+        report.AppendLine(hasFastBoost
+            ? "  step                 shift   sustained  boost    fast     registers   package power under load"
+            : "  step                 shift   sustained  boost    registers   package power under load");
 
         // Not disposed here: the bridge it shares is the caller's to close.
         var device = new MsiDevice(acpi, board);
@@ -36,7 +44,7 @@ public static class ModeCheck
 
         try
         {
-            report.AppendLine(Line("as found", original, held: null, UnderLoad(power)));
+            report.AppendLine(Line("as found", original, hasFastBoost, held: null, UnderLoad(power)));
 
             foreach (var mode in new[] { PerformanceMode.Balanced, PerformanceMode.Endurance })
             {
@@ -50,7 +58,7 @@ public static class ModeCheck
                 var held = now == expected;
                 allHeld &= held;
 
-                report.AppendLine(Line(mode.ToString(), now, held, watts));
+                report.AppendLine(Line(mode.ToString(), now, hasFastBoost, held, watts));
             }
         }
         catch (FirmwareException refused)
@@ -61,11 +69,18 @@ public static class ModeCheck
         finally
         {
             Registers.Restore(acpi, board, original);
+            if (board.Registers.AmdStamp is { } restoreStampReg
+                && originalStamp is { } stampBefore
+                && acpi.Get("Get_Data", restoreStampReg) is { Accepted: true } stampNow
+                && stampNow.Data[0] != stampBefore)
+            {
+                acpi.Set("Set_Data", restoreStampReg, [stampBefore]);
+            }
         }
 
         var restored = Registers.Read(acpi, board);
         var back = restored == original;
-        report.AppendLine(Line("restored", restored, back, UnderLoad(power)));
+        report.AppendLine(Line("restored", restored, hasFastBoost, back, UnderLoad(power)));
 
         report.AppendLine();
         report.AppendLine(allHeld
@@ -113,11 +128,21 @@ public static class ModeCheck
                 x = Math.Sqrt(x * x + i);
     }
 
-    private static string Line(string step, Registers? state, bool? held, double? watts)
+    private static string Line(string step, Registers? state, bool hasFastBoost, bool? held, double? watts)
     {
-        var values = state is { } s
-            ? $"0x{s.ShiftMode:X2}    {s.Sustained,2} W       {s.Boost,2} W "
-            : "--      --         --   ";
+        string values;
+        if (hasFastBoost)
+        {
+            values = state is { } s
+                ? $"0x{s.ShiftMode:X2}    {s.Sustained,2} W       {s.Boost,2} W     {(s.FastBoost is { } f ? $"{f,2} W " : "--   ")}"
+                : "--      --         --       --   ";
+        }
+        else
+        {
+            values = state is { } s
+                ? $"0x{s.ShiftMode:X2}    {s.Sustained,2} W       {s.Boost,2} W "
+                : "--      --         --   ";
+        }
 
         var verdict = held switch { null => "", true => "ok", false => "WRONG" };
         var measured = watts is { } w ? $"{w,5:F1} W" : "not measured";

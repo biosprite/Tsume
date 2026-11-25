@@ -280,7 +280,7 @@ Verified from decompiled MSI Center M v3.0.2610.0701 (`API_UserScenario.dll`, `M
 Differences from the Claw 8 EX (`MS-1T91`):
 
 - **Board models:** `MS-1T52` (8" 1200p) and `MS-1T42` (7" 1080p). Same `MSI_ACPI` WMI bridge (`ACPI\PNP0C14\0_0`, `Package_32`) and EC register map (`0x50`, `0x51`, `0x68`, `0x98`, `0xD2`, `0xD4`, `0xD7`).
-- **Manual shift code (`0xD2`):** `0x04` (`0xC4`, shared with Sport/Performance), not `0x06` (`0xC6`, which is EX-only). Endurance (`0xC2`), Balanced (`0xC1`), and Performance (`0xC4`) match the EX.
+- **Manual shift code (`0xD2`):** `0x04` (`0xC4`, shared with Sport/Performance), not `0x06` (`0xC6`, which is EX-only). Endurance (`0xC2`), Balanced (`0xC1`), and Performance (`0xC4`) match the EX. *(Note: MSI Center M switches `0xD2` to `0xC2` when Manual `PL1 == 8`; pending on-device `mode-check` verification on `MS-1T42`/`MS-1T52`.)*
 - **Power limits (Core Ultra 7 258V / Lunar Lake):**
   - Ceiling is **8–30 W sustained (PL1)** and **9–37 W boost (PL2)**, floor `8 W`.
   - **PL2 headroom (`MinBoostHeadroom = 1`):** Lunar Lake requires `PL2 >= PL1 + 1`; setting `PL1 == PL2` triggers a firmware/power-management throttling quirk. Tsume enforces `PL2 >= PL1 + 1` in `PowerRange.Clamp` (helper) and in the Manual and Presets sliders.
@@ -303,7 +303,7 @@ Differences from the Claw 8 EX (`MS-1T91`, which covers both Core G3 Extreme and
 
 - **Board model & EC transport:** `MS-1T8K` (and `MS-1T7K`) with ITE EC (`1T8KIMS1.105`). Exposes the identical `root\WMI` `MSI_ACPI` (`ACPI\PNP0C14\0_0`, `Package_32`, v2.8) bridge; DSDT `WMRD`/`WMWT` transparently routes EC RAM through MMIO `0xFEDF1400 + reg` when `ECID == 'I'`.
 - **AMD 3-tier TDP path & UI sliders (no RyzenAdj / SMU mailbox):** Writes directly through `MSI_ACPI.Set_Data` to `0x50` (SPL, `7–35 W`, floor `7 W`), `0x51` (SPPT, `9–50 W`, floor `9 W`), and `0x52` (FPPT, `11–60 W`, floor `11 W`) with monotonic coupling (`SPL <= SPPT <= FPPT`, gap 0). Exact write order (`UserScenarioX.setPowerLimit_AMD`): `0x50 = 7` → `0x51 = 9` → `0x52 = FPPT` → `0x51 = SPPT` → `0x50 = SPL`. Tsume exposes a 3rd **Fast boost** slider in Manual mode and Performance Presets only on 3-tier AMD devices (2-tier Intel UI is unchanged).
-- **AMD STAMP (`0xC5`):** If MSI Center M AI Engine Mode 8 left STAMP active (bit 7 supported, bit 1 set), Tsume clears it via `0xC5 |= 0x01` before applying power limits.
+- **AMD STAMP (`0xC5`):** After writing power limits, if bit 7 (supported) is set, Tsume clears bit 1 and sets bit 0 (`(stamp & ~0x02) | 0x01`) so any STAMP boost left active by MSI Center M AI Engine Mode 8 is reset.
 - **Manual shift code (`0xD2`):** `0x04` (`0xC4`, shared with Sport/Performance). Endurance (`0xC2`) and Balanced (`0xC1`) match the EX.
 - **Presets & thermals:** Endurance `15 / 28 / 33 W`, Balanced `20 / 33 / 43 W`, Performance `28 / 45 / 55 W` (matching MSI Center M stock presets). AMD thermal thresholds: `75 °C` warn / `85 °C` hot.
 - **Fan, battery, buttons & controller:** Same `0x68` CPU temp, `0x98` Cooler Boost, `0xD4` Fan Control, `0xD7` Charge Limit (`0x80 | pct`), `Get_Fan(0)` tachometer (`480_000 / raw`), WMI events `0x29`/`0x58` (`Win+G`), and unified `0DB0:1901/1902` 1478-byte HID controller (`3.xx` firmware, no legacy offset cutoff).

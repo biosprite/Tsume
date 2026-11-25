@@ -57,18 +57,11 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board) : IDevice
 
         lock (_oneIntentionAtATime)
         {
-            // Clear AMD STAMP boost if MSI Center M AI Engine Mode 8 left it active on 1T8K.
-            if (_at.AmdStamp is { } stampReg)
-            {
-                var stamp = Read(stampReg, nameof(_at.AmdStamp));
-                if ((stamp & _at.AmdStampSupported) != 0 && (stamp & _at.AmdStampActive) != 0)
-                    Write(stampReg, nameof(_at.AmdStamp), (byte)(stamp | _at.AmdStampReset));
-            }
-
             Write(_at.ShiftMode, nameof(_at.ShiftMode), board.Shift.Encode(shiftMode));
 
-            if (_at.PowerLimitFastBoost is { } fastBoostReg && limits.FastBoost is { } fppt)
+            if (_at.PowerLimitFastBoost is { } fastBoostReg)
             {
+                var fppt = limits.FastBoost ?? limits.Boost;
                 // MSI's AMD order (UserScenarioX.setPowerLimit_AMD):
                 // SPL -> floor (7 W), SPPT -> floor (9 W), then FPPT -> SPPT -> SPL.
                 Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), board.PowerFloor);
@@ -83,6 +76,19 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board) : IDevice
                 Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), board.PowerFloor);
                 Write(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost), (byte)limits.Boost);
                 Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), (byte)limits.Sustained);
+            }
+
+            // Clear AMD STAMP boost after writing limits (mirrors UserScenarioX.setPowerLimit_AMDSTAMP(false)):
+            // bit 7 = supported, bit 0 = reset/off, bit 1 = on (cleared so both bits are never set together).
+            if (_at.AmdStamp is { } stampReg)
+            {
+                var stamp = Read(stampReg, nameof(_at.AmdStamp));
+                if ((stamp & _at.AmdStampSupported) != 0)
+                {
+                    var cleared = (byte)((stamp & ~_at.AmdStampActive) | _at.AmdStampReset);
+                    if (cleared != stamp)
+                        Write(stampReg, nameof(_at.AmdStamp), cleared);
+                }
             }
         }
     }
