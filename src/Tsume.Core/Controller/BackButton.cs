@@ -4,7 +4,7 @@ namespace Tsume.Core.Controller;
 
 /// <summary>
 /// One key or button code a controller's firmware understands in its button-remap table.
-/// MSI codes match MSI's <c>KeyMapDefine</c> (<c>docs/hardware/controller.md</c>).
+/// The codes are the ones the MSI Claw controller uses (<c>docs/hardware/controller.md</c>).
 /// </summary>
 public sealed record BackButtonKey(byte Code, string Name, string Category)
 {

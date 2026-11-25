@@ -97,7 +97,7 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board) : IDevice
 
                 try
                 {
-                    // MSI's AMD order (UserScenarioX.setPowerLimit_AMD):
+                    // MSI's AMD order:
                     // SPL -> floor (7 W), SPPT -> floor (9 W), then FPPT -> SPPT -> SPL.
                     Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), board.PowerFloor);
                     Write(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost), board.BoostFloor ?? board.PowerFloor);
@@ -125,7 +125,7 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board) : IDevice
                 Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), (byte)limits.Sustained);
             }
 
-            // Turn AMD STAMP boost off after writing limits, exactly as UserScenarioX.setPowerLimit_AMDSTAMP(false):
+            // Turn AMD STAMP boost off after writing limits, as MSI Center M does:
             // if bit 7 (supported) reads set, write the byte back with bit 0 set — always, other bits as read.
             if (_at.AmdStamp is { } stampReg)
             {
@@ -208,8 +208,8 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board) : IDevice
 
         lock (_oneIntentionAtATime)
         {
-            // MSI Center M treats bit 7 as a capability bit and changes the byte only when it already reads set
-            // (API_Battery ComponentLoader.WriteECBatteryMode_WMIACPI_2). Boards not checked on a real unit follow it.
+            // MSI Center M treats bit 7 as a capability bit and changes the byte only when it already reads set.
+            // Boards not checked on a real unit follow it.
             if (!board.CheckedOnDevice
                 && (Read(_at.ChargeLimit, nameof(_at.ChargeLimit)) & _at.ChargeLimitOn) == 0)
                 throw new FirmwareException("This device's firmware does not offer a charge limit.");

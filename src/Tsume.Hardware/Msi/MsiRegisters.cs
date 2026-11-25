@@ -3,7 +3,7 @@ namespace Tsume.Hardware.Msi;
 /// <summary>
 /// One MSI board's embedded-controller register addresses. They differ between boards, so each board in
 /// <see cref="MsiBoards"/> states its own. Only MS-1T91's are confirmed against a real machine; the others
-/// come from MSI Center M and, for MS-1T52 and MS-1T8K, their BIOS images.
+/// are untested.
 /// </summary>
 public sealed record MsiRegisters
 {

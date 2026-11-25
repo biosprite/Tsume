@@ -69,11 +69,11 @@ public sealed class MsiAcpiBridge(Board machine, MsiBoard? verified) : IMsiFirmw
     private int _interfaceVersion = -1;
 
     /// <summary>
-    /// MSI Center M uses the <c>Get_Data</c>/<c>Set_Data</c> register path only on WMI interface major version 2
-    /// (<c>isNew_EC = WmiMajorVersion &gt; 1</c>; version 3 has a different method set). On a board never checked
-    /// on a real unit, refuses every write unless the firmware reports exactly that.
+    /// The <c>Get_Data</c>/<c>Set_Data</c> register path is only known to work on WMI interface major version 2
+    /// (version 3 has a different method set). On a board never checked on a real unit, refuses every write
+    /// unless the firmware reports exactly that.
     /// </summary>
-    // Get_WMI reply (DSDT WMAM, MAJR/MINR): status, then data byte 0 = major, data byte 1 = minor.
+    // Get_WMI reply: status, then data byte 0 = major, data byte 1 = minor.
     // Called before Set takes AcpiCallGate: Get takes the gate itself, so the two never nest. Callers may hold
     // MsiDevice's own lock; Get_WMI does not take that one.
     private void RequireRegisterInterface()

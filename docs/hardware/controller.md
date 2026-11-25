@@ -1,195 +1,125 @@
-# Controller protocol (vendor HID)
+# Controller protocol
 
-How the Claw's built-in gamepad is configured: mode switching, button remaps,
-RGB, vibration, gyro. Derived by reading MSI Center M's own control module
-(`API_ControlMode` v1.0.2609.2901) on this device. Only some of it has been
-replayed against the hardware, on one Claw 8 EX AI+ (controller firmware 4.19) —
-see **Status** at the bottom. Other models and firmware branches are inferred.
+The Claw's built-in gamepad has its own USB channel for the controller mode,
+the lighting and the back buttons. It needs no elevation, so the panel talks to
+it directly.
 
-Multi-byte values are big-endian unless noted.
+Everything here was checked on one Claw 8 EX AI+ with controller firmware 4.19.
+Other models and firmware versions are untested.
 
 ## Finding the device
 
-| | |
+| Property | Value |
 |---|---|
-| USB IDs | `0DB0:1901` (this device), `0DB0:1902` |
-| Interface | the HID collection that has an **output report with ID `0x0F`** (that is MSI's only test) |
+| USB IDs | `0DB0:1901`, `0DB0:1902` |
+| Interface | The HID collection that accepts output report `0x0F` |
 | Report size | 64 bytes each way, report ID included |
-| Firmware version | USB `bcdDevice` — `0x0414` reads as "4.14" |
+| Firmware version | The USB device version: `0x0419` reads as 4.19 |
 
-Zero-pad every outgoing report to 64 bytes.
-
-## Framing
+## Packets
 
 ```
-out   0F 00 00 3C  cmd  payload…                      (zero-padded to 64)
-out   0F 00 00 3C  cmd  profile offH offL len data…   (profile-addressed)
-in    ?? ?? ?? ??  cmd  payload…
+out   0F 00 00 3C  command  payload…        (zero-padded to 64 bytes)
+in    ?? ?? ?? ??  command  payload…
 ```
 
-Bytes 1–3 are constants in every packet MSI sends. Incoming bytes 0–3 are never
-checked by MSI.
+Tsume waits one second for a reply and tries three times.
 
-**Acknowledgement.** MSI runs a stop-and-wait queue: 1000 ms timeout, up to 5
-resends, then it sends `ResetDevice` (0x28) on its own. A read is acknowledged
-by a matching `0x05` reply (same offset and length). Anything else is
-acknowledged by *any* incoming report except `0x0A`, `0x27`, `0x30` and `0xF4`.
+| Command | Meaning | Payload |
+|---|---|---|
+| `04` | Read profile | `00 offsetHigh offsetLow length` |
+| `05` | Reply to a read | `index offsetHigh offsetLow length data…` |
+| `21` | Write profile (working memory) | `01 offsetHigh offsetLow length data…`, up to 55 bytes |
+| `22` | Save working memory to flash | none |
+| `24` | Switch mode | `mode mkeys` |
+| `26` | Read mode | none |
+| `27` | Reply to a mode read | `mode mkeys` |
 
-## Commands
+These are the only commands Tsume sends. Two warnings for anyone adding more:
 
-| Hex | Name | Direction | Payload |
-|---|---|---|---|
-| 04 | ReadProfile | → | `00 offH offL len` |
-| 05 | ReadProfileAck | ← | `idx offH offL len data…` |
-| 0A | ReadRGBStatusAck | ← | 9 × `R G B` |
-| 21 | WriteProfile (RAM) | → | `01 offH offL len data…` (len ≤ 55) |
-| 22 | SyncToROM | → | none — persists RAM to flash |
-| 23 | RestoreFromROM | → | none — discards RAM state |
-| 24 | SwitchMode | → | `mode mkeys` |
-| 26 | ReadGamepadMode | → | none |
-| 27 | GamepadModeAck | ← | `mode mkeys` (also sent unsolicited, by inference) |
-| 28 | ResetDevice | → | none |
-| 2C | SetFeatureState | → | 1 byte, **inverted** (1 = disable) |
-| 2D | DisableDevice | → | 1 byte (1 = disable) |
-| 2F | SetMotionStatus | → | 1 byte (1 = stream IMU) |
-| 30 | MotionDataAck | ← | int16 **little-endian**: Gx Gy Gz Ax Ay Az from byte 5 |
-| E0 | RGBControl | → | `play frameIndex` |
-| FD | CalibrationControl | → | `0` enter · `1` commit · `2` cancel · `3` status |
-| FE | CalibrationAck | ← | `[5]` in-calibration, `[6]` bits LT RT LS RS Motion |
-
-### Never send
-
-| Hex | Why |
-|---|---|
-| **F0** | Firmware update transport (JieLi DFU). A bad packet can brick the controller. |
-| **F4** | Unknown. MSI only ever ignores it. |
-| 24 with mode 5 or 6 | "BIOS" and "TESTING" modes. MSI never sends them. |
-| 01 03 07 08 0B | Legacy commands with unknown behavior. |
-
-Also avoid pulsing both rumble motors at speeds `77 83 73 65 80 80` ("MSIAPP",
-20 ms on / 5 ms off): MSI uses that XInput pattern as a firmware trigger.
-
-### Use with care
-
-- **22 SyncToROM** is a flash write. MSI issues it on almost every change; Tsume should debounce it.
-- **FD 01** commits a calibration. Always send `FD 02` to back out, and on suspend.
-- **2C / 2D** can leave the controller disabled.
+- **Never send `F0`.** It is the firmware update channel, and a bad packet can
+  brick the controller.
+- **`22` is a flash write.** Tsume sends it once, when a settings screen is
+  left, not on every change.
 
 ## Modes
 
-```
-0F 00 00 3C 24  mode  mkeys
-```
+| `mode` | Meaning | Tsume sends it |
+|---|---|---|
+| 1 | Gamepad (XInput) | yes |
+| 2 | DInput | no |
+| 3 | MSI's own mode | no |
+| 4 | Cursor: mouse and keyboard | yes |
 
-| `mode` | | `mkeys` | |
-|---|---|---|---|
-| 1 | XInput | 0 | M1/M2 run macros |
-| 2 | DInput | 1 | M1/M2 are key combinations |
-| 3 | MSI | 2 | M1/M2 disabled |
-| 4 | Desktop (mouse + keyboard) | | |
+`mkeys` says what the back buttons do: 0 uses the remaps stored in the profile.
 
-MSI waits 20 ms and then reads the mode back with `0F 00 00 3C 26`. Tsume
-does the same (`Platform/ControllerMode`), and sends back the `mkeys` it just
-read so the paddles are left as they were.
+To switch, Tsume reads the mode, sends the new mode with the `mkeys` it just
+read, waits 20 ms and reads the mode back. If the pad still reports the old
+mode it sends again, and gives up after five seconds.
 
 ## Profile memory
 
-One 1478-byte image. Read it in chunks of up to 55 bytes (27 requests for the
-whole thing); write only the bytes that changed.
+The controller keeps its settings in one 1478-byte profile. Tsume reads it in
+chunks of up to 55 bytes and writes only these parts:
 
-```
-read    0F 00 00 3C 04  00  offH offL  len
-write   0F 00 00 3C 21  01  offH offL  len  data…
-save    0F 00 00 3C 22
-```
-
-Reads use profile index 0 and writes use index 1. That asymmetry is MSI's, and
-is unexplained.
-
-MSI's code uses this one layout for every model and every firmware version
-(`ProfileInfo.Parse`, no version branch). Tsume's legacy-layout write guard
-(`ClawController.UsesLegacyProfileLayout`: `<= 0x0163`, `0x0200..0x0216`) does
-not come from MSI's code. An older layout does exist per the Linux kernel
-`hid-msi` driver (formerly `hid-msi-claw`), which keeps separate old/new address
-tables (RGB `0x01FA` old vs `0x024A` new); the exact version cutoffs Tsume uses
-are not confirmed by any source here.
-
-| Offset | Len | Content |
+| Offset | Length | Content |
 |---|---|---|
-| 0 | 32 | Custom data — opaque, **preserve** |
-| 32 | 1 | Lift-to-wake (inverted) |
-| 33 | 1 | Report rate |
-| **34** | 2 | **Vibration strength: left, right** (default 50 / 50) |
-| 36 | 5 | Audio module |
-| **41** | 10 | **Gyro**: flags, switch, quick key, sensitivity, anti-deadzone, 2 × (orig, target), map selection |
-| 51 | 2 | Shift module |
-| 53 | 5 | Quick triggers, d-pad diagonal lock, ABXY swap, standby time |
-| 58 | 16 × 8 | Button profiles: Up Down Left Right L1 R1 L3 R3 A B X Y Home View Menu Camera |
-| **186** | 169 | **M1**: 8-byte button profile, step count, 32 × 5-byte macro steps |
-| **355** | 169 | **M2**: same |
-| **524** | 15 | **L2**: dead range at 527, edge dead range at 528 |
-| **539** | 15 | **R2**: dead range at 542, edge dead range at 543 |
-| **554** | 16 | **Left stick**: deadzone at 556, edge deadzone at 564 |
-| **570** | 16 | **Right stick**: deadzone at 572, edge deadzone at 580 |
-| **586** | 883 | **Lighting** (below) |
-| 1469 | 9 | Per-button ABXY brightness + reserved — **preserve** |
+| 186 | 8 | M1, the left back button |
+| 355 | 8 | M2, the right back button |
+| 586 | 883 | Lighting |
 
-**Button profile (8 bytes):** `index flag turbo map0..map4`. Index 1 = remap,
-2 = macro. Flag bits: 1 dead-zone, 2 map-or-macro, 3 linear.
+Nothing else in the profile is ever written.
 
-**Map codes:** gamepad 1–40 (Up 1 … A 9, B 10, X 11, Y 12, Home 13, View 14,
-Menu 15, Camera 16, back-left 17, back-right 18, L2 19, R2 20, stick directions
-21–28, diagonals 29–40), keyboard 50–157, mouse 200–206, none 255.
+A back button's eight bytes are `01 04 turbo key1 key2 key3 00 00`: up to three
+keys held together, or `FF` in the first key for no binding.
 
-**Macro step (5 bytes):** `key holdH holdL delayH delayL`, milliseconds. Unused steps have key 255.
+Early firmware keeps these settings at other offsets, so Tsume writes nothing
+when the controller firmware is:
 
-**Gyro flag bits:** 0 enable, 1 press-to-enable, 2 output as mouse, 3 flip X,
-4 flip Y, 5 disable X, 6 disable Y, 7 press-to-toggle.
+| Model | Firmware |
+|---|---|
+| Claw A1M | 1.63 or older |
+| Claw 8 AI+, Claw 7 AI+ | 2.00 to 2.16 |
 
-**Defaults MSI applies on this model:** M1 → back-left (17). M2 → back-right
-(18), or Left Ctrl + 1 once controller firmware reaches 4.19.
+These cut-offs are a best guess and have not been confirmed.
 
 ## Lighting
 
-Nine LEDs: left stick ring (0–3), right stick ring (4–7), ABXY (8).
+Nine LEDs: left stick ring (0–3), right stick ring (4–7), and the A B X Y
+buttons (8).
 
 ```
-586   active animation index
-587   animation 0 ─ keyframe count (1–8)
-588                 effect number, always 9
-589                 speed byte = 20 − speed
-590                 brightness 0–100
-591                 8 keyframes × 9 LEDs × R G B
-807   animation 1   (firmware-stored color cycle, by inference)
+586   active animation
+587   number of keyframes (1–8)
+588   always 9
+589   speed: 19 slowest … 1 fastest
+590   brightness 0–100
+591   8 keyframes × 9 LEDs × R G B
 ```
 
-The controller interpolates between keyframes: one keyframe is a steady color,
-two (color, black) is a breathing effect, six is a color cycle.
+The controller fades between keyframes, so each effect is a short list of
+them. Tsume writes the first animation only.
 
-**Solid red at full brightness** — a single write of 32 bytes at offset 0x024A:
+| Effect | Keyframes |
+|---|---|
+| Off | 1: all black |
+| Steady | 1: the color |
+| Breathe | 2: the color, then black |
+| Spin | 4: one bright LED moving round each ring |
+| Rainbow | 6: a color cycle |
 
-```
-0F 00 00 3C 21 01 02 4A 20   00 01 09 03 64
-FF 00 00  FF 00 00  FF 00 00  FF 00 00  FF 00 00  FF 00 00  FF 00 00  FF 00 00  FF 00 00
-```
+## With MSI Center M running
 
-**Brightness only** — one byte at 590: `0F 00 00 3C 21 01 02 4E 01 64`.
-
-**Lights off** — brightness 0, or one all-black keyframe.
-
-## What MSI Center M does around it
-
-- Logs every packet in hex to `%ProgramData%\MSI\MSI_Center_M\Log\API\GamePad\`. That log is the reference to validate Tsume's packets against.
-- Stores its own copy of the profile in `%ProgramData%\MSI\MSI_Center_M\Control Mode\profile.rec`.
-- Rewrites stick deadzones and saves to flash (`SaveProfile`, which always ends in `22` SyncToROM) every time it receives a `27` GamepadModeAck reporting XInput or Desktop mode (`MSIGamePad.ControlModeUpdated`). That includes, by inference, the replies to Tsume's own `26` reads, since every open handle receives the controller's input reports. While MSI Center M runs, it will fight any other writer.
+MSI Center M writes to the same profile and may undo lighting or button
+changes. The panel says so on the Lighting screen. See
+[msi-center-m.md](msi-center-m.md).
 
 ## Status
 
-| | |
-|---|---|
-| Protocol read from MSI's code | done |
-| Read-only handshake on this device (mode read, full profile read) | **done** 2026-11-10 — firmware 4.19, mode 1, 1478 bytes in 108 ms (`controller-read-2026-11-10.txt`) |
-| Profile layout confirmed by read-back | **lighting block confirmed**: animation 0 at 586 (index), 587 count, 588 = 9, 589 speed, 590 brightness, 591 keyframes. Animations 1 and 3 sit on the 220-byte stride (807, 1247); animation 2 at 1027 has a byte the layout does not explain (brightness reads 0x80). Tsume writes animation 0 only |
-| Lighting write | **done** — 0x21 to working memory acknowledged in 5 ms, read back equal, original restored and read back equal (`lighting-check-2026-11-10.txt`). Not yet confirmed by eye |
-| Mode switching | **done** 2026-11-11 — `24 04 00` read back as mode 4 after 40 ms, `24 01 00` as mode 1 after 34 ms (`pad-mode-check-2026-11-11.txt`). The pad **stays on the bus**: same five HID collections under `PID_1901`, same handle, XInput slot 0 still answering in mode 4. What the buttons and sticks send in mode 4 has **not been observed** (needs presses). Whether the mode survives sleep or a restart is not known. Tsume sends modes 1 and 4 only |
-| Vibration, remaps | not yet |
+| Feature | Status | Capture |
+|---|---|---|
+| Read the mode and the whole profile | Checked 2026-11-10 | [controller read](controller-read-2026-11-10.txt) |
+| Lighting write | Checked 2026-11-10: written, read back, restored | [lighting check](lighting-check-2026-11-10.txt) |
+| Mode switch | Checked 2026-11-11: Cursor and back, each confirmed in about 40 ms | [pad mode check](pad-mode-check-2026-11-11.txt) |
+| Back buttons | Built, no capture recorded | |
+| Vibration, gyro, triggers, stick settings | Not built | |

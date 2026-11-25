@@ -3,7 +3,7 @@
     Switches performance mode, checks it took effect, and puts everything back.
 
 .DESCRIPTION
-    Runs `Tsume.Helper --mode-check` (one UAC prompt): applies Balanced and then Endurance (MSI's stock presets),
+    Runs `Tsume.Helper --mode-check` (one UAC prompt): applies Tsume's Balanced and then Endurance presets,
     reads the registers back and measures processor power draw under a few seconds of full load in each,
     then restores the starting mode and limits. Takes about 35 seconds; the fans will spin up.
     The report is printed and saved to artifacts\mode-check.txt.

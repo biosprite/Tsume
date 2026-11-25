@@ -12,56 +12,42 @@
   <img src="assets/media/showcase.gif" alt="Tsume's panel sliding in over the desktop" width="600">
 </p>
 
-## Supported devices
+## Features
 
-| | Device | Replaces |
+| Feature | What it does |
+|---|---|
+| **Performance modes** | Endurance, Balanced, Performance and Manual, set in the firmware. Each preset starts from defaults that depend on the device and can be customized in Settings. Manual has its own sliders for the power limits. The chosen mode is saved. |
+| **Live readings** | Processor temperature and fan speed, updated every second while the panel is open, beside the power limits in force, the battery level and the time. |
+| **Fan control** | Auto or Max. |
+| **Battery charge limit** | Stop charging at 80 %, 90 % or 100 %, kept across sleep and restarts. |
+| **Display and sound** | Screen brightness, speaker volume with mute, and a switch between the refresh rates the display offers. |
+| **Controller mode** | Switch the built-in pad between gamepad and cursor (mouse) mode. |
+| **Buttons** | Remap the M1 and M2 back buttons, and choose what the M and Quick Settings buttons do. |
+| **RGB lighting** | Off, Steady, Breathe, Rainbow or Spin for the stick rings and the A B X Y buttons, with a color for each stick, brightness and speed. The choice is saved on the controller. |
+| **Quick actions** | Touch keyboard, screenshot, Task Manager, show desktop. |
+| **Power menu** | Hibernate, lock, restart, shut down. |
+| **OptiScaler** (experimental) | Finds games in Steam, Epic, GOG, Ubisoft Connect, the EA app and the Xbox app, then installs, updates, repairs or removes OptiScaler in each one and puts the game's own files back on removal. Per game you choose the upscaler (XeSS, FSR 4 or FSR 3.1) and frame generation. Single-player games only: in an online game it can get an account banned, and it is not offered where an anti-cheat is found. |
+| **RTSS overlay** (experimental) | Optional performance overlay using [realHfde's Essential Dark overlays](https://github.com/realHfde/Huffdee-RTSS-Overlays-and-Rainmeter-Skins) (MIT): FPS, Bar, Detail or Full. RTSS's own OverlayEditor plugin draws a single combined layout, so MSI Afterburner isn't needed, level changes (and Off) apply live in-game without restarting RTSS, and the overlay disappears when Tsume exits. Also sets a global frame-rate cap through RivaTuner Statistics Server. Can be switched off to give your own RTSS overlay back. RTSS itself isn't bundled; Tsume installs it through Windows Package Manager or links to Guru3D's official download. |
+| **Themes** | Eight color schemes, or your own accent, background and text colors. |
+| **Controller, touch and mouse** | The whole panel works with any of the three, over a game or the desktop. |
+
+<details>
+<summary><b>Supported devices</b></summary>
+
+| | Device | Board |
 |---|---|---|
-| ✅ | MSI Claw 8 EX AI+ (board MS-1T91) | MSI Center M and its Game Bar Quick Settings widget |
-| 🧪 | MSI Claw 8 AI+ (board MS-1T52, beta) | MSI Center M and its Game Bar Quick Settings widget |
+| ✅ | MSI Claw 8 EX AI+ | MS-1T91 |
+| 🧪 | MSI Claw 8 AI+ (beta) | MS-1T52 |
+| 🧪 | MSI Claw 7 AI+ (beta) | MS-1T42 |
+| 🧪 | MSI Claw A1M (beta) | MS-1T41 |
+| 🧪 | MSI Claw A8 (beta) | MS-1T8K |
+
+On these, Tsume replaces MSI Center M and its Game Bar Quick Settings widget.
 
 Tsume is built so that more devices can be added. On a machine it does not know
 yet, the panel runs but leaves the firmware alone.
 
-## Features
-
-- **Performance modes:** Endurance, Balanced, Performance and Manual, set in
-  the firmware. Each preset starts from defaults that depend on the device and
-  can be customized in Settings. Manual has its own sliders for the sustained
-  and boost limits. The chosen mode is saved.
-- **Live readings:** processor temperature and fan speed, updated every second
-  while the panel is open, beside the power limits in force, the battery level
-  and the time.
-- **Fan control:** Auto or Max.
-- **Battery charge limit:** stop charging at 80 %, 90 % or 100 %, kept across
-  sleep and restarts.
-- **Display and sound:** screen brightness, speaker volume with mute, and a
-  switch between the refresh rates the display offers.
-- **Controller mode:** switch the built-in pad between gamepad and cursor
-  (mouse) mode.
-- **RGB lighting:** Off, Steady, Breathe, Rainbow or Spin for the stick rings
-  and the A B X Y buttons, with a colour for each stick, brightness and speed.
-  The choice is saved on the controller.
-- **Quick actions:** touch keyboard, screenshot, Task Manager, show desktop.
-- **Power menu:** hibernate, lock, restart, shut down.
-- **OptiScaler (experimental):** finds games in Steam, Epic, GOG, Ubisoft
-  Connect and the Xbox app, then installs, updates, repairs or removes
-  OptiScaler in each one and puts the game's own files back on removal. Per
-  game you choose the upscaler (XeSS, FSR 4 or FSR 3.1), frame generation and
-  a frame-rate counter. Single-player games only: in an online game it can get
-  an account banned, and it is not offered where an anti-cheat is found.
-- **RTSS overlay (experimental):** optional performance overlay using
-  [realHfde's Essential Dark overlays](https://github.com/realHfde/Huffdee-RTSS-Overlays-and-Rainmeter-Skins)
-  (MIT): an FPS square, Bar, Detail or Full side panel. RTSS's own
-  OverlayEditor plugin draws a single combined layout, so MSI Afterburner isn't
-  needed, level changes (and Off) apply live in-game without restarting RTSS,
-  and the overlay disappears when Tsume exits. Also sets a global frame-rate
-  cap through RivaTuner Statistics Server. Can be switched off to give your own
-  RTSS overlay back. RTSS itself isn't bundled; Tsume links to Guru3D's
-  official RTSS 7.3.7 download.
-- **Themes:** eight colour schemes, or your own accent, background and text
-  colours.
-- **Controller, touch and mouse:** the whole panel works with any of the
-  three, over a game or the desktop.
+</details>
 
 <details>
 <summary><b>Install</b></summary>
@@ -86,10 +72,10 @@ then right-click `MSI_Center_M_Server` and choose **Run**.
 <details>
 <summary><b>Use</b></summary>
 
-| To open or close the panel | |
+| To open or close the panel | How |
 |---|---|
-| Controller | hold **View + Menu** |
-| The **M** button (Claw) | while MSI Center M is paused |
+| Controller | Press **View + Menu** together |
+| The **M** button (Claw) | While MSI Center M is paused |
 | Keyboard | **Win + Alt + Q** |
 | Start menu | **Tsume** |
 
@@ -105,10 +91,9 @@ right change a slider or the performance mode.
   `Tsume.Helper.exe`, which runs as a Windows service.
 - The helper accepts a fixed list of requests and clamps every value. It cannot
   be asked to write an arbitrary register.
-- The helper only writes to boards whose firmware map has been verified. On
-  anything else it refuses.
-- No kernel driver: on the Claw, the firmware is reached through MSI's own WMI
-  interface.
+- The helper only writes to boards it knows. On anything else it refuses.
+- No kernel driver: on the Claw, the firmware is reached through the WMI
+  interface its BIOS provides.
 - Nothing of the manufacturer's is removed. Pausing MSI Center M only disables
   its two scheduled tasks and stops its processes; resuming reverses both.
 
@@ -137,16 +122,16 @@ write (one permission prompt, reads only):
 powershell -ExecutionPolicy Bypass -File tools\probe.ps1
 ```
 
-```
-src/Tsume.Core        modes, limits, the helper protocol; no hardware, no UI
-src/Tsume.Hardware    the firmware interface
-src/Tsume.Helper      the elevated helper
-src/Tsume.Upscaling   finds games; fetches, installs and removes OptiScaler
-src/Tsume.App         the panel
-docs/hardware         how each device is controlled, and how that was learned
-installer             the .msi
-tools                 build · run · probe · checks · publish
-```
+| Folder | Contents |
+|---|---|
+| `src/Tsume.Core` | Modes, limits, the helper protocol; no hardware, no UI |
+| `src/Tsume.Hardware` | The firmware interface |
+| `src/Tsume.Helper` | The elevated helper |
+| `src/Tsume.Upscaling` | Finds games; fetches, installs and removes OptiScaler |
+| `src/Tsume.App` | The panel |
+| [`docs`](docs/README.md) | How each device is controlled |
+| `installer` | The .msi |
+| `tools` | Build, run, probe, checks, publish |
 
 </details>
 
@@ -154,7 +139,7 @@ tools                 build · run · probe · checks · publish
 
 Tsume is developed with the assistance of AI.
 
-## Licence
+## License
 
 Copyright (C) 2026 Tsume contributors.
 

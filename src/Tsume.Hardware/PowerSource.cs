@@ -6,8 +6,8 @@ namespace Tsume.Hardware;
 public static class PowerSource
 {
     /// <summary>
-    /// True only when Windows reports the AC line offline, as MSI Center M's
-    /// <c>SystemInformation.PowerStatus.PowerLineStatus == Offline</c>; an unknown line or a failed call counts as wall power.
+    /// True only when Windows reports the AC line offline, as MSI Center M tests it; an unknown line or a
+    /// failed call counts as wall power.
     /// </summary>
     public static bool IsOnBattery() => GetSystemPowerStatus(out var status) && status.ACLineStatus == AcLineOffline;
 

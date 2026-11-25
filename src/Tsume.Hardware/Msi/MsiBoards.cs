@@ -7,8 +7,8 @@ namespace Tsume.Hardware.Msi;
 /// <summary>
 /// The MSI boards Tsume knows (docs/hardware/firmware.md); Tsume writes to no others. Only MS-1T91 has been
 /// probed, write-checked and mode-checked on a real unit (<see cref="MsiBoard.CheckedOnDevice"/>). The other
-/// maps come from decompiled MSI Center M, plus BIOS/ACPI images for MS-1T52 and MS-1T8K only, and writes to
-/// them are guarded by the WMI interface check in <see cref="MsiAcpiBridge"/>.
+/// maps have not been tested on real hardware, and writes to them are guarded by the WMI interface check in
+/// <see cref="MsiAcpiBridge"/>.
 /// </summary>
 public static class MsiBoards
 {
@@ -102,7 +102,7 @@ public static class MsiBoards
         Model = "MS-1T52",
 
         // MSI Center M never runs PL1 = 8 W under 0xC4: in Manual with PL1 == 8 it switches to its Super
-        // Battery scenario, whose shift code is 0x02 / 0xC2 (UserScenarioX.SetManualPower, SetScenario_Value(3)).
+        // Battery scenario, whose shift code is 0x02 / 0xC2.
         SustainedShift = new(SustainedWatts: 8, PerformanceMode.Endurance),
 
         Registers = new()
@@ -185,7 +185,7 @@ public static class MsiBoards
     /// Claw 7 AI+ / A7 (A2VM, Intel Core Ultra 7 258V / Lunar Lake, 7" 1080p). Identical to the Claw 8 AI+
     /// (MS-1T52) in MSI Center M's power, shift (Manual = 0x04 / 0xC4), fan and battery handling, and Tsume
     /// uses the same PL1/PL2 limits (8–30 W / 8–37 W, PL2 &gt;= PL1 + 1) and 2.xx controller firmware.
-    /// That its WMI interface and EC registers match MS-1T52 is inferred: there is no MS-1T42 BIOS image.
+    /// That its WMI interface and EC registers match MS-1T52 is assumed, not tested.
     /// </summary>
     public static readonly MsiBoard Claw7AiPlus = new()
     {
@@ -273,9 +273,9 @@ public static class MsiBoards
     /// <summary>
     /// Claw A1M (Intel Core Ultra 5 135H / Ultra 7 155H Meteor Lake, 7" 1080p). Manual shift mode 0x04 (0xC4),
     /// PowerFloor 15 W, and 1.xx controller firmware. That it has the same MSI_ACPI WMI bridge and EC register
-    /// map is inferred: there is no MS-1T41 BIOS image. MSI's own Manual sliders are 20–40 W for both PL1 and
-    /// PL2 on AC and 20–35 W on battery (UC_UserScenario.xaml), and its presets differ on AC and battery
-    /// (Performance 43/45 W on AC, 35/35 W on battery; UserScenarioX), re-applied on every AC/battery change.
+    /// map is assumed, not tested. MSI's own Manual sliders are 20–40 W for both PL1 and
+    /// PL2 on AC and 20–35 W on battery, and its presets differ on AC and battery
+    /// (Performance 43/45 W on AC, 35/35 W on battery), re-applied on every AC/battery change.
     /// Rule: on AC, Manual goes as far as the highest MSI itself applies on each tier: its Performance preset,
     /// 43/45 W (its Manual sliders stop at 40 W). Performance is that preset. On battery everything is held to
     /// MSI's battery limit, the battery cap of 35 W on both tiers: its battery sliders' end and its Performance
@@ -364,14 +364,13 @@ public static class MsiBoards
     };
 
     /// <summary>
-    /// Claw A8 (BZ2EM, AMD Ryzen Z2 Extreme, ITE EC 1T8KIMS1). Uses the same MSI_ACPI WMI bridge (the DSDT
-    /// routes EC RAM through MMIO 0xFEDF1400 when ECID == 'I') and writes 3-tier AMD power limits directly
-    /// to EC 0x50 (SPL, 7–35 W), 0x51 (SPPT, 9–45 W), and 0x52 (FPPT, 11–55 W) in MSI's safe order:
+    /// Claw A8 (BZ2EM, AMD Ryzen Z2 Extreme). Uses the same MSI_ACPI WMI bridge and writes 3-tier AMD power
+    /// limits directly to EC 0x50 (SPL, 7–35 W), 0x51 (SPPT, 9–45 W), and 0x52 (FPPT, 11–55 W) in MSI's safe order:
     /// 0x50=7 -&gt; 0x51=9 -&gt; 0x52=FPPT -&gt; 0x51=SPPT -&gt; 0x50=SPL. Manual shift mode is 0x04 (0xC4).
     /// Rule: Manual goes as far as the highest MSI itself applies on each tier without STAMP boost: SPL 35 W (its
-    /// Manual slider, UC_UserScenario_1T8K.xaml), SPPT 45 / FPPT 55 W (its Performance preset, 28/45/55 W; its
+    /// Manual slider), SPPT 45 / FPPT 55 W (its Performance preset, 28/45/55 W; its
     /// Manual sliders stop at 40 / 48 W). So Manual can reach 35/45/55 W, a mix MSI's own UI does not offer but
-    /// inside its driver clamps of 35 / 50 / 60 W (UserScenarioX), which its AI mode reaches with STAMP on.
+    /// inside its own upper limits of 35 / 50 / 60 W, which its AI mode reaches with STAMP on.
     /// MSI applies the same watts on AC and battery on this board, so there is no battery cap.
     /// </summary>
     public static readonly MsiBoard ClawA8 = new()
@@ -453,10 +452,9 @@ public static class MsiBoards
         },
     };
 
-    // MS-1T7K is deliberately absent: it is recognized by MSI's software but not supported by Tsume yet. MSI
-    // Center M names it only in its compatibility whitelist and one OSD helper; its power code sends it down
-    // the 1T91 path. Its power path, EC and marketing name are unconfirmed, so it needs a probe from a real
-    // unit before it gets a map. Until then it is an unknown board (read-only discovery).
+    // MS-1T7K is deliberately absent: it is recognized by MSI's software but not supported by Tsume yet. Its
+    // power path, EC and marketing name are unconfirmed, so it needs a probe from a real unit before it gets a
+    // map. Until then it is an unknown board (read-only discovery).
     private static readonly MsiBoard[] Known = [Claw8, Claw8AiPlus, Claw7AiPlus, ClawA1M, ClawA8];
 
     /// <summary>The map for a board, or null if Tsume has none.</summary>
