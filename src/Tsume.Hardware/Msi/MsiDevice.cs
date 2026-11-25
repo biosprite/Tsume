@@ -57,20 +57,19 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board) : IDevice
     public PerformanceMode HardwareModeFor(PerformanceMode mode, PowerLimits limits) => ShiftModeFor(board, mode, limits);
 
     /// <summary>
-    /// The profile's limits, lowered to its <see cref="DeviceProfile.BatteryCap"/> while on battery, as MSI Center M
-    /// lowers its own. The power source is asked only on a board that has a cap and when the caller did not supply it.
+    /// The profile's limits, or its battery limits while on battery, as MSI Center M does. The power source is
+    /// asked only when the limits depend on it and the caller did not supply it.
     /// </summary>
-    public PowerLimits? LimitsToApply(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null, bool? onBattery = null)
-    {
-        var limits = Profile.LimitsFor(mode, manual, custom);
-        return limits is { } found && Profile.BatteryCap is not null && (onBattery ?? PowerSource.IsOnBattery())
-            ? Profile.CapForBattery(found)
-            : limits;
-    }
+    public PowerLimits? LimitsToApply(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null, bool? onBattery = null,
+        PowerLimits? customOnBattery = null) =>
+        Profile.FollowsPowerSource && (onBattery ?? PowerSource.IsOnBattery())
+            ? Profile.LimitsOnBattery(mode, manual, customOnBattery)
+            : Profile.LimitsFor(mode, manual, custom);
 
-    public void SetPerformance(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null, bool? onBattery = null)
+    public void SetPerformance(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null, bool? onBattery = null,
+        PowerLimits? customOnBattery = null)
     {
-        var limits = LimitsToApply(mode, manual, custom, onBattery)
+        var limits = LimitsToApply(mode, manual, custom, onBattery, customOnBattery)
             ?? throw new ArgumentOutOfRangeException(nameof(mode), mode, "This device does not offer that mode.");
 
         var shiftMode = ShiftModeFor(board, mode, limits);

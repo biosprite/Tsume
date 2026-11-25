@@ -10,7 +10,8 @@ using Tsume.Core.Performance;
 namespace Tsume.App.ViewModels;
 
 /// <summary>
-/// The performance presets page, opened from Settings: sustained and boost watts for each mode that has its own limits.
+/// The performance presets page, opened from Settings: sustained and boost watts for each mode that has its own limits,
+/// with a second set for battery on a machine whose limits differ there.
 /// Changes are saved to state.json shortly after the sliders stop, and applied if the mode is in force.
 /// </summary>
 public sealed class PerformancePresetsViewModel : LayerViewModel
@@ -41,12 +42,17 @@ public sealed class PerformancePresetsViewModel : LayerViewModel
         {
             if (e.PropertyName == nameof(PerformanceViewModel.Modes)) LayOut();
         };
-
         LayOut();
     }
 
-    /// <summary>One per mode whose limits can be changed, quietest first.</summary>
+    /// <summary>One per mode whose limits can be changed, quietest first; on wall power where limits differ on battery.</summary>
     public IReadOnlyList<PresetLimits> Presets { get; private set => Set(ref field, value); } = [];
+
+    /// <summary>The same modes on battery; empty on a machine whose limits do not differ there.</summary>
+    public IReadOnlyList<PresetLimits> BatteryPresets { get; private set => Set(ref field, value); } = [];
+
+    /// <summary>The "Plugged in" and "On battery" headings, shown only when there are battery presets.</summary>
+    public Visibility BatterySection => BatteryPresets.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>Puts every mode back to the machine's own limits.</summary>
     public ICommand Reset { get; }
@@ -57,16 +63,23 @@ public sealed class PerformancePresetsViewModel : LayerViewModel
     private void LayOut()
     {
         var device = _performance.Device;
+        var modes = device.Modes.Where(preset => device.CanCustomize(preset.Mode)).ToList();
 
         Presets = device.ManualRange is not { } range ? [] :
         [
-            .. device.Modes
-                .Where(preset => device.CanCustomize(preset.Mode))
-                .Select(preset => new PresetLimits(
-                    preset.Mode, preset.Limits!.Value, range, _performance.CustomFor(preset.Mode), Moved)),
+            .. modes.Select(preset => new PresetLimits(
+                preset.Mode, preset.Limits!.Value, range, _performance.CustomFor(preset.Mode), Moved)),
+        ];
+
+        BatteryPresets = !device.FollowsPowerSource || device.RangeOnBattery is not { } batteryRange ? [] :
+        [
+            .. modes.Select(preset => new PresetLimits(
+                preset.Mode, device.LimitsOnBattery(preset.Mode, default)!.Value, batteryRange,
+                _performance.CustomOnBatteryFor(preset.Mode), Moved, onBattery: true)),
         ];
 
         Notify(nameof(Card));
+        Notify(nameof(BatterySection));
     }
 
     private void Moved(PresetLimits preset)
@@ -81,7 +94,7 @@ public sealed class PerformancePresetsViewModel : LayerViewModel
     private void BackToTheMachines()
     {
         _absorbing = true;
-        foreach (var preset in Presets)
+        foreach (var preset in Presets.Concat(BatteryPresets))
         {
             if (preset.IsStock) continue;
 
@@ -101,13 +114,19 @@ public sealed class PerformancePresetsViewModel : LayerViewModel
 
         // Stock limits are not stored, so an unchanged mode follows the device profile
         // if a later version corrects it.
-        var chosen = Presets.Where(preset => !preset.IsStock).ToDictionary(preset => preset.Mode, preset => preset.Limits);
-        _state.Presets = chosen.Count > 0 ? chosen : null;
+        _state.Presets = Changed(Presets);
+        _state.BatteryPresets = Changed(BatteryPresets);
         _state.Save();
 
         PerformanceMode[] moved = [.. _moved];
         _moved.Clear();
         _performance.OnPresetsChanged(moved);
+    }
+
+    private static Dictionary<PerformanceMode, PowerLimits>? Changed(IEnumerable<PresetLimits> presets)
+    {
+        var chosen = presets.Where(preset => !preset.IsStock).ToDictionary(preset => preset.Mode, preset => preset.Limits);
+        return chosen.Count > 0 ? chosen : null;
     }
 
     /// <summary>Saves any pending change at once instead of waiting for the timer.</summary>
@@ -122,7 +141,9 @@ public sealed class PresetLimits : Observable
     private readonly Action<PresetLimits> _changed;
     private readonly PowerRange _range;
 
-    public PresetLimits(PerformanceMode mode, PowerLimits stock, PowerRange range, PowerLimits? custom, Action<PresetLimits> changed)
+    /// <param name="onBattery">True for the battery section; its sliders' spoken names say so.</param>
+    public PresetLimits(PerformanceMode mode, PowerLimits stock, PowerRange range, PowerLimits? custom, Action<PresetLimits> changed,
+        bool onBattery = false)
     {
         Mode = mode;
         Stock = stock;
@@ -131,9 +152,10 @@ public sealed class PresetLimits : Observable
 
         var name = PerformanceViewModel.Label(mode);
         Heading = name.ToUpper(CultureInfo.CurrentCulture);
-        SustainedName = Strings.PresetLimit(name, Strings.Sustained);
-        BoostName = Strings.PresetLimit(name, Strings.Boost);
-        FastBoostName = Strings.PresetLimit(name, Strings.FastBoost);
+        var spoken = onBattery ? Strings.PresetOnBattery(name) : name;
+        SustainedName = Strings.PresetLimit(spoken, Strings.Sustained);
+        BoostName = Strings.PresetLimit(spoken, Strings.Boost);
+        FastBoostName = Strings.PresetLimit(spoken, Strings.FastBoost);
         StockLine = stock.FastBoost is { } fast
             ? Strings.PresetStock3(stock.Sustained, stock.Boost, fast)
             : Strings.PresetStock(stock.Sustained, stock.Boost);

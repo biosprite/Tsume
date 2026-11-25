@@ -56,22 +56,25 @@ public sealed class ModeKeeper(IDevice device)
         {
             var manual = device.Profile.ManualRange?.Clamp(chosen.Manual) ?? chosen.Manual;
 
-            if (device.LimitsToApply(chosen.Mode, manual, chosen.Custom) is { } wanted)
+            if (device.LimitsToApply(chosen.Mode, manual, chosen.Custom, customOnBattery: chosen.CustomOnBattery) is { } wanted)
             {
                 var expectedHardwareMode = device.HardwareModeFor(chosen.Mode, wanted);
 
                 if (snapshot.Mode == expectedHardwareMode && snapshot.Limits == wanted)
                     return expectedHardwareMode == chosen.Mode ? snapshot : snapshot with { Mode = chosen.Mode };
 
-                // On a board with a battery cap, the firmware holds the other power source's limits for a moment
-                // after plugging in or unplugging, until the change is put back. That is still the chosen mode,
-                // not something else's Manual.
-                if (device.Profile.BatteryCap is not null
-                    && device.Profile.LimitsFor(chosen.Mode, manual, chosen.Custom) is { } onWallPower)
+                // Just after plugging in or unplugging, the firmware still holds the other source's limits.
+                // That is still the chosen mode.
+                if (device.Profile.FollowsPowerSource)
                 {
-                    foreach (var either in new[] { onWallPower, device.Profile.CapForBattery(onWallPower) })
+                    foreach (var either in new[]
                     {
-                        if (snapshot.Mode == device.HardwareModeFor(chosen.Mode, either) && snapshot.Limits == either)
+                        device.Profile.LimitsFor(chosen.Mode, manual, chosen.Custom),
+                        device.Profile.LimitsOnBattery(chosen.Mode, manual, chosen.CustomOnBattery),
+                    })
+                    {
+                        if (either is { } limits
+                            && snapshot.Mode == device.HardwareModeFor(chosen.Mode, limits) && snapshot.Limits == limits)
                             return snapshot with { Mode = chosen.Mode };
                     }
                 }
@@ -80,8 +83,8 @@ public sealed class ModeKeeper(IDevice device)
 
         // On boards where Manual shares its shift code with Performance (e.g. 0x04 on MS-1T41/1T42/1T52/1T8K),
         // MsiShiftModes.Decode always returns Manual. When there is no matching remembered choice (e.g. first
-        // launch or after MSI Center M switched modes), map an exact stock preset match (including any active
-        // battery cap) back to its preset mode.
+        // launch or after MSI Center M switched modes), map an exact stock preset match (battery limits included
+        // while on battery) back to its preset mode.
         if (snapshot.Mode == Core.Performance.PerformanceMode.Manual)
         {
             foreach (var preset in device.Profile.Modes)
@@ -111,11 +114,11 @@ public sealed class ModeKeeper(IDevice device)
     }
 
     /// <summary>True when the limits applied depend on the power source, so a change of it must be acted on.</summary>
-    public bool FollowsPowerSource => device.Profile.BatteryCap is not null;
+    public bool FollowsPowerSource => device.Profile.FollowsPowerSource;
 
     /// <summary>
-    /// Called on every power status notification. On a board with a battery cap, puts the chosen mode back
-    /// through <see cref="RestoreLocked"/> — which rewrites only when the cap went on or came off — once per
+    /// Called on every power status notification. On a board whose limits differ on battery, puts the chosen mode
+    /// back through <see cref="RestoreLocked"/> — which rewrites only when the limits changed — once per
     /// actual change of source; repeated notifications (battery level, duplicates) do nothing. Nothing otherwise.
     /// A source is counted as handled only once the firmware holds the right limits for it: if the restore was
     /// skipped (a firmware check, MSI Center M running, nothing chosen yet) or failed, the next notification tries again.
@@ -147,7 +150,7 @@ public sealed class ModeKeeper(IDevice device)
             if (CurrentLocked() is not { } chosen || !device.Profile.Offers(chosen.Mode) || device.MakerToolIsRunning) return false;
 
             var manual = device.Profile.ManualRange?.Clamp(chosen.Manual) ?? chosen.Manual;
-            var wanted = device.LimitsToApply(chosen.Mode, manual, chosen.Custom, onBattery);
+            var wanted = device.LimitsToApply(chosen.Mode, manual, chosen.Custom, onBattery, chosen.CustomOnBattery);
             // With no limits (unreachable for an offered mode) the comparison below fails and SetPerformance refuses.
             var expectedHardwareMode = wanted is { } target ? device.HardwareModeFor(chosen.Mode, target) : chosen.Mode;
             var (mode, limits) = device.Performance();
@@ -158,7 +161,7 @@ public sealed class ModeKeeper(IDevice device)
                 return true;
             }
 
-            device.SetPerformance(chosen.Mode, manual, chosen.Custom, onBattery);
+            device.SetPerformance(chosen.Mode, manual, chosen.Custom, onBattery, chosen.CustomOnBattery);
             if (FollowsPowerSource) _lastOnBattery = onBattery;
 
             var applied = expectedHardwareMode == chosen.Mode

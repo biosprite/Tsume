@@ -9,6 +9,44 @@
   <!-- The watts behind each performance mode, with a reset to the device's own values.
        Opened from Settings. -->
 
+  <UserControl.Resources>
+    <DataTemplate x:Key="PresetTemplate">
+      <StackPanel Margin="0,0,0,22">
+
+        <!-- The mode's name, plus the device's stock figures once the sliders differ from them. -->
+        <DockPanel Margin="0,0,4,0">
+          <TextBlock DockPanel.Dock="Right" Style="{StaticResource Text.Caption}" FontSize="11"
+                     Text="{Binding StockLine}" Visibility="{Binding StockNote}" />
+          <TextBlock Style="{StaticResource Text.Heading}" Text="{Binding Heading}" />
+        </DockPanel>
+
+        <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Sustained}"
+                              Label="{x:Static lang:Strings.Sustained}" Unit=" W"
+                              AutomationProperties.Name="{Binding SustainedName}"
+                              Minimum="{Binding MinWatts}" Maximum="{Binding MaxSustainedWatts}"
+                              LargeChange="1"
+                              Value="{Binding Sustained}" />
+
+        <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Boost}"
+                              Label="{x:Static lang:Strings.Boost}" Unit=" W"
+                              AutomationProperties.Name="{Binding BoostName}"
+                              Minimum="{Binding MinBoostWatts}" Maximum="{Binding MaxBoostWatts}"
+                              LargeChange="1"
+                              Value="{Binding Boost}"
+                              Margin="0,8,0,0" />
+
+        <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Boost}"
+                              Label="{x:Static lang:Strings.FastBoost}" Unit=" W"
+                              AutomationProperties.Name="{Binding FastBoostName}"
+                              Minimum="{Binding MinFastBoostWatts}" Maximum="{Binding MaxFastBoostWatts}"
+                              LargeChange="1"
+                              Value="{Binding FastBoost}"
+                              Margin="0,8,0,0"
+                              Visibility="{Binding HasFastBoost, Converter={StaticResource VisibleWhenTrue}}" />
+      </StackPanel>
+    </DataTemplate>
+  </UserControl.Resources>
+
   <DockPanel DataContext="{Binding Settings.PerformancePresets}">
 
     <DockPanel DockPanel.Dock="Top" Height="46" Margin="0,0,0,20">
@@ -33,46 +71,19 @@
                   VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
       <StackPanel>
 
+        <!-- Plugged in / On battery headings appear only on a machine whose limits differ on battery. -->
+        <TextBlock Style="{StaticResource Text.Body}" Text="{x:Static lang:Strings.PresetsPluggedIn}"
+                   Visibility="{Binding BatterySection}" Margin="4,0,0,14" />
+
         <ItemsControl ItemsSource="{Binding Presets}" Focusable="False"
-                      controls:Screen.TakesFocus="True">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate>
-              <StackPanel Margin="0,0,0,22">
+                      controls:Screen.TakesFocus="True"
+                      ItemTemplate="{StaticResource PresetTemplate}" />
 
-                <!-- The mode's name, plus the device's stock figures once the sliders differ from them. -->
-                <DockPanel Margin="0,0,4,0">
-                  <TextBlock DockPanel.Dock="Right" Style="{StaticResource Text.Caption}" FontSize="11"
-                             Text="{Binding StockLine}" Visibility="{Binding StockNote}" />
-                  <TextBlock Style="{StaticResource Text.Heading}" Text="{Binding Heading}" />
-                </DockPanel>
+        <TextBlock Style="{StaticResource Text.Body}" Text="{x:Static lang:Strings.PresetsOnBattery}"
+                   Visibility="{Binding BatterySection}" Margin="4,8,0,14" />
 
-                <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Sustained}"
-                                      Label="{x:Static lang:Strings.Sustained}" Unit=" W"
-                                      AutomationProperties.Name="{Binding SustainedName}"
-                                      Minimum="{Binding MinWatts}" Maximum="{Binding MaxSustainedWatts}"
-                                      LargeChange="1"
-                                      Value="{Binding Sustained}" />
-
-                <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Boost}"
-                                      Label="{x:Static lang:Strings.Boost}" Unit=" W"
-                                      AutomationProperties.Name="{Binding BoostName}"
-                                      Minimum="{Binding MinBoostWatts}" Maximum="{Binding MaxBoostWatts}"
-                                      LargeChange="1"
-                                      Value="{Binding Boost}"
-                                      Margin="0,8,0,0" />
-
-                <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Boost}"
-                                      Label="{x:Static lang:Strings.FastBoost}" Unit=" W"
-                                      AutomationProperties.Name="{Binding FastBoostName}"
-                                      Minimum="{Binding MinFastBoostWatts}" Maximum="{Binding MaxFastBoostWatts}"
-                                      LargeChange="1"
-                                      Value="{Binding FastBoost}"
-                                      Margin="0,8,0,0"
-                                      Visibility="{Binding HasFastBoost, Converter={StaticResource VisibleWhenTrue}}" />
-              </StackPanel>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <ItemsControl ItemsSource="{Binding BatteryPresets}" Focusable="False"
+                      ItemTemplate="{StaticResource PresetTemplate}" />
 
         <controls:Tile Style="{StaticResource Tile.Row}" Margin="0"
                        Glyph="{x:Static theme:Glyphs.Update}"

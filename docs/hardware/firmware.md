@@ -104,7 +104,7 @@ These are MSI's default limits.
 |---|---|---|---|---|
 | MS-1T91 | 15 / 20 | 25 / 37 | 30 / 37 | 25 / 37 |
 | MS-1T52, MS-1T42 | 8 / 12 | 17 / 20 | 30 / 37 | 17 / 20 |
-| MS-1T41 | 20 / 20 | 30 / 35 | 43 / 45 | 30 / 35 |
+| MS-1T41 | 20 / 20 | 35 / 35 | 43 / 45 | 30 / 35 |
 | MS-1T8K | 15 / 28 / 33 | 20 / 33 / 43 | 28 / 45 / 55 | 20 / 33 / 43 |
 
 Each preset can be changed in the panel, within the Manual range.
@@ -140,13 +140,16 @@ On MS-1T8K Tsume also:
 
 ### On battery (MS-1T41)
 
-This board is held to 35 / 35 W on battery. The chosen limits are kept, so
-wall power brings them back.
+This board is held to 35 / 35 W on battery, and Balanced drops to 30 / 30 W.
+The chosen limits are kept, so wall power brings them back.
+
+The presets page has separate "Plugged in" and "On battery" sliders for this
+board. Battery presets go up to 35 / 35 W.
 
 | Mode | On wall power | On battery |
 |---|---|---|
 | Endurance | 20 / 20 | 20 / 20 |
-| Balanced | 30 / 35 | 30 / 35 |
+| Balanced | 35 / 35 | 30 / 30 |
 | Performance | 43 / 45 | 35 / 35 |
 | Manual | up to 43 / 45 | up to 35 / 35 |
 

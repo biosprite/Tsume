@@ -26,9 +26,11 @@ public interface IDevice : IDisposable
     /// <paramref name="custom"/>, when given, replaces a preset mode's own limits —
     /// see <see cref="DeviceProfile.LimitsFor"/>.
     /// <paramref name="onBattery"/> lets a caller pass a power-source reading it already took so comparison and
-    /// write observe the same state; null queries the current power source when the board has a battery cap.
+    /// write observe the same state; null queries the current power source when the board's limits differ on battery.
+    /// <paramref name="customOnBattery"/> replaces the preset's limits on battery.
     /// </summary>
-    void SetPerformance(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null, bool? onBattery = null);
+    void SetPerformance(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null, bool? onBattery = null,
+        PowerLimits? customOnBattery = null);
 
     /// <summary>
     /// The limits <see cref="SetPerformance"/> would write right now for these arguments — the one answer every
@@ -36,7 +38,8 @@ public interface IDevice : IDisposable
     /// Null when the machine does not offer the mode. Defaults to <see cref="DeviceProfile.LimitsFor"/>; a device
     /// may lower it (e.g. to <see cref="DeviceProfile.BatteryCap"/> while on battery).
     /// </summary>
-    PowerLimits? LimitsToApply(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null, bool? onBattery = null) =>
+    PowerLimits? LimitsToApply(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null, bool? onBattery = null,
+        PowerLimits? customOnBattery = null) =>
         Profile.LimitsFor(mode, manual, custom);
 
     /// <summary>The mode and limits in force right now. Cheap: asked on every wake.</summary>

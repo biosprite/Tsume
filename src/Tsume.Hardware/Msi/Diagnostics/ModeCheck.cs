@@ -199,7 +199,7 @@ public static class ModeCheck
     /// <summary>The registers a mode is made of (three on Intel, four with FPPT on AMD).</summary>
     private readonly record struct Registers(byte ShiftMode, byte Sustained, byte Boost, byte? FastBoost = null)
     {
-        /// <summary>What <paramref name="device"/> writes for <paramref name="mode"/> right now (battery cap included).</summary>
+        /// <summary>What <paramref name="device"/> writes for <paramref name="mode"/> right now (battery limits included).</summary>
         public static Registers For(MsiDevice device, MsiBoard board, PerformanceMode mode)
         {
             var limits = device.LimitsToApply(mode, default) ?? throw new ArgumentOutOfRangeException(nameof(mode));

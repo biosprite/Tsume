@@ -46,9 +46,11 @@ public sealed record GetReadings : HelperRequest;
 
 /// <summary>
 /// Switch performance mode. <paramref name="Manual"/> is used only by <see cref="PerformanceMode.Manual"/>;
-/// <paramref name="Custom"/> replaces a preset mode's limits, clamped to the same range as Manual.
+/// <paramref name="Custom"/> replaces a preset mode's limits, clamped to the same range as Manual;
+/// <paramref name="CustomOnBattery"/> does the same on battery.
 /// </summary>
-public sealed record SetPerformance(PerformanceMode Mode, PowerLimits Manual, PowerLimits? Custom = null) : HelperRequest;
+public sealed record SetPerformance(
+    PerformanceMode Mode, PowerLimits Manual, PowerLimits? Custom = null, PowerLimits? CustomOnBattery = null) : HelperRequest;
 
 /// <summary>Switch fan behaviour.</summary>
 public sealed record SetFan(FanMode Mode) : HelperRequest;

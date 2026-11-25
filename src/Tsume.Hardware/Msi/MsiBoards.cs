@@ -299,7 +299,7 @@ public static class MsiBoards
     /// PowerFloor 15 W, and 1.xx controller firmware. That it has the same MSI_ACPI WMI bridge and EC register
     /// map is assumed, not tested. MSI's own Manual sliders are 20–40 W for both PL1 and
     /// PL2 on AC and 20–35 W on battery, and its presets differ on AC and battery
-    /// (Performance 43/45 W on AC, 35/35 W on battery), re-applied on every AC/battery change.
+    /// (Balanced 35/35 → 30/30 W, Performance 43/45 → 35/35 W), re-applied on every AC/battery change.
     /// Rule: on AC, Manual goes as far as the highest MSI itself applies on each tier: its Performance preset,
     /// 43/45 W (its Manual sliders stop at 40 W). Performance is that preset. On battery everything is held to
     /// MSI's battery limit, the battery cap of 35 W on both tiers: its battery sliders' end and its Performance
@@ -340,8 +340,8 @@ public static class MsiBoards
             Modes =
             [
                 new(PerformanceMode.Endurance,   new PowerLimits(Sustained: 20, Boost: 20)),
-                new(PerformanceMode.Balanced,    new PowerLimits(Sustained: 30, Boost: 35)),
-                new(PerformanceMode.Performance, new PowerLimits(Sustained: 43, Boost: 45)),
+                new(PerformanceMode.Balanced,    new PowerLimits(Sustained: 35, Boost: 35), OnBattery: new PowerLimits(Sustained: 30, Boost: 30)),
+                new(PerformanceMode.Performance, new PowerLimits(Sustained: 43, Boost: 45)),   // 35/35 on battery via the cap
                 new(PerformanceMode.Manual),
             ],
             ManualRange = new PowerRange(Min: 20, MaxSustained: 43, MaxBoost: 45),

@@ -22,6 +22,8 @@ public sealed class SavedState
     /// <summary>Per-mode limits overriding the machine's own; an unlisted mode keeps the machine's. Null: none changed.</summary>
     public Dictionary<PerformanceMode, PowerLimits>? Presets { get; set; }
 
+    /// <summary>The same on battery, on a machine whose limits differ there. Null: none changed.</summary>
+    public Dictionary<PerformanceMode, PowerLimits>? BatteryPresets { get; set; }
     /// <summary>The helper's last device profile, so the panel can lay out before the helper answers. Null until it first has.</summary>
     public DeviceProfile? Device { get; set; }
 

@@ -173,6 +173,8 @@ public static class Strings
     public static string PerformancePresetsDetail => Find();
     public static string PerformancePresetsSaved => Find();
     public static string PresetsReset => Find();
+    public static string PresetsPluggedIn => Find();
+    public static string PresetsOnBattery => Find();
 
     /// <summary>"Default 25 W / 37 W"</summary>
     public static string PresetStock(int sustained, int boost) => Fill(Find(), sustained, boost);
@@ -182,6 +184,9 @@ public static class Strings
 
     /// <summary>"Balanced: Sustained" — a slider's name for a screen reader.</summary>
     public static string PresetLimit(string mode, string limit) => Fill(Find(), mode, limit);
+
+    /// <summary>"Balanced on battery"</summary>
+    public static string PresetOnBattery(string mode) => Fill(Find(), mode);
 
     /// <summary>"3 games"</summary>
     public static string GamesWithOptiScaler(int count) => count == 1 ? Find("OneGameWithOptiScaler") : Fill(Find(), count);

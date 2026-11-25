@@ -4,8 +4,14 @@ using Tsume.Core.Performance;
 
 namespace Tsume.Core.Devices;
 
-/// <summary>One performance mode a machine offers, and the limits it applies — none for a mode set by hand.</summary>
-public sealed record ModePreset(PerformanceMode Mode, PowerLimits? Limits = null);
+/// <summary>
+/// One performance mode a machine offers, and the limits it applies — none for a mode set by hand.
+/// <paramref name="OnBattery"/>, if set, replaces them on battery.
+/// </summary>
+public sealed record ModePreset(
+    PerformanceMode Mode,
+    PowerLimits? Limits = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PowerLimits? OnBattery = null);
 
 /// <summary>
 /// What one machine can do: its modes, limits, fan settings and charge limits. The helper sends it
@@ -75,6 +81,32 @@ public sealed record DeviceProfile
             { Limits: { } preset }  => custom is { } own && ManualRange is { } range ? range.Clamp(own) : preset,
             _                       => ManualRange?.Clamp(manual),
         };
+
+    /// <summary>True when the limits differ on battery (a battery cap or a preset's battery limits).</summary>
+    [JsonIgnore]
+    public bool FollowsPowerSource => BatteryCap is not null || Modes.Any(preset => preset.OnBattery is not null);
+
+    /// <summary>
+    /// A mode's limits on battery, capped: <paramref name="custom"/> (the user's battery preset) if given, else the
+    /// preset's battery limits, else its own. Wall-power custom limits do not carry over.
+    /// </summary>
+    public PowerLimits? LimitsOnBattery(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null) =>
+        Modes.FirstOrDefault(preset => preset.Mode == mode) switch
+        {
+            null => null,
+            { Limits: { } stock } preset => CapForBattery(
+                custom is { } own && RangeOnBattery is { } range ? range.Clamp(own) : preset.OnBattery ?? stock),
+            _ => ManualRange is { } manualRange ? CapForBattery(manualRange.Clamp(manual)) : null,
+        };
+
+    /// <summary>The manual range lowered to the <see cref="BatteryCap"/>: what battery presets may be set to.</summary>
+    [JsonIgnore]
+    public PowerRange? RangeOnBattery => ManualRange is not { } range ? null : BatteryCap is not { } cap ? range : range with
+    {
+        MaxSustained = Math.Min(range.MaxSustained, cap.Sustained),
+        MaxBoost = Math.Min(range.MaxBoost, cap.Boost),
+        MaxFastBoost = range.MaxFastBoost is { } fast ? Math.Min(fast, cap.FastBoost ?? fast) : null,
+    };
 
     /// <summary>
     /// <paramref name="limits"/> as applied on battery: each tier lowered to <see cref="BatteryCap"/>, never raised.

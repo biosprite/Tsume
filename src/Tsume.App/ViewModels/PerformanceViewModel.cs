@@ -334,6 +334,10 @@ public sealed class PerformanceViewModel : Observable
     public PowerLimits? CustomFor(PerformanceMode mode) =>
         _state.Presets is { } chosen && chosen.TryGetValue(mode, out var own) ? own : null;
 
+    /// <summary>The same on battery, on a machine whose limits differ there.</summary>
+    public PowerLimits? CustomOnBatteryFor(PerformanceMode mode) =>
+        _state.BatteryPresets is { } chosen && chosen.TryGetValue(mode, out var own) ? own : null;
+
     /// <summary>Called after the presets page changed and saved these modes' limits; re-applies the mode in force if it is among them.</summary>
     public void OnPresetsChanged(IReadOnlyCollection<PerformanceMode> modes)
     {
@@ -344,26 +348,18 @@ public sealed class PerformanceViewModel : Observable
         Apply();
     }
 
-    /// <summary>
-    /// The helper's limits for the mode: the user's, lowered to the battery cap while it applies (as the helper
-    /// lowers what it writes; <see cref="DeviceProfile.CapForBattery"/>).
-    /// </summary>
-    private PowerLimits? InForce
-    {
-        get
-        {
-            var limits = Device.LimitsFor(Mode, Manual, CustomFor(Mode));
-            return limits is { } found && _onBattery ? Device.CapForBattery(found) : limits;
-        }
-    }
+    /// <summary>The limits the helper writes for the mode, on battery or wall power.</summary>
+    private PowerLimits? InForce => _onBattery
+        ? Device.LimitsOnBattery(Mode, Manual, CustomOnBatteryFor(Mode))
+        : Device.LimitsFor(Mode, Manual, CustomFor(Mode));
 
-    /// <summary>True while on battery on a machine with a battery cap; never set on any other machine.</summary>
+    /// <summary>True while on battery, only on a machine whose limits differ there.</summary>
     private bool _onBattery;
 
-    /// <summary>Asks Windows for the power source, only on a machine with a battery cap.</summary>
+    /// <summary>Asks Windows for the power source, only on a machine whose limits differ on battery.</summary>
     private void ReadPowerSource()
     {
-        var onBattery = Device.BatteryCap is not null && Battery.IsOnBattery();
+        var onBattery = Device.FollowsPowerSource && Battery.IsOnBattery();
         if (onBattery == _onBattery) return;
 
         // The sliders' ends and values move together. Whatever the controls push back meanwhile is not a user
@@ -408,12 +404,12 @@ public sealed class PerformanceViewModel : Observable
         : string.Empty;
 
     /// <summary>
-    /// The note shows only while the helper is lowering this mode's limits to the battery cap; collapsed in a mode
-    /// the cap does not touch, while the helper is offline, and on every machine without a cap.
+    /// The note shows only while the helper is lowering the Manual sliders to the battery cap (presets have their
+    /// own battery limits); collapsed otherwise, while the helper is offline, and on every machine without a cap.
     /// </summary>
     public bool ShowsBatteryCapNote =>
-        _onBattery && IsHelperOnline
-        && Device.LimitsFor(Mode, Manual, CustomFor(Mode)) is { } own && Device.CapForBattery(own) != own;
+        _onBattery && IsHelperOnline && Mode == PerformanceMode.Manual
+        && Device.LimitsFor(Mode, Manual) is { } own && Device.CapForBattery(own) != own;
 
     /// <summary>The power limits currently in force, or null when the device has none.</summary>
     public PowerLimits? ActiveLimits => InForce;
@@ -432,7 +428,7 @@ public sealed class PerformanceViewModel : Observable
     {
         Notify(nameof(SustainedInForce));
         Notify(nameof(BoostInForce));
-        if (Device.BatteryCap is not null) Notify(nameof(ShowsBatteryCapNote));   // it depends on the mode's limits
+        if (Device.FollowsPowerSource) Notify(nameof(ShowsBatteryCapNote));   // it depends on the mode's limits
     }
 
     /// <summary>Processor temperature, e.g. "61 °C", or a dash when the firmware did not answer.</summary>
@@ -524,7 +520,7 @@ public sealed class PerformanceViewModel : Observable
         if (reply.Readings is { } readings)
         {
             Show(readings.CpuTemperature, readings.FanRpm);
-            ReadPowerSource();   // nothing on a machine without a battery cap
+            ReadPowerSource();   // nothing on a machine whose limits are the same on battery
         }
         else Absorb(reply);   // no readings means the helper is gone
     }
@@ -549,12 +545,13 @@ public sealed class PerformanceViewModel : Observable
                 var mode = Mode;
                 var manual = Manual;
                 var custom = CustomFor(mode);
+                var customOnBattery = CustomOnBatteryFor(mode);
 
                 _state.Mode = mode;
                 if (Device.ManualRange is not null && _manualChosen) _state.Manual = manual;
                 _state.Save();
 
-                var reply = await _helper.SendAsync(new SetPerformance(mode, manual, custom));
+                var reply = await _helper.SendAsync(new SetPerformance(mode, manual, custom, customOnBattery));
                 Absorb(reply);
             }
             while (_applyAgain);
@@ -579,13 +576,13 @@ public sealed class PerformanceViewModel : Observable
 
         IsUnsupported = reply.Unsupported;
         IsHelperOnline = reply.Snapshot is not null;
-        if (Device.BatteryCap is not null) Notify(nameof(ShowsBatteryCapNote));   // it hides while the helper is offline
+        if (Device.FollowsPowerSource) Notify(nameof(ShowsBatteryCapNote));   // it hides while the helper is offline
 
         if (reply.Snapshot is not { } snapshot) return;
 
         Fan = snapshot.Fan;
         Show(snapshot.CpuTemperature, snapshot.FanRpm);
-        ReadPowerSource();   // nothing on a machine without a battery cap
+        ReadPowerSource();   // nothing on a machine whose limits are the same on battery
 
         if (!adoptMode) return;
 

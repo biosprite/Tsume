@@ -53,7 +53,7 @@ public sealed class RequestHandler
                 case SetPerformance or SetFan or SetChargeLimit when DiscoveryWorker.IsMutatingFirmwareCheckRunning:
                     return HelperReply.Failure("A firmware check is running. Wait for it to finish before changing settings.");
 
-                case SetPerformance(var mode, var manual, var custom) chosen:
+                case SetPerformance(var mode, var manual, var custom, var customOnBattery) chosen:
                     if (!profile.Offers(mode))
                         return HelperReply.Failure($"This device has no {mode} mode.");
 
@@ -62,9 +62,9 @@ public sealed class RequestHandler
                         if (DiscoveryWorker.IsMutatingFirmwareCheckRunning)
                             return HelperReply.Failure("A firmware check is running. Wait for it to finish before changing settings.");
 
-                        bool? onBattery = profile.BatteryCap is not null ? PowerSource.IsOnBattery() : null;
+                        bool? onBattery = profile.FollowsPowerSource ? PowerSource.IsOnBattery() : null;
                         // A preset's own limits, if sent, are clamped where they are used: DeviceProfile.LimitsFor.
-                        device.SetPerformance(mode, profile.ManualRange?.Clamp(manual) ?? manual, custom, onBattery);
+                        device.SetPerformance(mode, profile.ManualRange?.Clamp(manual) ?? manual, custom, onBattery, customOnBattery);
                         keeper?.Remember(chosen, onBattery);
                     }
                     break;

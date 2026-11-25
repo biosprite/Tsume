@@ -219,6 +219,9 @@
   <data name="PerformancePresetsDetail" xml:space="preserve"><value>The watts behind each mode</value></data>
   <data name="PerformancePresetsSaved" xml:space="preserve"><value>Changes apply at once and are kept.</value></data>
   <data name="PresetsReset" xml:space="preserve"><value>Reset to defaults</value></data>
+  <data name="PresetsPluggedIn" xml:space="preserve"><value>Plugged in</value></data>
+  <data name="PresetsOnBattery" xml:space="preserve"><value>On battery</value></data>
+  <data name="PresetOnBattery" xml:space="preserve"><value>{0} on battery</value></data>
   <data name="PresetStock" xml:space="preserve">
     <value>Default {0} W / {1} W</value>
     <comment>{0} = the device's own sustained limit for a mode, {1} = its boost limit, in watts</comment>
