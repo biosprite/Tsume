@@ -159,11 +159,11 @@ public static class ScreenShots
             await Shot("3b-optiscaler-restore-all");
             upscaling.RestoreAll.IsOpen = false;
 
-            // One game OptiScaler can go into, and one it is not offered for.
+            // One game OptiScaler can go into, and one with anti-cheat that shows the ban warning.
             var ready = upscaling.List.Games.FirstOrDefault(game => game.Facts is { AntiCheat: null, Upscalers.Count: > 0 });
-            var blocked = upscaling.List.Games.FirstOrDefault(game => game.Facts is { AntiCheat: not null });
+            var antiCheat = upscaling.List.Games.FirstOrDefault(game => game is { Facts.AntiCheat: not null, AntiCheatAccepted: false });
 
-            foreach (var (game, name) in new[] { (ready, "4-optiscaler-game"), (blocked, "5-optiscaler-game-not-offered") })
+            foreach (var (game, name) in new[] { (ready, "4-optiscaler-game"), (antiCheat, "5-optiscaler-game-anti-cheat") })
             {
                 if (game is null) continue;
 

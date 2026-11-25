@@ -209,7 +209,6 @@ public static class Strings
 
     /// <summary>"Installed · nightly of 11 November"</summary>
     public static string TagUpdateReady => Find();
-    public static string TagBlocked => Find();
     public static string GameInstalled(string night) => Fill(Find(), night);
     public static string GameInstalledWithOptiPatcher(string night) => Fill(Find(), night);
     public static string GameUpdateReady => Find();
@@ -220,8 +219,8 @@ public static class Strings
     public static string GameNothingToRun => Find();
     public static string GameNoUpscaler => Find();
 
-    /// <summary>"Easy Anti-Cheat — not offered"</summary>
-    public static string GameBlocked(string antiCheat) => Fill(Find(), antiCheat);
+    /// <summary>"Easy Anti-Cheat, DLSS, FSR 3"</summary>
+    public static string GameAntiCheat(string antiCheat, string detail) => Fill(Find(), antiCheat, detail);
 
     public static string NotInstalled => Find();
 
@@ -230,8 +229,9 @@ public static class Strings
     public static string StateReplaced => Find();
     public static string StateCutShort => Find();
     public static string StateFolderGone => Find();
-    public static string StateBlocked(string antiCheat) => Fill(Find(), antiCheat);
     public static string StateNothingToRun => Find();
+    public static string AntiCheatWarning(string antiCheat) => Fill(Find(), antiCheat);
+    public static string AcceptAntiCheat => Find();
 
     /// <summary>"Found: DLSS, FSR 3"</summary>
     public static string FoundUpscalers(string list) => Fill(Find(), list);

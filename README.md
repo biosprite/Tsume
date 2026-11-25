@@ -16,20 +16,20 @@
 
 | Feature | What it does |
 |---|---|
-| **Performance modes** | Endurance, Balanced, Performance and Manual, set in the firmware. Each preset starts from defaults that depend on the device and can be customized in Settings. Manual has its own sliders for the power limits. The chosen mode is saved. |
+| **Opens over anything** | Games, the desktop, Xbox Full Screen Experience (FSE) and Steam Big Picture. |
+| **Performance modes** | Endurance, Balanced, Performance and Manual, set in the firmware. Presets start from your device's defaults and can be customized in Settings. |
 | **Live readings** | Processor temperature and fan speed, updated every second while the panel is open, beside the power limits in force, the battery level and the time. |
-| **Fan control** | Auto or Max. |
+| **Fan control** | Auto (the device's default fan profile) or Max. |
 | **Battery charge limit** | Stop charging at 80 %, 90 % or 100 %, kept across sleep and restarts. |
 | **Display and sound** | Screen brightness, speaker volume with mute, and a switch between the refresh rates the display offers. |
 | **Controller mode** | Switch the built-in pad between gamepad and cursor (mouse) mode. |
 | **Buttons** | Remap the M1 and M2 back buttons, and choose what the M and Quick Settings buttons do. |
-| **RGB lighting** | Off, Steady, Breathe, Rainbow or Spin for the stick rings and the A B X Y buttons, with a color for each stick, brightness and speed. The choice is saved on the controller. |
+| **RGB lighting** | Off, Steady, Breathe, Rainbow or Spin for the stick rings and the A B X Y buttons, with a color for each stick, brightness and speed. |
 | **Quick actions** | Touch keyboard, screenshot, Task Manager, show desktop. |
-| **Power menu** | Hibernate, lock, restart, shut down. |
-| **OptiScaler** (experimental) | Finds games in Steam, Epic, GOG, Ubisoft Connect, the EA app and the Xbox app, then installs, updates, repairs or removes OptiScaler in each one and puts the game's own files back on removal. Per game you choose the upscaler (XeSS, FSR 4 or FSR 3.1) and frame generation. Single-player games only: in an online game it can get an account banned, and it is not offered where an anti-cheat is found. |
-| **RTSS overlay** (experimental) | Optional performance overlay using [realHfde's Essential Dark overlays](https://github.com/realHfde/Huffdee-RTSS-Overlays-and-Rainmeter-Skins) (MIT): FPS, Bar, Detail or Full. RTSS's own OverlayEditor plugin draws a single combined layout, so MSI Afterburner isn't needed, level changes (and Off) apply live in-game without restarting RTSS, and the overlay disappears when Tsume exits. Also sets a global frame-rate cap through RivaTuner Statistics Server. Can be switched off to give your own RTSS overlay back. RTSS itself isn't bundled; Tsume installs it through Windows Package Manager or links to Guru3D's official download. |
+| **OptiScaler** | Adds OptiScaler to your games from Steam, Epic, GOG, Ubisoft Connect, EA and Xbox, or to any game you add yourself. Pick the upscaler (XeSS, FSR 4 or FSR 3.1) and frame generation for each game. Install, update, repair or remove it at any time; removing it puts the game's original files back. Games with anti-cheat show a warning you must accept before OptiScaler can be installed. |
+| **RTSS overlay** | An optimized on-screen FPS and performance overlay in four sizes (FPS, Bar, Detail or Full). Changes apply instantly in-game, and the overlay closes with Tsume. It can also cap the frame rate. Only needs RTSS, which Tsume can install for you or link to the official download. |
 | **Themes** | Eight color schemes, or your own accent, background and text colors. |
-| **Controller, touch and mouse** | The whole panel works with any of the three, over a game or the desktop. |
+| **Controller, touch and mouse** | The whole panel works with any of the three. |
 
 <details>
 <summary><b>Supported devices</b></summary>
@@ -124,17 +124,6 @@ write (one permission prompt, reads only):
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\probe.ps1
 ```
-
-| Folder | Contents |
-|---|---|
-| `src/Tsume.Core` | Modes, limits, the helper protocol; no hardware, no UI |
-| `src/Tsume.Hardware` | The firmware interface |
-| `src/Tsume.Helper` | The elevated helper |
-| `src/Tsume.Upscaling` | Finds games; fetches, installs and removes OptiScaler |
-| `src/Tsume.App` | The panel |
-| [`docs`](docs/README.md) | How each device is controlled |
-| `installer` | The .msi |
-| `tools` | Build, run, probe, checks, publish |
 
 </details>
 

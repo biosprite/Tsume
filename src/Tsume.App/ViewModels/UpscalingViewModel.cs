@@ -327,7 +327,7 @@ public sealed class UpscalingViewModel : LayerViewModel
         }
 
         var facts = GameInspector.Inspect(listed.Game) ?? throw new UpscalingException(Trouble.FolderMissing, listed.Game.Folder);
-        if (facts.AntiCheat is not null) throw new UpscalingException(Trouble.AntiCheat, facts.AntiCheat);
+        if (facts.AntiCheat is not null && !listed.AntiCheatAccepted) throw new UpscalingException(Trouble.AntiCheat, facts.AntiCheat);
 
         listed.Facts = facts;
         Installer.Install(listed.Game, facts, build, settings);
@@ -827,7 +827,7 @@ public sealed class UpscalingGameRow(ListedGame listed, Action open) : Observabl
         var facts = Listed.Facts;
 
         IsInstalled = state is InstallState.Healthy;
-        Detail = state switch
+        var detail = state switch
         {
             InstallState.Healthy when !isCurrent && optiPatcherOn => Strings.GameUpdateReadyWithOptiPatcher,
             InstallState.Healthy when !isCurrent                  => Strings.GameUpdateReady,
@@ -838,10 +838,12 @@ public sealed class UpscalingGameRow(ListedGame listed, Action open) : Observabl
             InstallState.FolderGone                               => Strings.GameFolderGone,
 
             _ when facts is null                    => Strings.GameNothingToRun,
-            _ when facts.AntiCheat is { } antiCheat => Strings.GameBlocked(antiCheat),
             _ when facts.Upscalers.Count == 0       => Strings.GameNoUpscaler,
             _                                       => string.Join(", ", facts.Upscalers),
         };
+
+        // Spoken for screen readers alongside the tags.
+        Detail = state == InstallState.None && facts?.AntiCheat is { } found ? Strings.GameAntiCheat(found, detail) : detail;
 
         var tags = new List<GameTag>();
         switch (state)
@@ -868,13 +870,15 @@ public sealed class UpscalingGameRow(ListedGame listed, Action open) : Observabl
 
             default:
                 if (facts is null)
-                    tags.Add(new GameTag(Strings.GameNothingToRun));
-                else if (facts.AntiCheat is { } antiCheat)
                 {
-                    tags.Add(new GameTag(Strings.TagBlocked, GameTagTone.Danger, Glyphs.Shield));
-                    tags.Add(new GameTag(antiCheat));
+                    tags.Add(new GameTag(Strings.GameNothingToRun));
+                    break;
                 }
-                else if (facts.Upscalers.Count == 0)
+
+                if (facts.AntiCheat is { } antiCheat)
+                    tags.Add(new GameTag(antiCheat, GameTagTone.Warning, Glyphs.Shield));
+
+                if (facts.Upscalers.Count == 0)
                     tags.Add(new GameTag(Strings.GameNoUpscaler));
                 else
                     foreach (var upscaler in facts.Upscalers)

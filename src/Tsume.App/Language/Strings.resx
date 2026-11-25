@@ -287,7 +287,6 @@
   <data name="OpenGameMenu" xml:space="preserve"><value>Open in-game menu</value></data>
   <data name="OpenGameMenuDetail" xml:space="preserve"><value>Presses Insert in the game</value></data>
   <data name="TagUpdateReady" xml:space="preserve"><value>Update ready</value></data>
-  <data name="TagBlocked" xml:space="preserve"><value>Blocked</value></data>
   <data name="GameInstalled" xml:space="preserve">
     <value>Installed ({0})</value>
     <comment>{0} = the night the build was made, e.g. "11 November"</comment>
@@ -303,9 +302,9 @@
   <data name="GameFolderGone" xml:space="preserve"><value>Folder missing</value></data>
   <data name="GameNothingToRun" xml:space="preserve"><value>No .exe found</value></data>
   <data name="GameNoUpscaler" xml:space="preserve"><value>No upscalers found</value></data>
-  <data name="GameBlocked" xml:space="preserve">
-    <value>Blocked ({0})</value>
-    <comment>{0} = the name of an anti-cheat</comment>
+  <data name="GameAntiCheat" xml:space="preserve">
+    <value>{0}, {1}</value>
+    <comment>{0} = the name of an anti-cheat, {1} = what else is known about the game, e.g. "DLSS, FSR 3"</comment>
   </data>
 
   <!-- OptiScaler: one game -->
@@ -318,10 +317,11 @@
   <data name="StateReplaced" xml:space="preserve"><value>Needs repair. A game update replaced OptiScaler's file.</value></data>
   <data name="StateCutShort" xml:space="preserve"><value>Install interrupted. Press Repair to finish or Remove to undo.</value></data>
   <data name="StateFolderGone" xml:space="preserve"><value>Game folder is missing. You can forget this install.</value></data>
-  <data name="StateBlocked" xml:space="preserve">
-    <value>Blocked due to {0}. OptiScaler is not allowed with anti-cheat.</value>
+  <data name="AntiCheatWarning" xml:space="preserve">
+    <value>This game uses {0}. Anti-cheat can detect OptiScaler and ban your account, even in single-player. Only continue if you accept that risk.</value>
     <comment>{0} = the name of an anti-cheat</comment>
   </data>
+  <data name="AcceptAntiCheat" xml:space="preserve"><value>I understand, allow OptiScaler</value></data>
   <data name="StateNothingToRun" xml:space="preserve"><value>No game .exe found in this folder.</value></data>
   <data name="FoundUpscalers" xml:space="preserve">
     <value>Found: {0}</value>

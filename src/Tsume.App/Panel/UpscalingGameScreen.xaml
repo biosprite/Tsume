@@ -95,6 +95,25 @@
           </StackPanel>
         </Border>
 
+        <!-- Anti-cheat found: OptiScaler is held back until the ban risk is accepted. -->
+        <StackPanel Visibility="{Binding AntiCheatWarningShown}" Margin="0,0,0,8">
+          <Border Style="{StaticResource Card.Warning}" Margin="0,0,0,4">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Icon}" FontSize="15"
+                         Foreground="{StaticResource Signal.Warn}" VerticalAlignment="Top" Margin="0,1,10,0"
+                         Text="{x:Static theme:Glyphs.Shield}" />
+              <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
+                         TextWrapping="Wrap" TextTrimming="None"
+                         Text="{Binding AntiCheatWarning}" />
+            </DockPanel>
+          </Border>
+          <controls:Tile Style="{StaticResource Tile.Row}" Margin="-4,0,-4,0" controls:Screen.TakesFocus="True"
+                         Glyph="{x:Static theme:Glyphs.Tick}" Label="{x:Static lang:Strings.AcceptAntiCheat}"
+                         AutomationProperties.HelpText="{Binding AntiCheatWarning}"
+                         IsEnabled="{Binding CanAct}"
+                         Command="{Binding AcceptAntiCheat}" />
+        </StackPanel>
+
         <Border Style="{StaticResource Card.Note}" Visibility="{Binding NoticeShown}">
           <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
                      TextWrapping="Wrap" TextTrimming="None" Text="{Binding Notice}" />

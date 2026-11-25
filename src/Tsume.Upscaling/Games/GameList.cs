@@ -14,6 +14,10 @@ public sealed class ListedGame
 
     /// <summary>Null until the game is given settings of its own; it follows the defaults till then.</summary>
     public UpscalerSettings? Settings { get; set; }
+
+    /// <summary>True once the user has accepted the ban risk of OptiScaler in a game with anti-cheat.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool AntiCheatAccepted { get; set; }
 }
 
 /// <summary>

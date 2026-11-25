@@ -54,6 +54,16 @@ public sealed class UpscalingGameViewModel : LayerViewModel
 
         Remove = new Command(() => _ = RunAsync(RemoveAsync));
 
+        AcceptAntiCheat = new Command(() =>
+        {
+            if (_listed is null || _hub.IsBusy) return;
+
+            _listed.AntiCheatAccepted = true;
+            _hub.SaveList();
+            Notify("");
+            Settled?.Invoke();   // the button that was pressed is gone
+        });
+
         TakeOffList = new Command(() =>
         {
             if (_listed is null || _hub.IsBusy) return;
@@ -97,6 +107,7 @@ public sealed class UpscalingGameViewModel : LayerViewModel
 
     public ICommand Primary { get; }
     public ICommand Remove { get; }
+    public ICommand AcceptAntiCheat { get; }
     public ICommand TakeOffList { get; }
     public ICommand OpenFolder { get; }
 
@@ -197,8 +208,11 @@ public sealed class UpscalingGameViewModel : LayerViewModel
     private bool IsOptiPatcherOutdated =>
         _patcher is not null && _manifest is not null && !_hub.Installer.IsOptiPatcherCurrent(_manifest, _patcher);
 
-    /// <summary>OptiScaler is not offered: an anti-cheat, or nothing to run.</summary>
-    private bool IsBlocked => _state == InstallState.None && Facts is not { AntiCheat: null };
+    /// <summary>An anti-cheat was found and the user has not yet accepted the ban risk.</summary>
+    private bool HasUnacceptedAntiCheat => Facts is { AntiCheat: not null } && _listed is { AntiCheatAccepted: false };
+
+    /// <summary>OptiScaler is not offered: nothing to run, or an anti-cheat warning not yet accepted.</summary>
+    private bool IsBlocked => _state == InstallState.None && (Facts is null || HasUnacceptedAntiCheat);
 
     public string StateLine => _state switch
     {
@@ -207,10 +221,14 @@ public sealed class UpscalingGameViewModel : LayerViewModel
         InstallState.CutShort   => Strings.StateCutShort,
         InstallState.FolderGone => Strings.StateFolderGone,
 
-        _ when Facts is null                    => Strings.StateNothingToRun,
-        _ when Facts.AntiCheat is { } antiCheat => Strings.StateBlocked(antiCheat),
-        _                                       => Strings.NotInstalled,
+        _ when Facts is null => Strings.StateNothingToRun,
+        _                    => Strings.NotInstalled,
     };
+
+    /// <summary>The ban warning for a game with anti-cheat, until the user accepts it.</summary>
+    public string AntiCheatWarning => Facts?.AntiCheat is { } antiCheat ? Strings.AntiCheatWarning(antiCheat) : "";
+
+    public Visibility AntiCheatWarningShown => _state == InstallState.None && HasUnacceptedAntiCheat ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>What the game ships that OptiScaler can take over.</summary>
     public string FoundLine => Facts switch
@@ -237,7 +255,7 @@ public sealed class UpscalingGameViewModel : LayerViewModel
 
     /// <summary>Something worth knowing before pressing a button; empty when there is nothing.</summary>
     public string Notice =>
-        _state == InstallState.None && Facts is { AntiCheat: null, ExistingProxy: { } proxy } ? Strings.SomeoneElsesOptiScaler(proxy)
+        _state == InstallState.None && !IsBlocked && Facts is { ExistingProxy: { } proxy } ? Strings.SomeoneElsesOptiScaler(proxy)
         : _state == InstallState.Healthy && IsOlderBuild ? Strings.NewerBuildReady(UpscalingViewModel.Night(_build!.Build.Tag))
         : _state == InstallState.Healthy && IsOptiPatcherOutdated ? Strings.OptiPatcherUpdateReady(_patcher!.Release.Tag)
         : _state == InstallState.Healthy && !IsCurrent && Tsume.Upscaling.GpuVendor.HasIntelXmxGpu() && !Installer.HasXmx(_manifest!) ? Strings.XmxReady
