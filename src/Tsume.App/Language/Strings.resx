@@ -34,6 +34,7 @@
   <data name="ModeManual" xml:space="preserve"><value>Manual</value></data>
   <data name="Sustained" xml:space="preserve"><value>Sustained</value></data>
   <data name="Boost" xml:space="preserve"><value>Boost</value></data>
+  <data name="FastBoost" xml:space="preserve"><value>Fast boost</value></data>
 
   <data name="Cpu" xml:space="preserve"><value>CPU</value></data>
   <data name="Fan" xml:space="preserve"><value>Fan</value></data>
@@ -41,6 +42,10 @@
   <data name="Watts" xml:space="preserve">
     <value>{0} W</value>
     <comment>{0} = a power limit in watts</comment>
+  </data>
+  <data name="WattsPair" xml:space="preserve">
+    <value>{0}/{1} W</value>
+    <comment>{0} = boost (SPPT) watts, {1} = fast boost (FPPT) watts on 3-tier AMD devices</comment>
   </data>
   <data name="Temperature" xml:space="preserve">
     <value>{0} °C</value>
@@ -213,6 +218,10 @@
   <data name="PresetStock" xml:space="preserve">
     <value>Default {0} W / {1} W</value>
     <comment>{0} = the device's own sustained limit for a mode, {1} = its boost limit, in watts</comment>
+  </data>
+  <data name="PresetStock3" xml:space="preserve">
+    <value>Default {0} W / {1} W / {2} W</value>
+    <comment>{0} = sustained (SPL), {1} = boost (SPPT), {2} = fast boost (FPPT), in watts</comment>
   </data>
   <data name="PresetLimit" xml:space="preserve">
     <value>{0}: {1}</value>

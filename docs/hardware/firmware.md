@@ -273,16 +273,37 @@ and it can be read without elevation.
 | Are writes refused while MSI Center M runs? | unknown — every check ran with it paused |
 | Unelevated calls refused | yes — hence the helper |
 
-## Claw 8 AI+ (A2VM, MS-1T52 — Intel Core Ultra 7 258V / Lunar Lake)
+## Claw 8 AI+ (A2VM, MS-1T52) & Claw 7 AI+ / A7 (A2VM, MS-1T42 — Intel Core Ultra 7 258V / Lunar Lake)
 
-Cross-referenced from **HandheldCompanion** (`ClawA2VM.cs` / `ClawA1M.cs`), Linux `msi-wmi-platform` / **hhd**, and Intel Core Ultra 7 258V specifications. Pending on-device `probe`, `write-check` and `mode-check` runs on real `MS-1T52` hardware.
+Verified from decompiled MSI Center M v3.0.2610.0701 (`API_UserScenario.dll`, `MSIWMIACPI2.dll`, `UC_UserScenario_1T421T52`), official `E1T52IMS.114` BIOS ACPI AML, and embedded ENE EC firmware `1T52EMS1.109`. `MS-1T42` and `MS-1T52` share the exact same WMI, EC, shift, power, fan, battery, and `2.xx` controller paths.
 
 Differences from the Claw 8 EX (`MS-1T91`):
 
-- **Board model:** `MS-1T52` (EC firmware prefix `1T52EMS1`). Same `MSI_ACPI` WMI bridge and EC register map (`0x50`, `0x51`, `0x68`, `0x98`, `0xD2`, `0xD4`, `0xD7`).
-- **Manual shift code (`0xD2`):** `0x03` (`0xC3`), not `0x06` (`0xC6`, which is EX-only). Endurance (`0xC2`), Balanced (`0xC1`), and Performance (`0xC4`) match the EX.
+- **Board models:** `MS-1T52` (8" 1200p) and `MS-1T42` (7" 1080p). Same `MSI_ACPI` WMI bridge (`ACPI\PNP0C14\0_0`, `Package_32`) and EC register map (`0x50`, `0x51`, `0x68`, `0x98`, `0xD2`, `0xD4`, `0xD7`).
+- **Manual shift code (`0xD2`):** `0x04` (`0xC4`, shared with Sport/Performance), not `0x06` (`0xC6`, which is EX-only). Endurance (`0xC2`), Balanced (`0xC1`), and Performance (`0xC4`) match the EX.
 - **Power limits (Core Ultra 7 258V / Lunar Lake):**
-  - Ceiling is **8–30 W sustained (PL1)** and **9–37 W boost (PL2)**.
+  - Ceiling is **8–30 W sustained (PL1)** and **9–37 W boost (PL2)**, floor `8 W`.
   - **PL2 headroom (`MinBoostHeadroom = 1`):** Lunar Lake requires `PL2 >= PL1 + 1`; setting `PL1 == PL2` triggers a firmware/power-management throttling quirk. Tsume enforces `PL2 >= PL1 + 1` in `PowerRange.Clamp` (helper) and in the Manual and Presets sliders.
   - Tsume presets: Endurance `8 W / 12 W`, Balanced `17 W / 20 W` (258V Processor Base Power sweet spot), Performance `30 W / 37 W` (full 258V PL1 / MTP), Manual default `17 W / 20 W`.
-- **Hardware buttons & controller:** Same WMI event codes (`0x29`, `0x58`). Quick Settings triggers cover both `Win+G` (BIOS 10F+) and `F16` (older A2VM BIOSes). Rear-button (`M1`/`M2` at `186`/`355`) and lighting (`586`) profile offsets match the EX on controller firmware `>= 2.17` (`0x0217`); early launch firmware `2.11` (`0x0211`) used legacy offsets and is guarded off from writes.
+- **Hardware buttons & controller:** Same WMI event codes (`0x29`, `0x58`). Quick Settings triggers cover both `Win+G` (BIOS 10F+) and `F16` (older A2VM BIOSes). Rear-button (`M1`/`M2` at `186`/`355`) and lighting (`586`) profile offsets match the EX on controller firmware `>= 2.17` (`0x0217`); early launch firmware `< 2.17` used legacy offsets and is guarded off from writes.
+
+## Claw A1M (MS-1T41 — Intel Core Ultra 5 135H / Ultra 7 155H Meteor Lake)
+
+Verified from decompiled MSI Center M v3.0.2610.0701 (`API_UserScenario.dll`, `UC_UserScenario.xaml`, `MSI Controller FW Updater_2608_3101.exe`). No Ultra 5 vs Ultra 7 power-limit branching exists in MSI Center M.
+
+- **Board model & shift code:** `MS-1T41`. Same `MSI_ACPI` WMI bridge and EC register map (`0x50`, `0x51`, `0x68`, `0x98`, `0xD2`, `0xD4`, `0xD7`). Manual shift code is `0x04` (`0xC4`).
+- **Power limits:** Floor `15 W` (`LimitValue_PowerLow = 15`). Manual range `20–40 W` PL1 / `20–45 W` PL2 (`PL2 >= PL1`), presets Endurance `20 / 20 W`, Balanced `30 / 35 W`, Performance `40 / 45 W`.
+- **Buttons & controller:** WMI events `0x29`/`0x58`; Quick Settings triggers `Win+G`, `F15`, and `F16` (covering older and newer A1M BIOSes). Unified `0DB0:1901/1902` 1478-byte HID controller on `1.xx` firmware (`MinFirmwareVersion = 0x0164`; `<= 1.63` used legacy offsets).
+
+## Claw A8 (BZ2EM, MS-1T8K) & Claw 7 AMD (MS-1T7K — AMD Ryzen Z2 Extreme)
+
+Verified from decompiled MSI Center M v3.0.2610.0701 (`API_UserScenario.dll`, `UC_UserScenario_1T8K`), official `E1T8KAMS.106` BIOS ACPI AML, embedded ITE EC firmware `1T8KIMS1.105`, and `MSI Controller FW Updater_2608_3101.exe`. `MS-1T7K` shares the `MS-1T8K` AMD platform and `3.xx` controller firmware lineage.
+
+Differences from the Claw 8 EX (`MS-1T91`, which covers both Core G3 Extreme and Core G3 non-Extreme with identical `MS-1T91` limits):
+
+- **Board model & EC transport:** `MS-1T8K` (and `MS-1T7K`) with ITE EC (`1T8KIMS1.105`). Exposes the identical `root\WMI` `MSI_ACPI` (`ACPI\PNP0C14\0_0`, `Package_32`, v2.8) bridge; DSDT `WMRD`/`WMWT` transparently routes EC RAM through MMIO `0xFEDF1400 + reg` when `ECID == 'I'`.
+- **AMD 3-tier TDP path & UI sliders (no RyzenAdj / SMU mailbox):** Writes directly through `MSI_ACPI.Set_Data` to `0x50` (SPL, `7–35 W`, floor `7 W`), `0x51` (SPPT, `9–50 W`, floor `9 W`), and `0x52` (FPPT, `11–60 W`, floor `11 W`) with monotonic coupling (`SPL <= SPPT <= FPPT`, gap 0). Exact write order (`UserScenarioX.setPowerLimit_AMD`): `0x50 = 7` → `0x51 = 9` → `0x52 = FPPT` → `0x51 = SPPT` → `0x50 = SPL`. Tsume exposes a 3rd **Fast boost** slider in Manual mode and Performance Presets only on 3-tier AMD devices (2-tier Intel UI is unchanged).
+- **AMD STAMP (`0xC5`):** If MSI Center M AI Engine Mode 8 left STAMP active (bit 7 supported, bit 1 set), Tsume clears it via `0xC5 |= 0x01` before applying power limits.
+- **Manual shift code (`0xD2`):** `0x04` (`0xC4`, shared with Sport/Performance). Endurance (`0xC2`) and Balanced (`0xC1`) match the EX.
+- **Presets & thermals:** Endurance `15 / 28 / 33 W`, Balanced `20 / 33 / 43 W`, Performance `28 / 45 / 55 W` (matching MSI Center M stock presets). AMD thermal thresholds: `75 °C` warn / `85 °C` hot.
+- **Fan, battery, buttons & controller:** Same `0x68` CPU temp, `0x98` Cooler Boost, `0xD4` Fan Control, `0xD7` Charge Limit (`0x80 | pct`), `Get_Fan(0)` tachometer (`480_000 / raw`), WMI events `0x29`/`0x58` (`Win+G`), and unified `0DB0:1901/1902` 1478-byte HID controller (`3.xx` firmware, no legacy offset cutoff).

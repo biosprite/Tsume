@@ -22,6 +22,7 @@ public static class Strings
     public static string ModeManual => Find();
     public static string Sustained => Find();
     public static string Boost => Find();
+    public static string FastBoost => Find();
     public static string HelperOffline => Find();
     public static string DeviceNotSupported => Find();
     public static string OnlineGameCaution => Find();
@@ -32,6 +33,9 @@ public static class Strings
 
     /// <summary>"25 W"</summary>
     public static string Watts(int watts) => Fill(Find(), watts);
+
+    /// <summary>"45/55 W"</summary>
+    public static string WattsPair(int boost, int fastBoost) => Fill(Find(), boost, fastBoost);
 
     /// <summary>"61 °C"</summary>
     public static string Temperature(int celsius) => Fill(Find(), celsius);
@@ -169,6 +173,9 @@ public static class Strings
 
     /// <summary>"Default 25 W / 37 W"</summary>
     public static string PresetStock(int sustained, int boost) => Fill(Find(), sustained, boost);
+
+    /// <summary>"Default 28 W / 45 W / 55 W"</summary>
+    public static string PresetStock3(int sustained, int boost, int fastBoost) => Fill(Find(), sustained, boost, fastBoost);
 
     /// <summary>"Balanced: Sustained" — a slider's name for a screen reader.</summary>
     public static string PresetLimit(string mode, string limit) => Fill(Find(), mode, limit);

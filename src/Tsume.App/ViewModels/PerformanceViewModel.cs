@@ -44,6 +44,7 @@ public sealed class PerformanceViewModel : Observable
         if (Device.ManualRange is { } range) manual = range.Clamp(manual);
         Sustained = manual.Sustained;
         Boost = manual.Boost;
+        FastBoost = manual.FastBoost ?? Device.ManualRange?.MinFastBoostFor(manual.Boost) ?? 0;
         _absorbing = false;
 
         CycleFan = new Command(NextFanMode);
@@ -73,16 +74,20 @@ public sealed class PerformanceViewModel : Observable
         var before = _absorbing;
         _absorbing = true;
 
+        Notify(nameof(HasFastBoost));
         Notify(nameof(MinWatts));
         Notify(nameof(MinBoostWatts));
+        Notify(nameof(MinFastBoostWatts));
         Notify(nameof(MaxSustainedWatts));
         Notify(nameof(MaxBoostWatts));
+        Notify(nameof(MaxFastBoostWatts));
 
         if (!_manualChosen && device.ManualDefault is { } start)
         {
             var clamped = device.ManualRange?.Clamp(start) ?? start;
             Sustained = clamped.Sustained;
             Boost = clamped.Boost;
+            if (clamped.FastBoost is { } fast) FastBoost = fast;
             _manualChosen = true;
         }
         else if (_manualChosen && device.ManualRange is { } range)
@@ -90,6 +95,7 @@ public sealed class PerformanceViewModel : Observable
             var clamped = range.Clamp(previousManual);
             Sustained = clamped.Sustained;
             Boost = clamped.Boost;
+            if (clamped.FastBoost is { } fast) FastBoost = fast;
         }
 
         Notify(nameof(Modes));
@@ -161,14 +167,22 @@ public sealed class PerformanceViewModel : Observable
     /// <summary>The sliders show only in Manual mode, and only on a machine whose limits can be set.</summary>
     public bool ShowsLimitSliders => IsManual && Device.ManualRange is not null;
 
+    /// <summary>True on 3-tier AMD devices that expose an independent Fast Boost (FPPT) slider.</summary>
+    public bool HasFastBoost => Device.ManualRange?.HasFastBoost == true;
+
     // Slider ranges, as doubles to bind to Slider.Minimum/Maximum.
     public double MinWatts => Device.ManualRange?.Min ?? 0;
     public double MinBoostWatts => Device.ManualRange?.MinBoost ?? 0;
+    public double MinFastBoostWatts => Device.ManualRange?.MinFastBoost ?? 0;
     public double MaxSustainedWatts => Device.ManualRange?.EffectiveMaxSustained ?? 1;
-    public double MaxBoostWatts => Device.ManualRange?.MaxBoost ?? 1;
+    public double MaxBoostWatts => Device.ManualRange?.EffectiveMaxBoost ?? 1;
+    public double MaxFastBoostWatts => Device.ManualRange?.MaxFastBoost ?? 1;
 
     private double MinBoostFor(double sustained) =>
         Device.ManualRange is { } range ? range.MinBoostFor((int)sustained) : sustained;
+
+    private double MinFastBoostFor(double boost) =>
+        Device.ManualRange is { HasFastBoost: true } range ? range.MinFastBoostFor((int)boost) : boost;
 
     public double Sustained
     {
@@ -199,8 +213,33 @@ public sealed class PerformanceViewModel : Observable
             var rounded = Math.Round(value);
             var floor = MinBoostFor(Sustained);
             var clamped = Device.ManualRange is { } range
-                ? Math.Clamp(rounded, floor, range.MaxBoost)
+                ? Math.Clamp(rounded, floor, range.EffectiveMaxBoost)
                 : Math.Max(rounded, floor);
+
+            if (!Set(ref field, clamped))
+            {
+                if (clamped != value) Notify();
+                return;
+            }
+
+            if (HasFastBoost)
+            {
+                var minFast = MinFastBoostFor(field);
+                if (FastBoost < minFast) FastBoost = minFast;
+            }
+            OnManualChanged();
+        }
+    }
+
+    public double FastBoost
+    {
+        get;
+        set
+        {
+            var rounded = Math.Round(value);
+            var clamped = Device.ManualRange is { MaxFastBoost: { } maxFast } range
+                ? Math.Clamp(rounded, range.MinFastBoostFor((int)Boost), maxFast)
+                : rounded;
 
             if (Set(ref field, clamped))
                 OnManualChanged();
@@ -209,7 +248,9 @@ public sealed class PerformanceViewModel : Observable
         }
     }
 
-    private PowerLimits Manual => new((int)Sustained, (int)Boost);
+    private PowerLimits Manual => HasFastBoost
+        ? new((int)Sustained, (int)Boost, (int)FastBoost)
+        : new((int)Sustained, (int)Boost);
 
     private void OnManualChanged()
     {
@@ -247,8 +288,12 @@ public sealed class PerformanceViewModel : Observable
     /// <summary>The sustained limit in force, e.g. "25 W".</summary>
     public string SustainedInForce => InForce is { } limits ? Strings.Watts(limits.Sustained) : Strings.NoReading;
 
-    /// <summary>The boost limit in force, e.g. "37 W".</summary>
-    public string BoostInForce => InForce is { } limits ? Strings.Watts(limits.Boost) : Strings.NoReading;
+    /// <summary>The boost limit in force, e.g. "37 W" on Intel or "45/55 W" (SPPT/FPPT) on 3-tier AMD.</summary>
+    public string BoostInForce => InForce is { } limits
+        ? limits.FastBoost is { } fast
+            ? Strings.WattsPair(limits.Boost, fast)
+            : Strings.Watts(limits.Boost)
+        : Strings.NoReading;
 
     private void NotifyLimits()
     {
@@ -378,6 +423,7 @@ public sealed class PerformanceViewModel : Observable
             var limits = Device.ManualRange is { } range ? range.Clamp(snapshot.Limits) : snapshot.Limits;
             Sustained = limits.Sustained;
             Boost = limits.Boost;
+            if (limits.FastBoost is { } fast) FastBoost = fast;
         }
         _absorbing = false;
     }

@@ -133,7 +133,10 @@ public sealed class PresetLimits : Observable
         Heading = name.ToUpper(CultureInfo.CurrentCulture);
         SustainedName = Strings.PresetLimit(name, Strings.Sustained);
         BoostName = Strings.PresetLimit(name, Strings.Boost);
-        StockLine = Strings.PresetStock(stock.Sustained, stock.Boost);
+        FastBoostName = Strings.PresetLimit(name, Strings.FastBoost);
+        StockLine = stock.FastBoost is { } fast
+            ? Strings.PresetStock3(stock.Sustained, stock.Boost, fast)
+            : Strings.PresetStock(stock.Sustained, stock.Boost);
 
         Show(range.Clamp(custom ?? stock));
         _changed = changed;
@@ -147,18 +150,24 @@ public sealed class PresetLimits : Observable
     /// <summary>The sliders' names for a screen reader, e.g. "Balanced: Sustained".</summary>
     public string SustainedName { get; }
     public string BoostName { get; }
+    public string FastBoostName { get; }
+
+    /// <summary>True on 3-tier AMD devices that expose an independent Fast Boost (FPPT) slider.</summary>
+    public bool HasFastBoost => _range.HasFastBoost;
 
     /// <summary>The machine's own limits for this mode.</summary>
     public PowerLimits Stock { get; }
 
-    /// <summary>E.g. "Default 25 W / 37 W".</summary>
+    /// <summary>E.g. "Default 25 W / 37 W" or "Default 28 W / 45 W / 55 W".</summary>
     public string StockLine { get; }
 
     // Slider ranges, the same as Manual's; doubles to bind to Slider.Minimum/Maximum.
     public double MinWatts => _range.Min;
     public double MinBoostWatts => _range.MinBoost;
+    public double MinFastBoostWatts => _range.MinFastBoost;
     public double MaxSustainedWatts => _range.EffectiveMaxSustained;
-    public double MaxBoostWatts => _range.MaxBoost;
+    public double MaxBoostWatts => _range.EffectiveMaxBoost;
+    public double MaxFastBoostWatts => _range.MaxFastBoost ?? 1;
 
     public double Sustained
     {
@@ -183,7 +192,32 @@ public sealed class PresetLimits : Observable
         get;
         set
         {
-            var clamped = Math.Clamp(Math.Round(value), _range.MinBoostFor((int)Sustained), _range.MaxBoost);
+            var clamped = Math.Clamp(Math.Round(value), _range.MinBoostFor((int)Sustained), _range.EffectiveMaxBoost);
+            if (!Set(ref field, clamped))
+            {
+                if (clamped != value) Notify();
+                return;
+            }
+
+            if (HasFastBoost)
+            {
+                var minFast = _range.MinFastBoostFor((int)field);
+                if (FastBoost < minFast) FastBoost = minFast;
+            }
+            OnChanged();
+        }
+    }
+
+    public double FastBoost
+    {
+        get;
+        set
+        {
+            var rounded = Math.Round(value);
+            var clamped = _range.MaxFastBoost is { } maxFast
+                ? Math.Clamp(rounded, _range.MinFastBoostFor((int)Boost), maxFast)
+                : rounded;
+
             if (Set(ref field, clamped))
                 OnChanged();
             else if (clamped != value)
@@ -191,7 +225,9 @@ public sealed class PresetLimits : Observable
         }
     }
 
-    public PowerLimits Limits => new((int)Sustained, (int)Boost);
+    public PowerLimits Limits => HasFastBoost
+        ? new((int)Sustained, (int)Boost, (int)FastBoost)
+        : new((int)Sustained, (int)Boost);
 
     /// <summary>True while the sliders are at the machine's own limits.</summary>
     public bool IsStock => Limits == Stock;
@@ -203,6 +239,7 @@ public sealed class PresetLimits : Observable
     {
         Sustained = limits.Sustained;
         Boost = limits.Boost;
+        if (HasFastBoost) FastBoost = limits.FastBoost ?? _range.MinFastBoostFor(limits.Boost);
     }
 
     private void OnChanged()

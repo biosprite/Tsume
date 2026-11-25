@@ -17,8 +17,11 @@ public sealed record MsiBoard
     /// <summary>What the panel is told this machine can do.</summary>
     public required DeviceProfile Profile { get; init; }
 
-    /// <summary>Watts the sustained limit is dropped to while both limits change, so boost is never below sustained.</summary>
+    /// <summary>Watts the sustained limit is dropped to while limits change, so boost is never below sustained.</summary>
     public required byte PowerFloor { get; init; }
+
+    /// <summary>Watts the boost limit (SPPT) is dropped to before writing FPPT on AMD 3-tier boards. Null on Intel boards.</summary>
+    public byte? BoostFloor { get; init; }
 
     /// <summary>Fan speed in RPM is this divided by the tachometer period the firmware reports.</summary>
     public int Tachometer { get; init; } = 480_000;

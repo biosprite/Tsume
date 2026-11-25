@@ -125,13 +125,17 @@ public static class ModeCheck
         return $"  {step,-19}  {values}    {verdict,-10}  {measured}";
     }
 
-    /// <summary>The three registers a mode is made of.</summary>
-    private readonly record struct Registers(byte ShiftMode, byte Sustained, byte Boost)
+    /// <summary>The registers a mode is made of (three on Intel, four with FPPT on AMD).</summary>
+    private readonly record struct Registers(byte ShiftMode, byte Sustained, byte Boost, byte? FastBoost = null)
     {
         public static Registers For(MsiBoard board, PerformanceMode mode)
         {
             var limits = board.Profile.LimitsFor(mode, default) ?? throw new ArgumentOutOfRangeException(nameof(mode));
-            return new Registers(board.Shift.Encode(MsiDevice.ShiftModeFor(board, mode)), (byte)limits.Sustained, (byte)limits.Boost);
+            return new Registers(
+                board.Shift.Encode(MsiDevice.ShiftModeFor(board, mode)),
+                (byte)limits.Sustained,
+                (byte)limits.Boost,
+                limits.FastBoost is { } fppt ? (byte)fppt : null);
         }
 
         public static Registers? Read(MsiAcpiBridge acpi, MsiBoard board)
@@ -140,23 +144,38 @@ public static class ModeCheck
             var sustained = acpi.Get("Get_Data", board.Registers.PowerLimitSustained);
             var boost = acpi.Get("Get_Data", board.Registers.PowerLimitBoost);
 
-            return shift.Accepted && sustained.Accepted && boost.Accepted
-                ? new Registers(shift.Data[0], sustained.Data[0], boost.Data[0])
-                : null;
+            if (!shift.Accepted || !sustained.Accepted || !boost.Accepted) return null;
+
+            byte? fastBoost = null;
+            if (board.Registers.PowerLimitFastBoost is { } fastReg)
+            {
+                var fast = acpi.Get("Get_Data", fastReg);
+                if (!fast.Accepted) return null;
+                fastBoost = fast.Data[0];
+            }
+
+            return new Registers(shift.Data[0], sustained.Data[0], boost.Data[0], fastBoost);
         }
 
         /// <summary>
         /// Writes the raw bytes back, bypassing <see cref="MsiDevice"/>, so a state that is not one of Tsume's
-        /// modes is still restored. Same order as any change: sustained to the floor, boost, sustained.
+        /// modes is still restored. Same order as any change: floors first, then highest-to-lowest limit.
         /// </summary>
         public static void Restore(MsiAcpiBridge acpi, MsiBoard board, Registers original)
         {
             acpi.Set("Set_Data", board.Registers.ShiftMode, [original.ShiftMode]);
             acpi.Set("Set_Data", board.Registers.PowerLimitSustained, [board.PowerFloor]);
+            if (board.Registers.PowerLimitFastBoost is { } fastReg && original.FastBoost is { } fppt)
+            {
+                acpi.Set("Set_Data", board.Registers.PowerLimitBoost, [board.BoostFloor ?? board.PowerFloor]);
+                acpi.Set("Set_Data", fastReg, [fppt]);
+            }
             acpi.Set("Set_Data", board.Registers.PowerLimitBoost, [original.Boost]);
             acpi.Set("Set_Data", board.Registers.PowerLimitSustained, [original.Sustained]);
         }
 
-        public override string ToString() => $"shift 0x{ShiftMode:X2}, {Sustained} W / {Boost} W";
+        public override string ToString() => FastBoost is { } fppt
+            ? $"shift 0x{ShiftMode:X2}, {Sustained} W / {Boost} W / {fppt} W"
+            : $"shift 0x{ShiftMode:X2}, {Sustained} W / {Boost} W";
     }
 }

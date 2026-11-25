@@ -32,6 +32,11 @@ public sealed record MsiShiftModes
     {
         var code = register & ModeMask;
 
+        // When Manual shares its shift code with another mode (e.g. 0x04 on MS-1T42, MS-1T52, MS-1T8K),
+        // decode it as Manual so ReadMode() matches MsiDevice.HardwareModeFor() and ModeKeeper.Resolve().
+        if (Codes.TryGetValue(PerformanceMode.Manual, out var manualCode) && manualCode == code)
+            return PerformanceMode.Manual;
+
         foreach (var (mode, itsCode) in Codes)
             if (itsCode == code) return mode;
 

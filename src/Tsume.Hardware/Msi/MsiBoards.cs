@@ -90,8 +90,9 @@ public static class MsiBoards
 
     /// <summary>
     /// Claw 8 AI+ (A2VM, Intel Core Ultra 7 258V / Lunar Lake). Uses the same MSI EC register map as the EX,
-    /// except Manual shift mode is 0x03 (0xC3) instead of 0x06 (0xC6). Power ceilings are 30 W PL1 / 37 W PL2
-    /// with at least 1 W boost headroom (PL2 &gt;= PL1 + 1) to avoid Lunar Lake's PL1 == PL2 throttling quirk.
+    /// except Manual shift mode uses 0x04 (0xC4, shared with Sport/Performance) instead of EX's 0x06 (0xC6).
+    /// Power ceilings are 30 W PL1 / 37 W PL2 with at least 1 W boost headroom (PL2 &gt;= PL1 + 1) to avoid
+    /// Lunar Lake's PL1 == PL2 throttling quirk.
     /// </summary>
     public static readonly MsiBoard Claw8AiPlus = new()
     {
@@ -115,7 +116,7 @@ public static class MsiBoards
                 [PerformanceMode.Endurance] = 0x02,
                 [PerformanceMode.Balanced] = 0x01,
                 [PerformanceMode.Performance] = 0x04,
-                [PerformanceMode.Manual] = 0x03,
+                [PerformanceMode.Manual] = 0x04,
             },
             Otherwise = PerformanceMode.Balanced,   // including MSI's "Comfort", 0x00
         },
@@ -171,7 +172,268 @@ public static class MsiBoards
         },
     };
 
-    private static readonly MsiBoard[] Verified = [Claw8, Claw8AiPlus];
+    /// <summary>
+    /// Claw 7 AI+ / A7 (A2VM, Intel Core Ultra 7 258V / Lunar Lake, 7" 1080p). Identical to the Claw 8 AI+
+    /// (MS-1T52) across WMI, EC registers, shift mode (Manual = 0x04 / 0xC4), PL1/PL2 limits (8–30 W / 8–37 W,
+    /// PL2 &gt;= PL1 + 1), fan control, charge limit, WMI events, and 2.xx controller firmware.
+    /// </summary>
+    public static readonly MsiBoard Claw7AiPlus = new()
+    {
+        Model = "MS-1T42",
+
+        Registers = new()
+        {
+            PowerLimitSustained = 0x50,
+            PowerLimitBoost = 0x51,
+            CpuTemperature = 0x68,
+            CoolerBoost = 0x98,
+            ShiftMode = 0xD2,
+            FanControl = 0xD4,
+            ChargeLimit = 0xD7,
+        },
+
+        Shift = new()
+        {
+            Codes = new Dictionary<PerformanceMode, byte>
+            {
+                [PerformanceMode.Endurance] = 0x02,
+                [PerformanceMode.Balanced] = 0x01,
+                [PerformanceMode.Performance] = 0x04,
+                [PerformanceMode.Manual] = 0x04,
+            },
+            Otherwise = PerformanceMode.Balanced,   // including MSI's "Comfort", 0x00
+        },
+
+        PowerFloor = 8,
+
+        Profile = new()
+        {
+            Name = "MSI Claw 7 AI+ (MS-1T42)",
+            Modes =
+            [
+                new(PerformanceMode.Endurance,   new PowerLimits(Sustained: 8,  Boost: 12)),
+                new(PerformanceMode.Balanced,    new PowerLimits(Sustained: 17, Boost: 20)),
+                new(PerformanceMode.Performance, new PowerLimits(Sustained: 30, Boost: 37)),
+                new(PerformanceMode.Manual),
+            ],
+            ManualRange = new PowerRange(Min: 8, MaxSustained: 30, MaxBoost: 37, MinBoostHeadroom: 1),
+            ManualDefault = new PowerLimits(Sustained: 17, Boost: 20),
+            FanModes = [FanMode.Auto, FanMode.Max],
+            ChargeLimits = [80, 90, 100],
+            ChargeResumeGap = 10,
+            TempWarnC = 85,
+            TempHotC = 95,
+            Controls = new()
+            {
+                HasGameBarButton = true,
+                GameBarNativeWinG = true,
+                GameBarTriggers =
+                [
+                    new KeyTrigger(VirtualKey: 0x47, Win: true),   // Win+G (BIOS 10F+)
+                    new KeyTrigger(VirtualKey: 0x7F),              // F16 (older A2VM BIOSes)
+                ],
+                HasOemButton = true,
+                HasMsiCenterConflict = true,
+                OemButtonWmiCode = 0x29,
+                GameBarWmiCode = 0x58,
+                BackButtons = new()
+                {
+                    Protocol = BackButtonsProfile.MsiHidV1,
+                    VendorId = 0x0DB0,
+                    ProductIds = [0x1901, 0x1902],
+                    ProfileLength = 1478,
+                    BlockLength = 8,
+                    MaxSimultaneousKeys = 3,
+                    MinFirmwareVersion = 0x0217,   // 2.xx branch: < 2.17 used legacy profile offsets
+                    Buttons =
+                    [
+                        new("M1", "M1", "Left back button", Offset: 186),
+                        new("M2", "M2", "Right back button", Offset: 355),
+                    ],
+                },
+            },
+        },
+    };
+
+    /// <summary>
+    /// Claw A1M (Intel Core Ultra 5 135H / Ultra 7 155H Meteor Lake, 7" 1080p). Same MSI_ACPI WMI bridge
+    /// and EC register map, with Manual shift mode 0x04 (0xC4), PowerFloor 15 W, Manual range 20–40 W PL1 /
+    /// 20–45 W PL2 (PL2 &gt;= PL1), and 1.xx controller firmware (legacy layout cutoff &lt;= 1.63).
+    /// </summary>
+    public static readonly MsiBoard ClawA1M = new()
+    {
+        Model = "MS-1T41",
+
+        Registers = new()
+        {
+            PowerLimitSustained = 0x50,
+            PowerLimitBoost = 0x51,
+            CpuTemperature = 0x68,
+            CoolerBoost = 0x98,
+            ShiftMode = 0xD2,
+            FanControl = 0xD4,
+            ChargeLimit = 0xD7,
+        },
+
+        Shift = new()
+        {
+            Codes = new Dictionary<PerformanceMode, byte>
+            {
+                [PerformanceMode.Endurance] = 0x02,
+                [PerformanceMode.Balanced] = 0x01,
+                [PerformanceMode.Performance] = 0x04,
+                [PerformanceMode.Manual] = 0x04,
+            },
+            Otherwise = PerformanceMode.Balanced,   // including MSI's "Comfort", 0x00
+        },
+
+        PowerFloor = 15,
+
+        Profile = new()
+        {
+            Name = "MSI Claw A1M (MS-1T41)",
+            Modes =
+            [
+                new(PerformanceMode.Endurance,   new PowerLimits(Sustained: 20, Boost: 20)),
+                new(PerformanceMode.Balanced,    new PowerLimits(Sustained: 30, Boost: 35)),
+                new(PerformanceMode.Performance, new PowerLimits(Sustained: 40, Boost: 45)),
+                new(PerformanceMode.Manual),
+            ],
+            ManualRange = new PowerRange(Min: 20, MaxSustained: 40, MaxBoost: 45),
+            ManualDefault = new PowerLimits(Sustained: 30, Boost: 35),
+            FanModes = [FanMode.Auto, FanMode.Max],
+            ChargeLimits = [80, 90, 100],
+            ChargeResumeGap = 10,
+            TempWarnC = 85,
+            TempHotC = 95,
+            Controls = new()
+            {
+                HasGameBarButton = true,
+                GameBarNativeWinG = true,
+                GameBarTriggers =
+                [
+                    new KeyTrigger(VirtualKey: 0x47, Win: true),   // Win+G (newer A1M BIOSes)
+                    new KeyTrigger(VirtualKey: 0x7E),              // F15 (older A1M BIOSes)
+                    new KeyTrigger(VirtualKey: 0x7F),              // F16 (older A1M BIOSes)
+                ],
+                HasOemButton = true,
+                HasMsiCenterConflict = true,
+                OemButtonWmiCode = 0x29,
+                GameBarWmiCode = 0x58,
+                BackButtons = new()
+                {
+                    Protocol = BackButtonsProfile.MsiHidV1,
+                    VendorId = 0x0DB0,
+                    ProductIds = [0x1901, 0x1902],
+                    ProfileLength = 1478,
+                    BlockLength = 8,
+                    MaxSimultaneousKeys = 3,
+                    MinFirmwareVersion = 0x0164,   // 1.xx branch: <= 1.63 used legacy profile offsets
+                    Buttons =
+                    [
+                        new("M1", "M1", "Left back button", Offset: 186),
+                        new("M2", "M2", "Right back button", Offset: 355),
+                    ],
+                },
+            },
+        },
+    };
+
+    /// <summary>
+    /// Claw A8 (BZ2EM, AMD Ryzen Z2 Extreme, ITE EC 1T8KIMS1). Uses the same MSI_ACPI WMI bridge (the DSDT
+    /// routes EC RAM through MMIO 0xFEDF1400 when ECID == 'I') and writes 3-tier AMD power limits directly
+    /// to EC 0x50 (SPL, 7–35 W), 0x51 (SPPT, 9–50 W), and 0x52 (FPPT, 11–60 W) in MSI's safe order:
+    /// 0x50=7 -&gt; 0x51=9 -&gt; 0x52=FPPT -&gt; 0x51=SPPT -&gt; 0x50=SPL. Manual shift mode is 0x04 (0xC4).
+    /// </summary>
+    public static readonly MsiBoard ClawA8 = new()
+    {
+        Model = "MS-1T8K",
+
+        Registers = new()
+        {
+            PowerLimitSustained = 0x50,
+            PowerLimitBoost = 0x51,
+            PowerLimitFastBoost = 0x52,
+            CpuTemperature = 0x68,
+            CoolerBoost = 0x98,
+            AmdStamp = 0xC5,
+            ShiftMode = 0xD2,
+            FanControl = 0xD4,
+            ChargeLimit = 0xD7,
+        },
+
+        Shift = new()
+        {
+            Codes = new Dictionary<PerformanceMode, byte>
+            {
+                [PerformanceMode.Endurance] = 0x02,
+                [PerformanceMode.Balanced] = 0x01,
+                [PerformanceMode.Performance] = 0x04,
+                [PerformanceMode.Manual] = 0x04,
+            },
+            Otherwise = PerformanceMode.Balanced,   // including MSI's "Comfort", 0x00
+        },
+
+        PowerFloor = 7,
+        BoostFloor = 9,
+
+        Profile = new()
+        {
+            Name = "MSI Claw A8 (MS-1T8K)",
+            Modes =
+            [
+                new(PerformanceMode.Endurance,   new PowerLimits(Sustained: 15, Boost: 28, FastBoost: 33)),
+                new(PerformanceMode.Balanced,    new PowerLimits(Sustained: 20, Boost: 33, FastBoost: 43)),
+                new(PerformanceMode.Performance, new PowerLimits(Sustained: 28, Boost: 45, FastBoost: 55)),
+                new(PerformanceMode.Manual),
+            ],
+            ManualRange = new PowerRange(
+                Min: 7, MaxSustained: 35, MaxBoost: 50,
+                MinBoostHeadroom: 0, MinBoostFloor: 9,
+                MaxFastBoost: 60, MinFastBoostHeadroom: 0, MinFastBoostFloor: 11),
+            ManualDefault = new PowerLimits(Sustained: 20, Boost: 33, FastBoost: 43),
+            FanModes = [FanMode.Auto, FanMode.Max],
+            ChargeLimits = [80, 90, 100],
+            ChargeResumeGap = 10,
+            TempWarnC = 75,
+            TempHotC = 85,
+            Controls = new()
+            {
+                HasGameBarButton = true,
+                GameBarNativeWinG = true,
+                GameBarTriggers = [new KeyTrigger(VirtualKey: 0x47, Win: true)],   // Win+G
+                HasOemButton = true,
+                HasMsiCenterConflict = true,
+                OemButtonWmiCode = 0x29,
+                GameBarWmiCode = 0x58,
+                BackButtons = new()
+                {
+                    Protocol = BackButtonsProfile.MsiHidV1,
+                    VendorId = 0x0DB0,
+                    ProductIds = [0x1901, 0x1902],
+                    ProfileLength = 1478,
+                    BlockLength = 8,
+                    MaxSimultaneousKeys = 3,
+                    Buttons =
+                    [
+                        new("M1", "M1", "Left back button", Offset: 186),
+                        new("M2", "M2", "Right back button", Offset: 355),
+                    ],
+                },
+            },
+        },
+    };
+
+    /// <summary>
+    /// Claw 7 AMD (MS-1T7K). Shares the MS-1T8K AMD platform and 3.xx controller firmware lineage in MSI Center M.
+    /// </summary>
+    public static readonly MsiBoard Claw7Amd = ClawA8 with
+    {
+        Model = "MS-1T7K",
+        Profile = ClawA8.Profile with { Name = "MSI Claw 7 AMD (MS-1T7K)" },
+    };
+
+    private static readonly MsiBoard[] Verified = [Claw8, Claw8AiPlus, Claw7AiPlus, ClawA1M, ClawA8, Claw7Amd];
 
     /// <summary>The verified map for a board, or null if it has none.</summary>
     public static MsiBoard? Find(Board board) =>

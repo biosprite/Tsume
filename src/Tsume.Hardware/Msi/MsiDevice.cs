@@ -57,16 +57,37 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board) : IDevice
 
         lock (_oneIntentionAtATime)
         {
+            // Clear AMD STAMP boost if MSI Center M AI Engine Mode 8 left it active on 1T8K.
+            if (_at.AmdStamp is { } stampReg)
+            {
+                var stamp = Read(stampReg, nameof(_at.AmdStamp));
+                if ((stamp & _at.AmdStampSupported) != 0 && (stamp & _at.AmdStampActive) != 0)
+                    Write(stampReg, nameof(_at.AmdStamp), (byte)(stamp | _at.AmdStampReset));
+            }
+
             Write(_at.ShiftMode, nameof(_at.ShiftMode), board.Shift.Encode(shiftMode));
 
-            // MSI's order: sustained to the floor first, so boost is never below sustained mid-change.
-            Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), board.PowerFloor);
-            Write(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost), (byte)limits.Boost);
-            Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), (byte)limits.Sustained);
+            if (_at.PowerLimitFastBoost is { } fastBoostReg && limits.FastBoost is { } fppt)
+            {
+                // MSI's AMD order (UserScenarioX.setPowerLimit_AMD):
+                // SPL -> floor (7 W), SPPT -> floor (9 W), then FPPT -> SPPT -> SPL.
+                Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), board.PowerFloor);
+                Write(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost), board.BoostFloor ?? board.PowerFloor);
+                Write(fastBoostReg, nameof(_at.PowerLimitFastBoost), (byte)fppt);
+                Write(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost), (byte)limits.Boost);
+                Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), (byte)limits.Sustained);
+            }
+            else
+            {
+                // MSI's Intel order: sustained to the floor first, so boost is never below sustained mid-change.
+                Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), board.PowerFloor);
+                Write(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost), (byte)limits.Boost);
+                Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), (byte)limits.Sustained);
+            }
         }
     }
 
-    /// <summary>Three register reads — much cheaper than a snapshot.</summary>
+    /// <summary>Three register reads (four on AMD 3-tier boards) — much cheaper than a snapshot.</summary>
     public (PerformanceMode Mode, PowerLimits Limits) Performance()
     {
         lock (_oneIntentionAtATime)
@@ -79,7 +100,10 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board) : IDevice
 
     private PowerLimits ReadLimits() => new(
         Read(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained)),
-        Read(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost)));
+        Read(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost)),
+        _at.PowerLimitFastBoost is { } fastBoostReg
+            ? Read(fastBoostReg, nameof(_at.PowerLimitFastBoost))
+            : null);
 
     public void SetFan(FanMode mode)
     {

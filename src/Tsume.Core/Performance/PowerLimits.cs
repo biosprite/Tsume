@@ -1,10 +1,12 @@
 namespace Tsume.Core.Performance;
 
 /// <summary>
-/// Processor power limits in watts. Sustained is Intel's PL1 (AMD's STAPM and slow limit);
-/// Boost is Intel's PL2 (AMD's fast limit). The accepted range is in <see cref="Devices.PowerRange"/>.
+/// Processor power limits in watts. Sustained is Intel's PL1 (AMD's SPL); Boost is Intel's PL2 (AMD's SPPT);
+/// FastBoost is AMD's FPPT (null on 2-tier Intel boards). The accepted range is in <see cref="Devices.PowerRange"/>.
 /// </summary>
-public readonly record struct PowerLimits(int Sustained, int Boost)
+public readonly record struct PowerLimits(int Sustained, int Boost, int? FastBoost = null)
 {
-    public override string ToString() => $"{Sustained} W / {Boost} W";
+    public override string ToString() => FastBoost is { } fast
+        ? $"{Sustained} W / {Boost} W / {fast} W"
+        : $"{Sustained} W / {Boost} W";
 }

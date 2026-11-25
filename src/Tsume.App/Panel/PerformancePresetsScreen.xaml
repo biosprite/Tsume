@@ -60,6 +60,15 @@
                                       LargeChange="1"
                                       Value="{Binding Boost}"
                                       Margin="0,8,0,0" />
+
+                <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Boost}"
+                                      Label="{x:Static lang:Strings.FastBoost}" Unit=" W"
+                                      AutomationProperties.Name="{Binding FastBoostName}"
+                                      Minimum="{Binding MinFastBoostWatts}" Maximum="{Binding MaxFastBoostWatts}"
+                                      LargeChange="1"
+                                      Value="{Binding FastBoost}"
+                                      Margin="0,8,0,0"
+                                      Visibility="{Binding HasFastBoost, Converter={StaticResource VisibleWhenTrue}}" />
               </StackPanel>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
