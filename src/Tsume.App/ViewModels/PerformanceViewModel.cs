@@ -20,7 +20,7 @@ public sealed class PerformanceViewModel : Observable
     private readonly HelperClient _helper;
     private readonly SavedState _state;
 
-    /// <summary>Waits for the manual sliders to stop moving before touching the firmware.</summary>
+    /// <summary>Waits for rapid mode switches or slider drags to settle before touching the firmware.</summary>
     private readonly DispatcherTimer _settle = new() { Interval = TimeSpan.FromMilliseconds(300) };
 
     /// <summary>True while values are being copied in from the hardware, so they are not sent straight back.</summary>
@@ -28,6 +28,9 @@ public sealed class PerformanceViewModel : Observable
 
     /// <summary>Counts user changes, so a reading requested before a change does not undo it.</summary>
     private int _changes;
+
+    private bool _applying;
+    private bool _applyAgain;
 
     public PerformanceViewModel(HelperClient helper, SavedState state)
     {
@@ -160,7 +163,7 @@ public sealed class PerformanceViewModel : Observable
             if (_absorbing) return;
 
             _changes++;
-            Apply();
+            ScheduleApply();
         }
     }
 
@@ -317,6 +320,12 @@ public sealed class PerformanceViewModel : Observable
         _manualChosen = true;
         if (!IsManual) return;
 
+        ScheduleApply();
+    }
+
+    private void ScheduleApply()
+    {
+        _applyAgain = false;
         _settle.Stop();
         _settle.Start();
     }
@@ -502,13 +511,13 @@ public sealed class PerformanceViewModel : Observable
 
         // A user change made while the helper was answering wins: adopting the older
         // reading's mode would move the selector back without the firmware following.
-        Absorb(reply, adoptMode: _changes == changesBefore);
+        Absorb(reply, adoptMode: _changes == changesBefore && !_applying && !_settle.IsEnabled);
     }
 
     /// <summary>Reads only the live numbers. Called once a second while the panel is open.</summary>
     public async Task RefreshTelemetryAsync()
     {
-        if (!IsHelperOnline) return;
+        if (!IsHelperOnline || _applying) return;
 
         var reply = await _helper.SendAsync(new GetReadings());
 
@@ -522,11 +531,38 @@ public sealed class PerformanceViewModel : Observable
 
     private async void Apply()
     {
-        _state.Mode = Mode;
-        if (Device.ManualRange is not null && _manualChosen) _state.Manual = Manual;
-        _state.Save();
+        _settle.Stop();
 
-        Absorb(await _helper.SendAsync(new SetPerformance(Mode, Manual, CustomFor(Mode))));
+        if (_applying)
+        {
+            _applyAgain = true;
+            return;
+        }
+
+        _applying = true;
+        try
+        {
+            do
+            {
+                _applyAgain = false;
+
+                var mode = Mode;
+                var manual = Manual;
+                var custom = CustomFor(mode);
+
+                _state.Mode = mode;
+                if (Device.ManualRange is not null && _manualChosen) _state.Manual = manual;
+                _state.Save();
+
+                var reply = await _helper.SendAsync(new SetPerformance(mode, manual, custom));
+                Absorb(reply);
+            }
+            while (_applyAgain);
+        }
+        finally
+        {
+            _applying = false;
+        }
     }
 
     /// <summary>

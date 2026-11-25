@@ -57,10 +57,16 @@ public sealed class RequestHandler
                     if (!profile.Offers(mode))
                         return HelperReply.Failure($"This device has no {mode} mode.");
 
-                    bool? onBattery = profile.BatteryCap is not null ? PowerSource.IsOnBattery() : null;
-                    // A preset's own limits, if sent, are clamped where they are used: DeviceProfile.LimitsFor.
-                    device.SetPerformance(mode, profile.ManualRange?.Clamp(manual) ?? manual, custom, onBattery);
-                    keeper?.Remember(chosen, onBattery);
+                    lock (DiscoveryWorker.KeeperGate)
+                    {
+                        if (DiscoveryWorker.IsMutatingFirmwareCheckRunning)
+                            return HelperReply.Failure("A firmware check is running. Wait for it to finish before changing settings.");
+
+                        bool? onBattery = profile.BatteryCap is not null ? PowerSource.IsOnBattery() : null;
+                        // A preset's own limits, if sent, are clamped where they are used: DeviceProfile.LimitsFor.
+                        device.SetPerformance(mode, profile.ManualRange?.Clamp(manual) ?? manual, custom, onBattery);
+                        keeper?.Remember(chosen, onBattery);
+                    }
                     break;
 
                 case SetFan(var mode):
