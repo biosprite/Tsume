@@ -38,6 +38,11 @@ public partial class OverlayWindow
     private readonly DispatcherTimer _settling = new() { Interval = TimeSpan.FromMilliseconds(60) };
     private static readonly Journal FocusLog = new("focus");
 
+    private static readonly TimeSpan ReleaseGrace = TimeSpan.FromMilliseconds(50);
+    private readonly DispatcherTimer _awaitingRelease = new(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(10) };
+    private DateTime _releaseDeadline;
+    private DateTime? _releasedAt;
+
     private nint _wasInFront;
     private bool _tookAtOnce;
     private int _retakes;
@@ -65,6 +70,7 @@ public partial class OverlayWindow
         };
         Deactivated += (_, _) => { if (!_stayOpen && !_settling.IsEnabled) _ = CloseAsync(); };
         _settling.Tick += (_, _) => HoldTheFront();
+        _awaitingRelease.Tick += (_, _) => OnAwaitingReleaseTick();
         _zOrderChanges.Changed += StayOverTaskbar;
 
         foreach (var layer in panel.Layers) layer.PropertyChanged += OnLayerMoved;
@@ -126,13 +132,19 @@ public partial class OverlayWindow
         // Until the panel has settled in front, losing focus does not close it (see HoldTheFront).
         ForegroundWindow.BehindPanel = _wasInFront = ForegroundWindow.Current;
         _retakes = _settleTicks = 0;
-        _settling.Start();
 
-        // Always activate on a real open, even if an early-boot WarmUp() has not finished hiding yet.
-        ShowActivated = true;
+        // If the stick or a button is still held, leave the focus where it is until it is let go: many apps
+        // (Steam Big Picture among them) stop reading the controller once they lose focus and keep repeating
+        // the held direction, since they never see the release.
+        var awaitRelease = Input.PadIsolation.IsBuiltInPadHeld();
+        if (!awaitRelease) _settling.Start();
+
+        // Activate on a real open, even if an early-boot WarmUp() has not finished hiding yet.
+        ShowActivated = !awaitRelease;
         Show();
         RaiseAboveEverything();
-        _tookAtOnce = ForegroundWindow.Take(this);
+        if (awaitRelease) AwaitRelease();
+        else _tookAtOnce = ForegroundWindow.Take(this);
         _zOrderChanges.Start();
 
         // After Show: started alongside it, this delays the window by a frame or three.
@@ -142,6 +154,36 @@ public partial class OverlayWindow
         // more than one late first frame is seen.
         PlayIn();
 
+        if (!awaitRelease) Dispatcher.BeginInvoke(DispatcherPriority.Input, FocusActiveControl);
+    }
+
+    /// <summary>Polls the built-in pad until it has been released for a moment (or the cap passes), then takes the front.</summary>
+    private void AwaitRelease()
+    {
+        _releaseDeadline = DateTime.UtcNow + Input.PadIsolation.HeldInputWaitCap;
+        _releasedAt = null;
+        _awaitingRelease.Start();
+    }
+
+    private void OnAwaitingReleaseTick()
+    {
+        if (!IsOpen)
+        {
+            _awaitingRelease.Stop();
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        if (Input.PadIsolation.IsBuiltInPadHeld()) _releasedAt = null;
+        else _releasedAt ??= now;
+
+        // After the release, give the app in front a moment to read the neutral report before it loses focus.
+        var settled = _releasedAt is { } released && now - released >= ReleaseGrace;
+        if (!settled && now < _releaseDeadline) return;
+
+        _awaitingRelease.Stop();
+        _settling.Start();
+        _tookAtOnce = ForegroundWindow.Take(this);
         Dispatcher.BeginInvoke(DispatcherPriority.Input, FocusActiveControl);
     }
 
@@ -390,6 +432,7 @@ public partial class OverlayWindow
         if (!IsOpen) return _closing?.Task ?? Task.CompletedTask;
         IsOpen = false;
         _settling.Stop();
+        _awaitingRelease.Stop();
         Stage.IsHitTestVisible = false;
 
         var closing = _closing = new TaskCompletionSource();

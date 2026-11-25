@@ -31,8 +31,12 @@ public sealed class PadIsolation : IDisposable
     private static readonly TimeSpan ReleasePoll = TimeSpan.FromMilliseconds(10);
     private static readonly TimeSpan NavInterval = TimeSpan.FromMilliseconds(16);
 
-    /// <summary>How long to wait for sticks/buttons to return to neutral before switching Mode 1 -> Mode 4.</summary>
-    private static readonly TimeSpan PreCaptureNeutralCap = TimeSpan.FromMilliseconds(600);
+    /// <summary>
+    /// How long to wait for sticks/buttons to return to neutral before switching Mode 1 -> Mode 4 (and, in
+    /// <c>OverlayWindow</c>, before taking the foreground). Long enough to cover a stick held through the open,
+    /// short enough that a drifting stick never blocks the panel for good.
+    /// </summary>
+    public static readonly TimeSpan HeldInputWaitCap = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan NeutralPoll = TimeSpan.FromMilliseconds(8);
 
     /// <summary>Idle windows in Mode 4 before flushing any latched XInput/HID report from a mid-input switch.</summary>
@@ -421,7 +425,7 @@ public sealed class PadIsolation : IDisposable
                 // so the controller itself emits a clean zeroed XInput report before entering Mode 4.
                 if (ReadBuiltInGamepadInput() != BuiltInInput.None)
                 {
-                    var deadline = DateTime.UtcNow + PreCaptureNeutralCap;
+                    var deadline = DateTime.UtcNow + HeldInputWaitCap;
                     while (DateTime.UtcNow < deadline && _panelOpen && !_disposed && !cancel.IsCancellationRequested)
                     {
                         await Task.Delay(NeutralPoll, cancel.Token);
@@ -485,7 +489,7 @@ public sealed class PadIsolation : IDisposable
     }
 
     /// <summary>
-    /// If switching Mode 1 -> Mode 4 while a stick was still held (past <see cref="PreCaptureNeutralCap"/>
+    /// If switching Mode 1 -> Mode 4 while a stick was still held (past <see cref="HeldInputWaitCap"/>
     /// or re-deflected during the ~30 ms USB switch) left the Claw's persistent XInput/HID gamepad endpoint
     /// reporting a non-zero stick or button state, keeps retrying on idle pauses until a brief
     /// Gamepad -> neutral -> Cursor bounce clears it through <c>xusb22.sys</c> / <c>InputHost</c>.
@@ -578,6 +582,9 @@ public sealed class PadIsolation : IDisposable
             cancel.Dispose();
         }
     }
+
+    /// <summary>True while the built-in pad reports any pressed button, trigger, or deflected stick.</summary>
+    public static bool IsBuiltInPadHeld() => ReadBuiltInGamepadInput() != BuiltInInput.None;
 
     private enum BuiltInInput
     {
