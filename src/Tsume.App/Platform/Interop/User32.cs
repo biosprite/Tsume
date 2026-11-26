@@ -18,7 +18,6 @@ internal static partial class User32
     public static partial nint SetWindowLongPtr(nint window, int index, nint value);
 
     public const nint HWND_TOPMOST = -1;
-    public const nint HWND_NOTOPMOST = -2;
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_NOACTIVATE = 0x0010;
@@ -26,6 +25,13 @@ internal static partial class User32
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetWindowRect(nint window, out RECT rect);
+
+    [LibraryImport("user32.dll")]
+    public static partial int SetWindowRgn(nint window, nint region, [MarshalAs(UnmanagedType.Bool)] bool redraw);
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

@@ -15,6 +15,8 @@ public partial class FanScreen
     private FanViewModel? _fan;
     private IDisposable? _textInputScope;
     private bool _openedTouchKeyboard;
+    private int _renameSession;
+    private CancellationTokenSource? _touchKeyboardOp;
 
     public FanScreen()
     {
@@ -66,22 +68,27 @@ public partial class FanScreen
 
     private void BeginTextInput()
     {
+        var session = ++_renameSession;
+        CancelTouchKeyboardOp();
+
         _textInputScope ??= TextInputMode.Enter();
         SetKeyboardPriority(yield: true);
 
         Dispatcher.BeginInvoke(DispatcherPriority.Input, async () =>
         {
-            if (_fan is not { IsRenamingProfile: true } || !IsVisible) return;
+            if (session != _renameSession || _fan is not { IsRenamingProfile: true } || !IsVisible) return;
 
             ProfileNameBox.Focus();
             ProfileNameBox.SelectAll();
+            ProfileNameBox.BringIntoView();
 
             // Only pop up Windows' on-screen keyboard when no external USB/Bluetooth keyboard is connected.
             if (PhysicalKeyboard.IsConnected()) return;
 
+            var token = ResetTouchKeyboardOp();
             var hwnd = WindowHandle();
-            var opened = await QuickActions.ShowTouchKeyboardAsync(hwnd);
-            if (_fan is not { IsRenamingProfile: true })
+            var opened = await QuickActions.ShowTouchKeyboardAsync(hwnd, token);
+            if (token.IsCancellationRequested || session != _renameSession || _fan is not { IsRenamingProfile: true })
             {
                 if (opened) QuickActions.HideTouchKeyboard(hwnd);
                 return;
@@ -90,12 +97,18 @@ public partial class FanScreen
             if (opened) _openedTouchKeyboard = true;
 
             if (IsVisible && ProfileNameBox.IsVisible)
+            {
                 ProfileNameBox.Focus();
+                ProfileNameBox.BringIntoView();
+            }
         });
     }
 
     private void EndTextInput(bool restoreFocus = false)
     {
+        var session = ++_renameSession;
+        CancelTouchKeyboardOp();
+
         _textInputScope?.Dispose();
         _textInputScope = null;
 
@@ -111,10 +124,26 @@ public partial class FanScreen
 
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
         {
-            if (!IsVisible || _fan is not { IsOpen: true }) return;
+            if (session != _renameSession || !IsVisible || _fan is not { IsOpen: true }) return;
+            if (Window.GetWindow(this) is OverlayWindow { IsOpen: false }) return;
             if (ProfileSelector is { IsVisible: true, IsEnabled: true } && ProfileSelector.Focus()) return;
             RestoreFocus(preferCurve: false);
         });
+    }
+
+    private CancellationToken ResetTouchKeyboardOp()
+    {
+        _touchKeyboardOp?.Cancel();
+        _touchKeyboardOp?.Dispose();
+        _touchKeyboardOp = new CancellationTokenSource();
+        return _touchKeyboardOp.Token;
+    }
+
+    private void CancelTouchKeyboardOp()
+    {
+        _touchKeyboardOp?.Cancel();
+        _touchKeyboardOp?.Dispose();
+        _touchKeyboardOp = null;
     }
 
     private void SetKeyboardPriority(bool yield)
@@ -141,17 +170,25 @@ public partial class FanScreen
 
     private async void OnTouchKeyboardClick(object sender, RoutedEventArgs e)
     {
+        if (_fan is not { IsRenamingProfile: true }) return;
         if (ProfileNameBox.IsVisible) ProfileNameBox.Focus();
 
+        var session = _renameSession;
+        var token = ResetTouchKeyboardOp();
         var hwnd = WindowHandle();
         var wasVisible = QuickActions.IsTouchKeyboardVisible();
-        await QuickActions.ToggleTouchKeyboardAsync(hwnd);
-        if (!wasVisible && QuickActions.IsTouchKeyboardVisible())
-            _openedTouchKeyboard = true;
-        else if (wasVisible && !QuickActions.IsTouchKeyboardVisible())
-            _openedTouchKeyboard = false;
+        var toggled = await QuickActions.ToggleTouchKeyboardAsync(hwnd, token);
+        if (!toggled) return;
 
-        if (_fan is { IsRenamingProfile: true } && IsVisible && ProfileNameBox.IsVisible)
+        if (token.IsCancellationRequested || session != _renameSession || _fan is not { IsRenamingProfile: true })
+        {
+            if (!wasVisible) QuickActions.HideTouchKeyboard(hwnd);
+            return;
+        }
+
+        _openedTouchKeyboard = !wasVisible;
+
+        if (IsVisible && ProfileNameBox.IsVisible)
             ProfileNameBox.Focus();
     }
 

@@ -494,8 +494,8 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board, string? fan
         return temperatures[^1] > temperatures[0];
     }
 
-    /// <summary>Returns the board's custom temperatures if valid and strictly below critical (<c>table[2]</c>).</summary>
-    private static IReadOnlyList<int>? TargetTemperaturesFor(FanCurveLimits limits, byte[] tempTable)
+    /// <summary>Returns the board's custom temperatures if valid and safely below critical (<c>table[2]</c>).</summary>
+    private IReadOnlyList<int>? TargetTemperaturesFor(FanCurveLimits limits, byte[] tempTable)
     {
         if (limits.CustomTemperatures is not { Count: CurvePoints } custom) return null;
         for (var i = 0; i < custom.Count; i++)
@@ -505,7 +505,8 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board, string? fan
         }
 
         var critical = tempTable[CriticalTempIndex];
-        if (critical is >= 80 and <= 120 && custom[^1] >= critical) return null;
+        var ceiling = board.FanTemperatures.OverflowIndex is not null ? critical - 2 : critical - 1;
+        if (critical is >= 80 and <= 120 && custom[^1] > ceiling) return null;
 
         return custom;
     }
@@ -517,7 +518,8 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board, string? fan
 
         var critical = tempTable[CriticalTempIndex];
         var ceiling = critical is >= 80 and <= 120 ? critical - 2 : HottestPoint;
-        return Math.Clamp(temperatures[^1] + 5, temperatures[^1], ceiling);
+        var floor = Math.Min(temperatures[^1], ceiling);
+        return Math.Clamp(temperatures[^1] + 5, floor, ceiling);
     }
 
     /// <summary>Absolute falling thresholds: <paramref name="hysteresis"/> °C below each rising point.</summary>
@@ -543,8 +545,11 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board, string? fan
         if (!LoadFanEntry()) return false;
         if (_fanEntry?.TablesMayBeCustom == mayBeCustom) return true;
 
-        _fanEntry = (_fanEntry ?? new(board.Model, null, null, null, false)) with { TablesMayBeCustom = mayBeCustom };
-        return _stockFile.Save(_fanEntry);
+        var next = (_fanEntry ?? new(board.Model, null, null, null, false)) with { TablesMayBeCustom = mayBeCustom };
+        if (!_stockFile.Save(next)) return false;
+
+        _fanEntry = next;
+        return true;
     }
 
     private string? FirmwareBuild() => _firmwareBuild ??= ReadFirmwareBuild();
@@ -726,7 +731,7 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board, string? fan
         if (!kept.Accepted || kept.Data.Length < FanTableLength || !Curve(kept.Data).SequenceEqual(Curve(wanted)))
             throw new FirmwareException(
                 $"The firmware did not keep fan {fan}'s curve: wrote {Convert.ToHexString(wanted)}, " +
-                $"read {(kept.Accepted ? Convert.ToHexString(kept.Data, 0, FanTableLength) : "nothing")}.");
+                $"read {(kept.Accepted ? Convert.ToHexString(kept.Data, 0, Math.Min(kept.Data.Length, FanTableLength)) : "nothing")}.");
     }
 
     /// <summary>Writes rising temperatures into a fan's table, preserving critical byte 2 and untouched bytes, then reads back.</summary>
@@ -742,7 +747,7 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board, string? fan
         if (!kept.Accepted || kept.Data.Length < FanTableLength || !TemperatureSlotsMatch(kept.Data, wanted))
             throw new FirmwareException(
                 $"The firmware did not keep fan {fan}'s temperatures: wrote {Convert.ToHexString(wanted)}, " +
-                $"read {(kept.Accepted ? Convert.ToHexString(kept.Data, 0, FanTableLength) : "nothing")}.");
+                $"read {(kept.Accepted ? Convert.ToHexString(kept.Data, 0, Math.Min(kept.Data.Length, FanTableLength)) : "nothing")}.");
     }
 
     /// <summary>Writes falling hysteresis bytes 1–6, preserving byte 0, then reads back.</summary>
@@ -758,7 +763,7 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board, string? fan
         if (!kept.Accepted || kept.Data.Length < ThermalTableLength || !FallingSlice(kept.Data).SequenceEqual(FallingSlice(wanted)))
             throw new FirmwareException(
                 $"The firmware did not keep fan {fan}'s hysteresis: wrote {Convert.ToHexString(wanted)}, " +
-                $"read {(kept.Accepted ? Convert.ToHexString(kept.Data, 0, ThermalTableLength) : "nothing")}.");
+                $"read {(kept.Accepted ? Convert.ToHexString(kept.Data, 0, Math.Min(kept.Data.Length, ThermalTableLength)) : "nothing")}.");
     }
 
     private static ReadOnlySpan<byte> Curve(byte[] table) => table.AsSpan(FirstSpeed, CurvePoints);

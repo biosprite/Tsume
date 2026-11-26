@@ -557,7 +557,7 @@ public sealed class FanCurveEditor : Control
         var panel = Find("Panel.Fill");
 
         // The chosen column, while the curve has the focus or a finger.
-        if ((IsKeyboardFocused || _dragging) && Chosen >= 0)
+        if ((IsKeyboardFocused || _dragging) && Chosen >= 0 && layout.Column > 4)
         {
             var x = layout.X(Chosen);
             dc.DrawRoundedRectangle(surface, null,

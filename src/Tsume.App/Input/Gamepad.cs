@@ -142,55 +142,62 @@ public sealed class Gamepad : IDisposable
 
     private void Watch()
     {
-        var presses = new PadPresses();
-        WaitHandle[] pauseOrStop = [_active.WaitHandle, _stop.Token.WaitHandle];
-
-        while (!_stop.IsCancellationRequested)
+        try
         {
-            if (!_active.IsSet)
-            {
-                if (WaitHandle.WaitAny(pauseOrStop) != 0) break;
-                continue;
-            }
+            var presses = new PadPresses();
+            var stopToken = _stop.Token;
+            WaitHandle[] pauseOrStop = [_active.WaitHandle, stopToken.WaitHandle];
 
-            var remainingMs = Volatile.Read(ref _resumeAfterTick) - Environment.TickCount64;
-            if (remainingMs > 0)
+            while (!stopToken.IsCancellationRequested)
             {
-                _stop.Token.WaitHandle.WaitOne((int)Math.Min(remainingMs, 250));
-                continue;
-            }
-
-            if (_resetOnResume)
-            {
-                _resetOnResume = false;
-                presses = new PadPresses();
-                _latchedActions.Clear();
-            }
-
-            try
-            {
-                var navigating = IsNavigating && !SuppressNavigation;
-                var skipSlotZero = navigating && SuppressBuiltInSlot;
-                var (summoned, pressed) = presses.Step(ReadButtons(skipSlotZero), navigating, DateTime.UtcNow);
-
-                if (summoned) Summoned?.Invoke();
-                foreach (var button in Each(pressed)) Pressed?.Invoke(button);
-
-                PollDedicatedActions();
-            }
-            catch (Exception error)
-            {
-                if (!_loggedWatchError)
+                if (!_active.IsSet)
                 {
-                    _loggedWatchError = true;
-                    Errors.Write($"Gamepad watch failed: {error}");
+                    if (WaitHandle.WaitAny(pauseOrStop) != 0) break;
+                    continue;
                 }
 
-                _stop.Token.WaitHandle.WaitOne(ErrorBackoff);
-                continue;
-            }
+                var remainingMs = Volatile.Read(ref _resumeAfterTick) - Environment.TickCount64;
+                if (remainingMs > 0)
+                {
+                    stopToken.WaitHandle.WaitOne((int)Math.Min(remainingMs, 250));
+                    continue;
+                }
 
-            _stop.Token.WaitHandle.WaitOne(IsNavigating ? ActivePoll : IdlePoll);
+                if (_resetOnResume)
+                {
+                    _resetOnResume = false;
+                    presses = new PadPresses();
+                    _latchedActions.Clear();
+                }
+
+                try
+                {
+                    var navigating = IsNavigating && !SuppressNavigation;
+                    var skipSlotZero = navigating && SuppressBuiltInSlot;
+                    var (summoned, pressed) = presses.Step(ReadButtons(skipSlotZero), navigating, DateTime.UtcNow);
+
+                    if (summoned) Summoned?.Invoke();
+                    foreach (var button in Each(pressed)) Pressed?.Invoke(button);
+
+                    PollDedicatedActions();
+                }
+                catch (Exception error)
+                {
+                    if (!_loggedWatchError)
+                    {
+                        _loggedWatchError = true;
+                        Errors.Write($"Gamepad watch failed: {error}");
+                    }
+
+                    stopToken.WaitHandle.WaitOne(ErrorBackoff);
+                    continue;
+                }
+
+                stopToken.WaitHandle.WaitOne(IsNavigating ? ActivePoll : IdlePoll);
+            }
+        }
+        catch (ObjectDisposedException)
+        {
         }
     }
 
@@ -339,9 +346,13 @@ public sealed class Gamepad : IDisposable
 
     public void Dispose()
     {
-        _stop.Cancel();
-        _thread.Join(TimeSpan.FromMilliseconds(250));
-        _active.Dispose();
-        _stop.Dispose();
+        try { _stop.Cancel(); }
+        catch (ObjectDisposedException) { return; }
+
+        if (_thread.Join(TimeSpan.FromMilliseconds(250)))
+        {
+            _active.Dispose();
+            _stop.Dispose();
+        }
     }
 }

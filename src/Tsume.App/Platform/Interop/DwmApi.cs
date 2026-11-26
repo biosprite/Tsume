@@ -34,8 +34,13 @@ internal static partial class DwmApi
     [LibraryImport("dwmapi.dll")]
     public static partial int DwmSetWindowAttribute(nint window, uint attribute, in int value, int size);
 
+    public const int RGN_DIFF = 4;
+
     [LibraryImport("gdi32.dll")]
     public static partial nint CreateRectRgn(int left, int top, int right, int bottom);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial int CombineRgn(nint dest, nint src1, nint src2, int mode);
 
     [LibraryImport("gdi32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

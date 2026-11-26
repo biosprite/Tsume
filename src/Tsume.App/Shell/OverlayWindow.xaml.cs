@@ -53,8 +53,13 @@ public partial class OverlayWindow
 
     /// <summary>What had focus as each layer opened, so focus can go back there as each one closes.</summary>
     private readonly Stack<IInputElement?> _focusBeneath = new();
+    private readonly DispatcherTimer _keyboardAvoidance = new() { Interval = TimeSpan.FromMilliseconds(60) };
     private bool _resettingLayers;
     private bool _yieldToKeyboard;
+    private bool _keyboardClearedHeight;
+    private bool _hasWindowRegion;
+    private User32.RECT _cutoutKeyboardRect;
+    private User32.RECT _cutoutWindowRect;
 
     /// <param name="stayOpen">Development aid: keep the panel up when it loses focus.</param>
     public OverlayWindow(PanelViewModel panel, bool stayOpen = false)
@@ -72,6 +77,7 @@ public partial class OverlayWindow
         Deactivated += (_, _) => OnWindowDeactivated();
         _settling.Tick += (_, _) => HoldTheFront();
         _awaitingRelease.Tick += (_, _) => OnAwaitingReleaseTick();
+        _keyboardAvoidance.Tick += (_, _) => SyncKeyboardAvoidance();
         _zOrderChanges.Changed += StayOverTaskbar;
 
         foreach (var layer in panel.Layers) layer.PropertyChanged += OnLayerMoved;
@@ -99,30 +105,141 @@ public partial class OverlayWindow
     }
 
     /// <summary>
-    /// Temporarily yields UIAccess topmost priority while editing text (such as renaming a custom fan profile)
-    /// so Windows' on-screen keyboard renders above the panel, then restores full topmost priority when done.
+    /// Clears room for Windows' touch/on-screen keyboard during inline text entry without ever clearing
+    /// <c>WS_EX_TOPMOST</c>.
     /// </summary>
+    // WARNING: Never set Topmost = false or call SetWindowPos(..., HWND_NOTOPMOST) here or anywhere else on
+    // OverlayWindow. Clearing WS_EX_TOPMOST demotes a UIAccess HWND from ZBID_UIACCESS (band 2) down to
+    // ZBID_DESKTOP (band 1), which breaks overlays over fullscreen apps (e.g. Steam Big Picture minimizes and
+    // raises the taskbar when a band-1 window takes foreground). Keep the window in band 2 and clear room for
+    // the touch keyboard by adjusting Height or clipping with SetWindowRgn instead.
     public void SetYieldToKeyboard(bool yield)
     {
         if (_yieldToKeyboard == yield) return;
         _yieldToKeyboard = yield;
 
-        var handle = new WindowInteropHelper(this).Handle;
         if (yield)
         {
-            Topmost = false;
-            if (handle != 0)
-            {
-                User32.SetWindowPos(handle, User32.HWND_NOTOPMOST, 0, 0, 0, 0,
-                    User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE);
-            }
+            SyncKeyboardAvoidance();
+            _keyboardAvoidance.Start();
         }
         else
         {
-            Topmost = true;
-            if (IsOpen && handle != 0) RaiseAboveEverything();
+            _keyboardAvoidance.Stop();
+            ClearKeyboardAvoidance(restoreHeight: IsOpen);
+            if (IsOpen && new WindowInteropHelper(this).Handle != 0) RaiseAboveEverything();
         }
     }
+
+    private void SyncKeyboardAvoidance()
+    {
+        if (!IsOpen || !_yieldToKeyboard)
+        {
+            _keyboardAvoidance.Stop();
+            ClearKeyboardAvoidance(restoreHeight: IsOpen);
+            return;
+        }
+
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == 0 || !Platform.QuickActions.TryGetTouchKeyboardRect(out var kbRect))
+        {
+            ClearKeyboardAvoidance(restoreHeight: true);
+            return;
+        }
+
+        if (!User32.GetWindowRect(handle, out var winRect)) return;
+
+        // No overlap with the panel's horizontal span: keep full panel height.
+        if (kbRect.Right <= winRect.Left || kbRect.Left >= winRect.Right)
+        {
+            ClearKeyboardAvoidance(restoreHeight: true);
+            return;
+        }
+
+        var screenHeightPx = User32.GetSystemMetrics(User32.SM_CYSCREEN);
+        if (screenHeightPx <= 0) return;
+
+        // Standard bottom-docked touch keyboard: shrink the window cleanly above it so rounded corners and shadow stay intact.
+        if (kbRect.Bottom >= screenHeightPx - 48 && kbRect.Top > screenHeightPx / 5)
+        {
+            ClearWindowRegion(handle);
+
+            var dpi = VisualTreeHelper.GetDpi(this);
+            var fullHeight = ScreenHeight();
+            if (fullHeight <= 0 || dpi.DpiScaleY <= 0) return;
+
+            var scale = Fit.ScaleY > 0 ? Fit.ScaleY : 1;
+            var minHeight = Math.Min(fullHeight, 180 * scale);
+            var targetHeight = Math.Clamp(kbRect.Top / dpi.DpiScaleY, minHeight, fullHeight);
+            if (Math.Abs(Height - targetHeight) > 0.5) Height = targetHeight;
+            _keyboardClearedHeight = targetHeight < fullHeight - 0.5;
+            return;
+        }
+
+        // Top-docked or floating keyboard with a reported rect: keep full height and punch out its rect from our window region.
+        if (_keyboardClearedHeight)
+        {
+            RestoreFullHeight();
+            if (!User32.GetWindowRect(handle, out winRect)) return;
+        }
+
+        if (_hasWindowRegion && RectsEqual(_cutoutKeyboardRect, kbRect) && RectsEqual(_cutoutWindowRect, winRect))
+            return;
+
+        var winWidth = winRect.Right - winRect.Left;
+        var winHeight = winRect.Bottom - winRect.Top;
+        if (winWidth <= 0 || winHeight <= 0) return;
+
+        var fullRegion = DwmApi.CreateRectRgn(0, 0, winWidth, winHeight);
+        var kbRegion = DwmApi.CreateRectRgn(
+            kbRect.Left - winRect.Left,
+            kbRect.Top - winRect.Top,
+            kbRect.Right - winRect.Left,
+            kbRect.Bottom - winRect.Top);
+        var diffRegion = DwmApi.CreateRectRgn(0, 0, 0, 0);
+
+        DwmApi.CombineRgn(diffRegion, fullRegion, kbRegion, DwmApi.RGN_DIFF);
+        DwmApi.DeleteObject(fullRegion);
+        DwmApi.DeleteObject(kbRegion);
+
+        if (User32.SetWindowRgn(handle, diffRegion, redraw: true) != 0)
+        {
+            _hasWindowRegion = true;
+            _cutoutKeyboardRect = kbRect;
+            _cutoutWindowRect = winRect;
+        }
+        else
+        {
+            DwmApi.DeleteObject(diffRegion);
+        }
+    }
+
+    private void ClearKeyboardAvoidance(bool restoreHeight)
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle != 0) ClearWindowRegion(handle);
+        if (restoreHeight && _keyboardClearedHeight) RestoreFullHeight();
+        else if (!restoreHeight) _keyboardClearedHeight = false;
+    }
+
+    private void RestoreFullHeight()
+    {
+        _keyboardClearedHeight = false;
+        var fullHeight = ScreenHeight();
+        if (fullHeight > 0 && Math.Abs(Height - fullHeight) > 0.5) Height = fullHeight;
+    }
+
+    private void ClearWindowRegion(nint handle)
+    {
+        if (!_hasWindowRegion) return;
+        _hasWindowRegion = false;
+        _cutoutKeyboardRect = default;
+        _cutoutWindowRect = default;
+        User32.SetWindowRgn(handle, 0, redraw: true);
+    }
+
+    private static bool RectsEqual(User32.RECT a, User32.RECT b) =>
+        a.Left == b.Left && a.Top == b.Top && a.Right == b.Right && a.Bottom == b.Bottom;
 
     private bool IsRightSide => _panel.Settings.Controls.OpenOnRight;
     private bool RememberLastPage => _panel.Settings.Controls.RememberLastPage;
@@ -135,6 +252,7 @@ public partial class OverlayWindow
         if (e.PropertyName != nameof(ControlsViewModel.OpenOnRight) || !IsOpen) return;
 
         PlaceOnScreen();
+        if (_yieldToKeyboard) SyncKeyboardAvoidance();
         Slide.Snap(TranslateTransform.XProperty, OffscreenX / 2);
         Slide.Animate(TranslateTransform.XProperty, 0, Motion.Arrive, Motion.Glide);
     }
@@ -185,11 +303,28 @@ public partial class OverlayWindow
         if (!awaitRelease) _settling.Start();
 
         // Activate on a real open, even if an early-boot WarmUp() has not finished hiding yet.
-        _yieldToKeyboard = false;
-        Topmost = true;
+        var yieldToKeyboard = Input.TextInputMode.IsActive;
+        _yieldToKeyboard = yieldToKeyboard;
+        if (!yieldToKeyboard)
+        {
+            _keyboardAvoidance.Stop();
+            ClearKeyboardAvoidance(restoreHeight: false);
+
+            // Promote into ZBID_UIACCESS before Show() activates the window so the very first open never
+            // steals foreground from a fullscreen app while still in ZBID_DESKTOP (band 1).
+            new WindowInteropHelper(this).EnsureHandle();
+            RaiseAboveEverything();
+        }
+
         ShowActivated = !awaitRelease;
         Show();
-        RaiseAboveEverything();
+        if (!yieldToKeyboard) RaiseAboveEverything();
+        else
+        {
+            SyncKeyboardAvoidance();
+            _keyboardAvoidance.Start();
+        }
+
         if (awaitRelease) AwaitRelease();
         else _tookAtOnce = ForegroundWindow.Take(this);
         _zOrderChanges.Start();
@@ -252,6 +387,7 @@ public partial class OverlayWindow
 
         ShowActivated = false;   // whatever is in front keeps the focus
         Show();
+        RaiseAboveEverything();  // promote into ZBID_UIACCESS while invisible so first real open never activates in band 1
 
         // Run the entrance animation too, with the stage left transparent.
         Motion.AfterFrames(2, () => { if (!IsOpen) MoveIn(); });
@@ -485,9 +621,10 @@ public partial class OverlayWindow
         var closing = _closing = new TaskCompletionSource();
         OpenChanged?.Invoke(false);
 
-        // Close any floating popup immediately; layers stay visually frozen until the panel is hidden
-        // so dismissing never flashes the main screen mid-slide.
+        // Close any floating popup or active inline rename immediately; layers stay visually frozen until the
+        // panel is hidden so dismissing never flashes the main screen mid-slide.
         Controls.KeyDropdown.CloseIfOpen();
+        if (_panel.Fan.IsRenamingProfile) _panel.Fan.CancelRename.Execute(null);
 
         var finished = false;
         var fallback = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
@@ -502,9 +639,10 @@ public partial class OverlayWindow
             {
                 ForgetFocus();
                 _zOrderChanges.Stop();
+                _keyboardAvoidance.Stop();
                 if (IsVisible) Hide();
                 _yieldToKeyboard = false;
-                Topmost = true;
+                ClearKeyboardAvoidance(restoreHeight: false);
                 DisplayClock.KeepAwake(false);
                 RightOfWay.Yield();
                 SettleLayersAfterHide();
@@ -545,9 +683,10 @@ public partial class OverlayWindow
         {
             Controls.KeyDropdown.CloseIfOpen();
             ForgetFocus();
+            _keyboardAvoidance.Stop();
             if (IsVisible) Hide();
             _yieldToKeyboard = false;
-            Topmost = true;
+            ClearKeyboardAvoidance(restoreHeight: false);
             SettleLayersAfterHide();
             _panel.OnClosed();
         }

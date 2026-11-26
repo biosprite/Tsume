@@ -8,16 +8,21 @@ namespace Tsume.App.Platform;
 /// </summary>
 internal static class FullScreenExperience
 {
+    private static volatile bool _unavailable;
+
     public static bool IsActive
     {
         get
         {
+            if (_unavailable) return false;
+
             try
             {
                 return IsGamingFullScreenExperienceActive();
             }
             catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException)
             {
+                _unavailable = true;
                 return false;
             }
         }

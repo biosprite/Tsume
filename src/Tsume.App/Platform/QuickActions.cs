@@ -90,25 +90,32 @@ public static class QuickActions
     }
 
     /// <summary>Shows or hides the Windows touch keyboard without blocking the UI thread if TabTip needs to start.</summary>
-    public static async Task ToggleTouchKeyboardAsync(nint window = 0)
+    public static async Task<bool> ToggleTouchKeyboardAsync(nint window = 0, CancellationToken cancellationToken = default)
     {
-        if (TryToggleTouchKeyboard(window)) return;
+        if (TryToggleTouchKeyboard(window)) return true;
 
         WakeTouchKeyboardHost();
-        await Task.Delay(400);
-        TryToggleTouchKeyboard(window);
+        try { await Task.Delay(400, cancellationToken); }
+        catch (OperationCanceledException) { return false; }
+
+        return !cancellationToken.IsCancellationRequested && TryToggleTouchKeyboard(window);
     }
 
     /// <summary>
     /// Ensures the Windows touch keyboard is visible, without toggling it off if it is already shown.
     /// Returns true if this call opened it.
     /// </summary>
-    public static async Task<bool> ShowTouchKeyboardAsync(nint window = 0)
+    public static async Task<bool> ShowTouchKeyboardAsync(nint window = 0, CancellationToken cancellationToken = default)
     {
         if (IsTouchKeyboardVisible()) return false;
+        if (TryToggleTouchKeyboard(window)) return true;
 
-        await ToggleTouchKeyboardAsync(window);
-        return true;
+        WakeTouchKeyboardHost();
+        try { await Task.Delay(400, cancellationToken); }
+        catch (OperationCanceledException) { return false; }
+
+        if (cancellationToken.IsCancellationRequested || IsTouchKeyboardVisible()) return false;
+        return TryToggleTouchKeyboard(window);
     }
 
     /// <summary>Dismisses the Windows touch keyboard if it is currently visible.</summary>
@@ -118,17 +125,28 @@ public static class QuickActions
     }
 
     /// <summary>True when Windows' touch keyboard input pane is currently shown on screen.</summary>
-    public static bool IsTouchKeyboardVisible()
+    public static bool IsTouchKeyboardVisible() => TryGetTouchKeyboardRect(out _);
+
+    /// <summary>Gets the screen pixel bounds of Windows' touch keyboard input pane when it is visible.</summary>
+    internal static bool TryGetTouchKeyboardRect(out User32.RECT rect)
     {
+        IFrameworkInputPane? pane = null;
         try
         {
-            var pane = (IFrameworkInputPane)new FrameworkInputPane();
-            return pane.Location(out var rect) == 0 && rect.Right > rect.Left && rect.Bottom > rect.Top;
+            pane = (IFrameworkInputPane)new FrameworkInputPane();
+            if (pane.Location(out rect) == 0 && rect.Right > rect.Left && rect.Bottom > rect.Top)
+                return true;
         }
         catch (COMException)
         {
-            return false;
         }
+        finally
+        {
+            if (pane is not null) Marshal.ReleaseComObject(pane);
+        }
+
+        rect = default;
+        return false;
     }
 
     /// <summary>True if <paramref name="window"/> belongs to Windows' on-screen / touch keyboard host.</summary>
@@ -200,9 +218,9 @@ public static class QuickActions
     [ComImport, Guid("5752238B-24F0-495A-82F1-2FD593056796"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IFrameworkInputPane
     {
-        int Advise(nint pWindow, nint pHandler, out uint pdwCookie);
-        int AdviseWithHWND(nint hwnd, nint pHandler, out uint pdwCookie);
-        int Unadvise(uint dwCookie);
-        int Location(out User32.RECT prcInputPaneScreenLocation);
+        [PreserveSig] int Advise(nint pWindow, nint pHandler, out uint pdwCookie);
+        [PreserveSig] int AdviseWithHWND(nint hwnd, nint pHandler, out uint pdwCookie);
+        [PreserveSig] int Unadvise(uint dwCookie);
+        [PreserveSig] int Location(out User32.RECT prcInputPaneScreenLocation);
     }
 }

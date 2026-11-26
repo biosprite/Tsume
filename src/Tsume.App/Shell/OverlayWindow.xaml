@@ -18,7 +18,10 @@
 
   <!-- A transparent window pinned to the left edge; Stage is what slides in and out.
        Transparency comes from Shell/SeeThrough, not AllowsTransparency.
-       Everything inside Fit is laid out for an 800-unit-tall screen, then scaled to the real one. -->
+       Everything inside Fit is laid out for an 800-unit-tall screen, then scaled to the real one.
+       WARNING: Never toggle Topmost="False" or call SetWindowPos(..., HWND_NOTOPMOST) on this window.
+       Clearing WS_EX_TOPMOST demotes a UIAccess window out of ZBID_UIACCESS (band 2) into ZBID_DESKTOP
+       (band 1), causing fullscreen apps like Steam Big Picture to minimize and raise the taskbar. -->
 
   <Grid>
     <Grid.LayoutTransform>
