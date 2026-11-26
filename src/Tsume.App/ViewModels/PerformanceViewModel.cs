@@ -965,6 +965,9 @@ public sealed class PerformanceViewModel : Observable
     private bool IsBatteryCapOf(PowerLimits read) =>
         Device.BatteryCap is not null && Device.ManualRange is { } range && read == Device.CapForBattery(range.Clamp(Manual));
 
+    /// <summary>Raised whenever a helper reply carries a live hardware snapshot, so other screens stay in sync.</summary>
+    public event Action<HelperReply>? SnapshotReceived;
+
     /// <summary>Shows a helper reply. The mode and manual limits are taken from it only when <paramref name="adoptMode"/> is set.</summary>
     /// <param name="fanReply">The answer to a fan request, so its fan mode is the newest there is.</param>
     private void Absorb(HelperReply reply, bool adoptMode = false, bool fanReply = false)
@@ -981,6 +984,8 @@ public sealed class PerformanceViewModel : Observable
             _curveSought = false;   // ask again once the helper is back
             return;
         }
+
+        SnapshotReceived?.Invoke(reply);
 
         // A reading taken before a fan request was answered would put the old mode back for a moment.
         if (fanReply || !IsFanBusy) TakeFan(snapshot.Fan);

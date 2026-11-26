@@ -13,21 +13,24 @@ namespace Tsume.App.ViewModels;
 public sealed class ChargeLimitViewModel : Observable
 {
     private readonly HelperClient _helper;
+    private readonly SavedState _state;
     private int? _resumeGap;
 
     /// <summary>Counts choices made here, so a reply requested before a choice cannot undo it.</summary>
     private int _changes;
+    private int _pendingApplies;
     private bool _absorbing;
 
     public ChargeLimitViewModel(HelperClient helper, SavedState state)
     {
         _helper = helper;
+        _state = state;
         Choices = state.Device?.ChargeLimits ?? [];
         _resumeGap = state.Device?.ChargeResumeGap;
 
-        // Until the firmware is read, show the last choice: charge to full.
+        // Start on the last known firmware limit (or full if never read) so Settings opens already settled.
         _absorbing = true;
-        Index = Choices.Count - 1;
+        Index = IndexFor(state.ChargeLimit ?? 100);
         _absorbing = false;
     }
 
@@ -135,18 +138,33 @@ public sealed class ChargeLimitViewModel : Observable
         if (_changes == changesBefore) Absorb(reply);
     }
 
+    /// <summary>Adopts a snapshot already fetched by another view model (e.g. panel open), unless a change is in flight.</summary>
+    public void AbsorbSnapshot(HelperReply reply)
+    {
+        if (_pendingApplies > 0 || reply.Snapshot is null) return;
+        Absorb(reply);
+    }
+
     private async void Apply(int percent)
     {
         var changesBefore = _changes;
-        var reply = await _helper.SendAsync(new SetChargeLimit(percent));
+        _pendingApplies++;
+        try
+        {
+            var reply = await _helper.SendAsync(new SetChargeLimit(percent));
 
-        if (_changes != changesBefore) return;   // a newer choice is on its way
+            if (_changes != changesBefore) return;   // a newer choice is on its way
 
-        // Refused, or not kept: show what the firmware really holds, not what was asked for.
-        if (reply.Snapshot is null) reply = await _helper.SendAsync(new GetSnapshot());
-        if (_changes == changesBefore) Absorb(reply);
+            // Refused, or not kept: show what the firmware really holds, not what was asked for.
+            if (reply.Snapshot is null) reply = await _helper.SendAsync(new GetSnapshot());
+            if (_changes == changesBefore) Absorb(reply);
 
-        RefreshStatus();
+            RefreshStatus();
+        }
+        finally
+        {
+            _pendingApplies--;
+        }
     }
 
     private void Absorb(HelperReply reply)
@@ -167,10 +185,25 @@ public sealed class ChargeLimitViewModel : Observable
         // No firmware limit means charge to full. A level set elsewhere that is
         // not among the choices shows as the nearest one.
         var inForce = snapshot.ChargeLimit ?? 100;
-        var nearest = Choices.MinBy(choice => Math.Abs(choice - inForce));
+        if (_state.ChargeLimit != inForce)
+        {
+            _state.ChargeLimit = inForce;
+            _state.Save();
+        }
 
         _absorbing = true;
-        Index = Choices.ToList().IndexOf(nearest);
+        Index = IndexFor(inForce);
         _absorbing = false;
+    }
+
+    private int IndexFor(int percent)
+    {
+        if (Choices.Count == 0) return -1;
+
+        var nearest = Choices.MinBy(choice => Math.Abs(choice - percent));
+        for (var i = 0; i < Choices.Count; i++)
+            if (Choices[i] == nearest) return i;
+
+        return Choices.Count - 1;
     }
 }

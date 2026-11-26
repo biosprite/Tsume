@@ -120,10 +120,11 @@ public sealed class SegmentedControl : Control
 
         var width = _labels.ActualWidth / Segments.Count;
         var x = width * SelectedIndex;
+        var shouldAnimate = animate && IsVisible && _labels.ActualWidth > 0;
 
         _thumb.Width = width;
 
-        if (animate) _slide.Animate(TranslateTransform.XProperty, x, Motion.Smooth, Motion.Spring);
+        if (shouldAnimate) _slide.Animate(TranslateTransform.XProperty, x, Motion.Smooth, Motion.Spring);
         else _slide.Snap(TranslateTransform.XProperty, x);
 
         for (var i = 0; i < _labels.Children.Count; i++)
@@ -135,7 +136,7 @@ public sealed class SegmentedControl : Control
 
             label.Opacity = disabled ? 0.35 : 1.0;
             brush.BeginAnimation(SolidColorBrush.ColorProperty,
-                new ColorAnimation(colour, animate ? Motion.Smooth : TimeSpan.Zero));
+                new ColorAnimation(colour, shouldAnimate ? Motion.Smooth : TimeSpan.Zero));
         }
     }
 

@@ -113,6 +113,9 @@ public sealed class SavedState
     /// <summary>The helper's last device profile, so the panel can lay out before the helper answers. Null until it first has.</summary>
     public DeviceProfile? Device { get; set; }
 
+    /// <summary>The last known firmware charge limit percentage, so Settings opens on it without waiting for the helper.</summary>
+    public int? ChargeLimit { get; set; }
+
     /// <summary>Whether the OptiScaler tile is on the main screen. Hiding it uninstalls nothing.</summary>
     public bool ShowOptiScaler { get; set; } = true;
 

@@ -31,6 +31,7 @@ public sealed class PanelViewModel : IDisposable
         _rtssService = new RtssOverlayService(helper, state);
 
         Settings = new SettingsViewModel(helper, state, Performance, dismiss, _rtssService.SetFeatureEnabled);
+        Performance.SnapshotReceived += Settings.ChargeLimit.AbsorbSnapshot;
         Lighting = new LightingViewModel(Performance);
         PadMode = new PadModeViewModel(padIsolation);
         Upscaling = new UpscalingViewModel(dismiss);
