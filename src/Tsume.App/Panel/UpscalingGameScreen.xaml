@@ -107,7 +107,7 @@
                          Text="{Binding AntiCheatWarning}" />
             </DockPanel>
           </Border>
-          <controls:Tile Style="{StaticResource Tile.Row}" Margin="-4,0,-4,0" controls:Screen.TakesFocus="True"
+          <controls:Tile Style="{StaticResource Tile.Row}" Margin="0" controls:Screen.TakesFocus="True"
                          Glyph="{x:Static theme:Glyphs.Tick}" Label="{x:Static lang:Strings.AcceptAntiCheat}"
                          AutomationProperties.HelpText="{Binding AntiCheatWarning}"
                          IsEnabled="{Binding CanAct}"

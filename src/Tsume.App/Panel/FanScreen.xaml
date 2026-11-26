@@ -44,7 +44,7 @@
         </controls:Reveal>
 
         <!-- Editable on Custom; on Auto it shows the machine's own curve, on Max full speed. -->
-        <controls:FanCurveEditor Margin="0,10,0,0"
+        <controls:FanCurveEditor x:Name="CurveEditor" Margin="0,10,0,0"
                                  AutomationProperties.Name="{x:Static lang:Strings.FanCurve}"
                                  Visibility="{Binding CurveShown, Converter={StaticResource VisibleWhenTrue}}"
                                  Limits="{Binding Limits}"
@@ -69,7 +69,7 @@
                    Text="{Binding Note}"
                    Visibility="{Binding ShowsNote, Converter={StaticResource VisibleWhenTrue}}" />
 
-        <controls:Tile Style="{StaticResource Tile.Row}" Margin="0,14,0,8"
+        <controls:Tile x:Name="ResetTile" Style="{StaticResource Tile.Row}" Margin="0,14,0,8"
                        Glyph="{x:Static theme:Glyphs.Update}"
                        Label="{x:Static lang:Strings.FanReset}"
                        Command="{Binding Reset}"
