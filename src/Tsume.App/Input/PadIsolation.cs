@@ -971,6 +971,21 @@ public sealed class PadIsolation : IDisposable
         if (code < User32.HC_ACTION || !_hooksActive)
             return User32.CallNextHookEx(_keyboardHook, code, wParam, lParam);
 
+        // Let physical keyboards type Space, Enter, Escape, Tab, and arrows freely into focused text boxes.
+        if (TextInputMode.IsActive)
+        {
+            if (_heldKeys != PadButton.None || _confirmKeyDown || _backKeyDown || _tabKeyDown)
+            {
+                _heldKeys = PadButton.None;
+                _pendingKeys = PadButton.None;
+                _confirmKeyDown = false;
+                _backKeyDown = false;
+                _tabKeyDown = false;
+                UpdateHeldFlag();
+            }
+            return User32.CallNextHookEx(_keyboardHook, code, wParam, lParam);
+        }
+
         var info = Marshal.PtrToStructure<User32.KBDLLHOOKSTRUCT>(lParam);
 
         // Never interfere with injected keys (e.g. QuickActions SendChord) or modified system chords (Win+Alt+Q, Alt+Tab, Alt+F4).

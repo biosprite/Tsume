@@ -86,6 +86,10 @@
             <panel:PerformancePresetsScreen />
           </controls:Screen>
 
+          <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Settings.Fan.IsOpen}">
+            <panel:FanScreen />
+          </controls:Screen>
+
           <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Settings.Customization.IsOpen}">
             <panel:CustomizationScreen />
           </controls:Screen>
@@ -108,10 +112,6 @@
 
           <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Settings.Developer.IsOpen}">
             <panel:DeveloperScreen />
-          </controls:Screen>
-
-          <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Fan.IsOpen}">
-            <panel:FanScreen />
           </controls:Screen>
 
           <controls:Screen Margin="18,16,18,16" IsOpen="{Binding Lighting.IsOpen}">

@@ -582,7 +582,7 @@ public sealed class DedicatedActionHook : IDisposable
         {
             _downKeys.Add(downCode);
 
-            if (KeyDropdown.IsAnyOpen)
+            if (KeyDropdown.IsAnyOpen || TextInputMode.IsActive)
                 return User32.CallNextHookEx(_hook, code, wParam, lParam);
 
             DedicatedActionKeys.GamepadInput? padState = null;

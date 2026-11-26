@@ -6,18 +6,23 @@
              xmlns:lang="clr-namespace:Tsume.App.Language"
              Focusable="False">
 
-  <!-- The fan mode, and a custom curve on a chart. Opened from the Fans tile. -->
+  <!-- The fan mode, named custom profiles, and a custom curve on a chart. Opened from Settings. -->
 
-  <DockPanel DataContext="{Binding Fan}">
+  <DockPanel DataContext="{Binding Settings.Fan}">
 
-    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,20">
+    <DockPanel DockPanel.Dock="Top" Height="46" Margin="0,0,0,20">
       <controls:Tile DockPanel.Dock="Left" Style="{StaticResource Tile.Icon}"
                      Glyph="{x:Static theme:Glyphs.Back}"
                      AutomationProperties.Name="{x:Static lang:Strings.Back}"
                      Command="{Binding Close}" />
 
-      <TextBlock Style="{StaticResource Text.Title}" Text="{x:Static lang:Strings.Fans}"
-                 Margin="16,0,0,0" VerticalAlignment="Center" />
+      <WrapPanel VerticalAlignment="Center" Margin="14,0,0,0" MaxHeight="46">
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Style="{StaticResource Text.ScreenCrumb}" Text="{x:Static lang:Strings.Settings}" />
+          <TextBlock Style="{StaticResource Text.ScreenCrumbSeparator}" Text="&gt;" />
+        </StackPanel>
+        <TextBlock Style="{StaticResource Text.ScreenTitle}" Text="{x:Static lang:Strings.Fans}" />
+      </WrapPanel>
     </DockPanel>
 
     <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
@@ -27,7 +32,7 @@
                   VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
       <StackPanel>
 
-        <controls:SegmentedControl controls:Screen.TakesFocus="True"
+        <controls:SegmentedControl x:Name="ModeSelector" controls:Screen.TakesFocus="True"
                                    AutomationProperties.Name="{x:Static lang:Strings.Fans}"
                                    Visibility="{Binding ShowsModes, Converter={StaticResource VisibleWhenTrue}}"
                                    Segments="{Binding Modes}" SelectedIndex="{Binding ModeIndex}"
@@ -37,10 +42,52 @@
 
         <!-- Three custom profiles, on Custom only; the chart below edits the active one. -->
         <controls:Reveal IsOpen="{Binding ShowsProfiles}">
-          <controls:SegmentedControl Margin="0,8,0,0" Height="40"
-                                     AutomationProperties.Name="{x:Static lang:Strings.FanProfiles}"
-                                     Segments="{Binding Profiles}" SelectedIndex="{Binding ProfileIndex}"
-                                     Reselect="{Binding ReselectProfile}" />
+          <Grid Margin="0,8,0,0">
+
+            <DockPanel Visibility="{Binding IsNotRenamingProfile, Converter={StaticResource VisibleWhenTrue}}">
+              <controls:Tile x:Name="RenameButton" DockPanel.Dock="Right"
+                             Style="{StaticResource Tile.MiniIcon}" Width="40" Height="40" Margin="8,0,0,0"
+                             Glyph="{x:Static theme:Glyphs.Edit}"
+                             ToolTip="{x:Static lang:Strings.FanProfileRename}"
+                             AutomationProperties.Name="{x:Static lang:Strings.FanProfileRename}"
+                             Command="{Binding StartRename}" />
+
+              <controls:SegmentedControl x:Name="ProfileSelector" Height="40"
+                                         AutomationProperties.Name="{x:Static lang:Strings.FanProfiles}"
+                                         Segments="{Binding Profiles}" SelectedIndex="{Binding ProfileIndex}"
+                                         Reselect="{Binding ReselectProfile}" />
+            </DockPanel>
+
+            <DockPanel Visibility="{Binding IsRenamingProfile, Converter={StaticResource VisibleWhenTrue}}">
+              <controls:Tile x:Name="CancelRenameButton" DockPanel.Dock="Right"
+                             Style="{StaticResource Tile.MiniIcon}" Width="40" Height="40" Margin="6,0,0,0"
+                             Glyph="{x:Static theme:Glyphs.Quit}"
+                             ToolTip="{x:Static lang:Strings.Cancel}"
+                             AutomationProperties.Name="{x:Static lang:Strings.Cancel}"
+                             Command="{Binding CancelRename}" />
+
+              <controls:Tile x:Name="ConfirmRenameButton" DockPanel.Dock="Right"
+                             Style="{StaticResource Tile.MiniIcon}" Width="40" Height="40" Margin="6,0,0,0"
+                             Glyph="{x:Static theme:Glyphs.Tick}"
+                             ToolTip="{x:Static lang:Strings.FanProfileRenameSave}"
+                             AutomationProperties.Name="{x:Static lang:Strings.FanProfileRenameSave}"
+                             Command="{Binding CommitRename}" />
+
+              <controls:Tile x:Name="TouchKeyboardButton" DockPanel.Dock="Right"
+                             Style="{StaticResource Tile.MiniIcon}" Width="40" Height="40" Margin="6,0,0,0"
+                             Glyph="{x:Static theme:Glyphs.Keyboard}"
+                             ToolTip="{x:Static lang:Strings.Keyboard}"
+                             AutomationProperties.Name="{x:Static lang:Strings.Keyboard}"
+                             Click="OnTouchKeyboardClick" />
+
+              <TextBox x:Name="ProfileNameBox" Style="{StaticResource Input.Text}"
+                       Height="40" MaxLength="20"
+                       AutomationProperties.Name="{x:Static lang:Strings.FanProfileRename}"
+                       Text="{Binding DraftProfileName, UpdateSourceTrigger=PropertyChanged}"
+                       PreviewKeyDown="OnProfileNameKeyDown" />
+            </DockPanel>
+
+          </Grid>
         </controls:Reveal>
 
         <!-- Editable on Custom; on Auto it shows the machine's own curve, on Max full speed. -->

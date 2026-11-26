@@ -84,6 +84,7 @@
     <comment>{0} = refresh rate</comment>
   </data>
   <data name="Fans" xml:space="preserve"><value>Fans</value></data>
+  <data name="FansSettingsDetail" xml:space="preserve"><value>Fan modes and custom curves</value></data>
   <data name="FanAuto" xml:space="preserve"><value>Auto</value></data>
   <data name="FanMax" xml:space="preserve"><value>Max</value></data>
   <data name="FanCustom" xml:space="preserve"><value>Custom</value></data>
@@ -93,14 +94,15 @@
   <data name="FanSaved" xml:space="preserve"><value>Changes apply at once and are kept.</value></data>
   <data name="FanFloorHint" xml:space="preserve"><value>Tsume keeps a minimum fan speed when it gets hot, so the shaded area is off limits.</value></data>
   <data name="FanAutoNote" xml:space="preserve"><value>Auto follows the device's own curve, shown here.</value></data>
-  <data name="FanMaxNote" xml:space="preserve"><value>Max runs the fans at full speed. Turn it off to go back to your curve or Auto.</value></data>
   <data name="FanCurveUnavailable" xml:space="preserve"><value>This device doesn't take a custom fan curve.</value></data>
   <data name="FanCustomElsewhere" xml:space="preserve"><value>The fans are following a custom curve set outside Tsume.</value></data>
   <data name="FanProfiles" xml:space="preserve"><value>Custom fan profiles</value></data>
+  <data name="FanProfileRename" xml:space="preserve"><value>Rename profile</value></data>
+  <data name="FanProfileRenameSave" xml:space="preserve"><value>Save name</value></data>
   <data name="FanStockUnknown" xml:space="preserve"><value>The device's own curve couldn't be read, so Reset to default is off.</value></data>
   <data name="FanProfileAdrift" xml:space="preserve">
-    <value>The fans aren't on Profile {0}'s curve. Pick Profile {0} again to send it.</value>
-    <comment>On the Fans page when the curve in force is not the active profile's; {0} = the profile's number, 1 to 3</comment>
+    <value>The fans aren't on {0}'s curve. Pick {0} again to send it.</value>
+    <comment>On the Fans page when the curve in force is not the active profile's; {0} = the profile's display name</comment>
   </data>
   <data name="FanCustomProfile" xml:space="preserve">
     <value>Custom {0}</value>
@@ -965,8 +967,8 @@
   <data name="DedicatedActionCyclePerformanceDetail" xml:space="preserve"><value>Step through your device's power profiles</value></data>
   <data name="DedicatedActionCycleRefreshRate" xml:space="preserve"><value>Cycle refresh rate</value></data>
   <data name="DedicatedActionCycleRefreshRateDetail" xml:space="preserve"><value>Switch between available display refresh rates</value></data>
-  <data name="DedicatedActionToggleFanBoost" xml:space="preserve"><value>Toggle fan boost</value></data>
-  <data name="DedicatedActionToggleFanBoostDetail" xml:space="preserve"><value>Switch fans between Auto and Max speed</value></data>
+  <data name="DedicatedActionToggleFanBoost" xml:space="preserve"><value>Cycle fan mode</value></data>
+  <data name="DedicatedActionToggleFanBoostDetail" xml:space="preserve"><value>Switch between Auto and your custom fan profiles</value></data>
   <data name="DedicatedActionToggleControllerMode" xml:space="preserve"><value>Controller mode</value></data>
   <data name="DedicatedActionToggleControllerModeDetail" xml:space="preserve"><value>Switch the built-in pad between Gamepad and Cursor mode</value></data>
   <data name="DedicatedActionScreenshot" xml:space="preserve"><value>Screenshot</value></data>

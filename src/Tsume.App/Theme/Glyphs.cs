@@ -69,6 +69,7 @@ public static class Glyphs
     public const string Hide        = "\uED1A";   // eye with slash (hide)
 
     public const string Customize   = "";   // paintbrush
+    public const string Edit        = "\uE70F";   // pencil
     public const string Tick        = "";
     public const string Developer   = "\uE943";   // code brackets </>
     public const string Inspect     = "\uE721";   // magnifying glass / hardware discovery

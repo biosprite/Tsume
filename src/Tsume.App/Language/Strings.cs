@@ -48,6 +48,7 @@ public static class Strings
 
     public static string RefreshRate => Find();
     public static string Fans => Find();
+    public static string FansSettingsDetail => Find();
     public static string FanAuto => Find();
     public static string FanMax => Find();
     public static string FanCustom => Find();
@@ -58,14 +59,15 @@ public static class Strings
     public static string FanSaved => Find();
     public static string FanFloorHint => Find();
     public static string FanAutoNote => Find();
-    public static string FanMaxNote => Find();
     public static string FanCurveUnavailable => Find();
     public static string FanCustomElsewhere => Find();
     public static string FanProfiles => Find();
+    public static string FanProfileRename => Find();
+    public static string FanProfileRenameSave => Find();
     public static string FanStockUnknown => Find();
 
     /// <summary>"The fans aren't on Profile 2's curve. Pick Profile 2 again to send it."</summary>
-    public static string FanProfileAdrift(int profile) => Fill(Find(), profile);
+    public static string FanProfileAdrift(string profile) => Fill(Find(), profile);
 
     /// <summary>"Custom 2", on the main screen's Fans tile.</summary>
     public static string FanCustomProfile(int profile) => Fill(Find(), profile);

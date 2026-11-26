@@ -51,7 +51,7 @@ public sealed class PerformanceViewModel : Observable
         FastBoost = manual.FastBoost ?? Device.ManualRange?.MinFastBoostFor(manual.Boost) ?? 0;
         _absorbing = false;
 
-        CycleFan = new Command(NextFanMode);
+        CycleFanMode = new Command(StepFanMode);
     }
 
     /// <summary>False until the manual sliders hold a chosen value: the user's, or the device's default.</summary>
@@ -106,6 +106,7 @@ public sealed class PerformanceViewModel : Observable
         Notify(nameof(ModeIndex));
         Notify(nameof(ShowsLimitSliders));
         Notify(nameof(FanDetail));
+        Notify(nameof(IsFanActive));
         Notify(nameof(FanLimits));
         if (FanLimits is null) FanCurve = null;
         NotifyLimits();
@@ -475,10 +476,13 @@ public sealed class PerformanceViewModel : Observable
     }
 
     /// <summary>
-    /// Toggles Max. Max is a boost on top of the user's own fan mode, so turning it off goes back to that mode:
-    /// their custom curve if they chose one, otherwise Auto.
+    /// Steps through available fan modes: Auto and each customized custom profile, skipping custom profiles
+    /// that have not been customized.
     /// </summary>
-    public ICommand CycleFan { get; }
+    public ICommand CycleFanMode { get; }
+
+    /// <summary>Raised whenever a custom fan profile is renamed.</summary>
+    public event Action? FanProfileNamesChanged;
 
     /// <summary>The fan mode in force, as the firmware last reported it.</summary>
     public FanMode Fan
@@ -488,18 +492,66 @@ public sealed class PerformanceViewModel : Observable
         {
             if (!Set(ref field, value)) return;
             Notify(nameof(FanDetail));
-            Notify(nameof(IsFanMax));
+            Notify(nameof(IsFanActive));
         }
     }
 
-    public string FanDetail => !IsHelperOnline || !Device.Offers(FanMode.Max) ? Strings.FanUnavailable : Fan switch
+    public string FanDetail => !IsHelperOnline || Device.FanModes.Count == 0 ? Strings.FanUnavailable : WantedFan switch
     {
         FanMode.Max    => Strings.FanMax,
-        FanMode.Custom => FanProfileInForce is { } profile ? Strings.FanCustomProfile(profile + 1) : Strings.FanCustom,
+        FanMode.Custom => (_sendingProfile ?? FanProfileInForce ?? (FanCurve is null ? FanProfile : null)) is { } profile
+            ? FanProfileLabel(profile)
+            : Strings.FanCustom,
         _              => Strings.FanAuto,
     };
 
-    public bool IsFanMax => Fan == FanMode.Max;
+    /// <summary>True while the fans are on a non-Auto mode, lighting up the main tile.</summary>
+    public bool IsFanActive => IsHelperOnline && Device.FanModes.Count > 0 && WantedFan != FanMode.Auto;
+
+    /// <summary>The saved custom name for <paramref name="profile"/>, or null if unnamed.</summary>
+    public string? CustomFanProfileName(int profile) => _state.FanProfileNameIn(profile);
+
+    /// <summary>Display name on the Fans page and main tile: the user's custom name, or "Profile 1"…</summary>
+    public string FanProfileLabel(int profile) =>
+        _state.FanProfileNameIn(profile) ?? Strings.FanProfile(profile + 1);
+
+    /// <summary>Saves a custom name for <paramref name="profile"/>, or clears it back to default when blank.</summary>
+    public void RenameFanProfile(int profile, string? name)
+    {
+        if (profile < 0 || profile >= SavedState.FanProfileCount) return;
+
+        var normalized = name?.Trim();
+        if (string.IsNullOrEmpty(normalized)) normalized = null;
+        else if (normalized.Length > SavedState.MaxFanProfileNameLength)
+            normalized = normalized[..SavedState.MaxFanProfileNameLength].TrimEnd();
+
+        // Treating the default label ("Profile N") as unnamed keeps localization intact.
+        if (normalized is not null && normalized.Equals(Strings.FanProfile(profile + 1), StringComparison.CurrentCultureIgnoreCase))
+            normalized = null;
+
+        if (_state.FanProfileNameIn(profile) == normalized) return;
+
+        _state.KeepFanProfileName(profile, normalized);
+        _state.Save();
+        Notify(nameof(FanDetail));
+        FanProfileNamesChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// True when <paramref name="profile"/> has been used (has a saved custom curve or a custom name).
+    /// Unused profiles are skipped when cycling fan modes from the main tile.
+    /// </summary>
+    public bool IsFanProfileUsed(int profile)
+    {
+        if (FanLimits is null || profile < 0 || profile >= SavedState.FanProfileCount) return false;
+        if (_state.FanProfileNameIn(profile) is not null) return true;
+
+        var saved = _state.FanCurveIn(profile);
+        if (saved is not { Count: > 0 }) return false;
+        if (FanCurve is { } curve && saved.Count != CustomTemperaturesOf(curve).Count) return false;
+
+        return true;
+    }
 
     /// <summary>What a custom fan curve may hold on this machine; null on one that takes none.</summary>
     public FanCurveLimits? FanLimits => Device.Offers(FanMode.Custom) ? Device.FanCurve : null;
@@ -535,13 +587,44 @@ public sealed class PerformanceViewModel : Observable
     /// <summary>Where the fans are heading: the mode last asked for if it is still on its way, otherwise the one in force.</summary>
     public FanMode WantedFan => _fanWanted ?? Fan;
 
-    private void NextFanMode()
+    private void StepFanMode()
     {
-        if (!IsHelperOnline || !Device.Offers(FanMode.Max)) return;
+        if (!IsHelperOnline) return;
 
-        if (WantedFan != FanMode.Max) Queue(() => SendFanAsync(new SetFan(FanMode.Max)), FanMode.Max);
-        else if (_state.FanCurveOn && FanLimits is not null) Queue(ReturnFromMaxAsync, FanMode.Custom, FanProfile);
-        else Queue(ReturnFromMaxAsync, FanMode.Auto);
+        var steps = new List<(FanMode Mode, int? Profile)>();
+        if (Device.Offers(FanMode.Auto)) steps.Add((FanMode.Auto, null));
+
+        if (FanLimits is not null)
+        {
+            for (var profile = 0; profile < SavedState.FanProfileCount; profile++)
+                if (IsFanProfileUsed(profile)) steps.Add((FanMode.Custom, profile));
+        }
+
+        if (steps.Count == 0) return;
+
+        var currentMode = WantedFan;
+        int? currentProfile = currentMode == FanMode.Custom ? (_sendingProfile ?? FanProfileInForce ?? FanProfile) : null;
+
+        var currentIndex = -1;
+        for (var i = 0; i < steps.Count; i++)
+        {
+            if (steps[i].Mode == currentMode && steps[i].Profile == currentProfile)
+            {
+                currentIndex = i;
+                break;
+            }
+        }
+
+        if (steps.Count == 1 && currentIndex == 0) return;
+
+        var next = currentIndex >= 0
+            ? steps[(currentIndex + 1) % steps.Count]
+            : steps[0];
+
+        if (next.Mode == FanMode.Custom && next.Profile is { } targetProfile)
+            ChooseFanProfile(targetProfile, send: true);
+        else
+            ChooseFan(next.Mode);
     }
 
     /// <summary>
@@ -556,8 +639,8 @@ public sealed class PerformanceViewModel : Observable
 
     /// <summary>
     /// Keeps <paramref name="speeds"/> in <paramref name="profile"/> and, with <paramref name="send"/>, makes the fans
-    /// follow it, leaving Max and replacing any fan request still waiting. Without, the curve is only kept for
-    /// later: an edit that lands after the user moved on (to Auto, Max, or another profile) must not undo that choice.
+    /// follow it, replacing any fan request still waiting. Without, the curve is only kept for later: an edit that
+    /// lands after the user moved on (to Auto or another profile) must not undo that choice.
     /// </summary>
     public void KeepFanCurve(int profile, IReadOnlyList<int> speeds, bool send)
     {
@@ -569,6 +652,25 @@ public sealed class PerformanceViewModel : Observable
         _state.Save();   // the base mode is taken from the fans' answer, not set here
 
         if (send && IsHelperOnline) Queue(() => SendFanAsync(new SetFanCurve(legal)), FanMode.Custom, profile);
+        Notify(nameof(FanDetail));
+    }
+
+    /// <summary>
+    /// Clears <paramref name="profile"/>'s saved curve so it returns to stock (and stops cycling on the main tile
+    /// unless named), sending stock speeds to the firmware when <paramref name="send"/> is true.
+    /// </summary>
+    public void ResetFanCurve(int profile, bool send)
+    {
+        if (FanLimits is not { } limits || FanCurve is not { } curve) return;
+
+        _state.KeepFanCurve(profile, null);
+        _state.Save();
+
+        if (send && IsHelperOnline && StockForCustom(curve) is { } stock)
+        {
+            var legal = limits.Clamp(CustomTemperaturesOf(curve), stock, stock);
+            Queue(() => SendFanAsync(new SetFanCurve(legal)), FanMode.Custom, profile);
+        }
         Notify(nameof(FanDetail));
     }
 
@@ -591,8 +693,22 @@ public sealed class PerformanceViewModel : Observable
             Notify(nameof(FanDetail));
         }
 
-        if (send && IsHelperOnline && FanCurve is { } curve)
-            Queue(() => SendFanAsync(new SetFanCurve(ProfileCurve(profile, curve))), FanMode.Custom, profile);
+        if (send && IsHelperOnline && FanLimits is not null)
+            Queue(() => SendFanProfileAsync(profile), FanMode.Custom, profile);
+    }
+
+    private async Task SendFanProfileAsync(int profile)
+    {
+        if (FanCurve is null) await ReadFanCurveAsync();
+
+        if (FanCurve is { } curve)
+        {
+            await SendFanAsync(new SetFanCurve(ProfileCurve(profile, curve)));
+            return;
+        }
+
+        if (_state.FanCurveIn(profile) is { } saved)
+            await SendFanAsync(new SetFanCurve([.. saved]));
     }
 
     /// <summary>Temperature points for Custom and Max: chipset custom scale when configured, else firmware temperatures.</summary>
@@ -658,32 +774,6 @@ public sealed class PerformanceViewModel : Observable
     }
 
     /// <summary>
-    /// Max goes off: back to the active profile if the user's mode is Custom, otherwise Auto. Auto makes the helper
-    /// forget the curve, so a curve that cannot be checked against the machine's is sent anyway for the helper to clamp.
-    /// </summary>
-    private async Task ReturnFromMaxAsync()
-    {
-        if (_state.FanCurveOn && FanLimits is not null)
-        {
-            if (FanCurve is null) await ReadFanCurveAsync();
-
-            if (FanCurve is { } curve)
-            {
-                await SendFanAsync(new SetFanCurve(ProfileCurve(FanProfile, curve)));
-                return;
-            }
-
-            if (_state.FanCurveIn(FanProfile) is { } saved)
-            {
-                await SendFanAsync(new SetFanCurve([.. saved]));
-                return;
-            }
-        }
-
-        await SendFanAsync(new SetFan(FanMode.Auto));
-    }
-
-    /// <summary>
     /// Reads the machine's fan curve, unless a fan request is already waiting (its answer carries the curve).
     /// Returns whether it was asked for.
     /// </summary>
@@ -717,6 +807,7 @@ public sealed class PerformanceViewModel : Observable
             _fanWanted = wanted;
             _sendingProfile = profile;
             Notify(nameof(FanDetail));
+            Notify(nameof(IsFanActive));
         }
         if (IsFanBusy) return;
 
@@ -735,6 +826,7 @@ public sealed class PerformanceViewModel : Observable
             _sendingProfile = null;
             IsFanBusy = false;
             Notify(nameof(FanDetail));
+            Notify(nameof(IsFanActive));
         }
     }
 
@@ -770,6 +862,7 @@ public sealed class PerformanceViewModel : Observable
             if (!Set(ref field, value)) return;
             Notify(nameof(IsHelperOffline));
             Notify(nameof(FanDetail));
+            Notify(nameof(IsFanActive));
         }
     }
 

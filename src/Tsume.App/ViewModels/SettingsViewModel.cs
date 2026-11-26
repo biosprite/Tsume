@@ -26,6 +26,7 @@ public sealed class SettingsViewModel : LayerViewModel
         _helper = helper;
         ChargeLimit = new ChargeLimitViewModel(helper, state);
         PerformancePresets = new PerformancePresetsViewModel(performance, state);
+        Fan = new FanViewModel(performance);
         Customization = new CustomizationViewModel(state);
         Controls = new ControlsViewModel(performance, state, onRtssVisibilityChanged);
         Developer = new DeveloperViewModel(helper, state, dismiss);
@@ -109,6 +110,8 @@ public sealed class SettingsViewModel : LayerViewModel
     public ChargeLimitViewModel ChargeLimit { get; }
 
     public PerformancePresetsViewModel PerformancePresets { get; }
+
+    public FanViewModel Fan { get; }
 
     public CustomizationViewModel Customization { get; }
 

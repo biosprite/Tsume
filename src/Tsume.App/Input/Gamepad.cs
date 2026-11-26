@@ -251,7 +251,7 @@ public sealed class Gamepad : IDisposable
                     // Latch the shorter subset without firing so releasing the extra key does not fire it.
                     _latchedActions.Add(binding.Action);
                 }
-                else if (_latchedActions.Add(binding.Action) && !KeyDropdown.IsAnyOpen)
+                else if (_latchedActions.Add(binding.Action) && !KeyDropdown.IsAnyOpen && !TextInputMode.IsActive)
                 {
                     ActionTriggered?.Invoke(binding.Action);
                 }

@@ -18,6 +18,7 @@ internal static partial class User32
     public static partial nint SetWindowLongPtr(nint window, int index, nint value);
 
     public const nint HWND_TOPMOST = -1;
+    public const nint HWND_NOTOPMOST = -2;
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_NOACTIVATE = 0x0010;
@@ -547,6 +548,35 @@ internal static partial class User32
         public nint WParam;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RAWINPUTDEVICELIST
+    {
+        public nint Device;
+        public uint Type;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RID_DEVICE_INFO_KEYBOARD
+    {
+        public uint Type;
+        public uint SubType;
+        public uint KeyboardMode;
+        public uint NumberOfFunctionKeys;
+        public uint NumberOfIndicators;
+        public uint NumberOfKeysTotal;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 32)]
+    public struct RID_DEVICE_INFO
+    {
+        [FieldOffset(0)] public uint Size;
+        [FieldOffset(4)] public uint Type;
+        [FieldOffset(8)] public RID_DEVICE_INFO_KEYBOARD Keyboard;
+    }
+
+    [LibraryImport("user32.dll")]
+    public static partial uint GetRawInputDeviceList([In, Out] RAWINPUTDEVICELIST[]? devices, ref uint count, uint size);
+
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool RegisterRawInputDevices([In] RAWINPUTDEVICE[] devices, uint count, uint size);
@@ -559,4 +589,7 @@ internal static partial class User32
 
     [DllImport("user32.dll", EntryPoint = "GetRawInputDeviceInfoW", CharSet = CharSet.Unicode)]
     public static extern uint GetRawInputDeviceInfo(nint device, uint command, [Out] char[]? data, ref uint size);
+
+    [DllImport("user32.dll", EntryPoint = "GetRawInputDeviceInfoW")]
+    public static extern uint GetRawInputDeviceInfo(nint device, uint command, ref RID_DEVICE_INFO data, ref uint size);
 }

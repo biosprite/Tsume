@@ -54,6 +54,7 @@ public partial class OverlayWindow
     /// <summary>What had focus as each layer opened, so focus can go back there as each one closes.</summary>
     private readonly Stack<IInputElement?> _focusBeneath = new();
     private bool _resettingLayers;
+    private bool _yieldToKeyboard;
 
     /// <param name="stayOpen">Development aid: keep the panel up when it loses focus.</param>
     public OverlayWindow(PanelViewModel panel, bool stayOpen = false)
@@ -68,7 +69,7 @@ public partial class OverlayWindow
             HideFromAltTab();
             SeeThrough.Apply(this);
         };
-        Deactivated += (_, _) => { if (!_stayOpen && !_settling.IsEnabled) _ = CloseAsync(); };
+        Deactivated += (_, _) => OnWindowDeactivated();
         _settling.Tick += (_, _) => HoldTheFront();
         _awaitingRelease.Tick += (_, _) => OnAwaitingReleaseTick();
         _zOrderChanges.Changed += StayOverTaskbar;
@@ -77,6 +78,50 @@ public partial class OverlayWindow
         panel.Settings.Controls.PropertyChanged += OnControlsChanged;
         Controls.StepOut.LetFocusLeave(Sections);   // down to Settings and Power
         Controls.SmoothScroll.Follow((System.Windows.Controls.ScrollViewer)Sections.Parent);
+    }
+
+    private void OnWindowDeactivated()
+    {
+        if (_stayOpen || _settling.IsEnabled) return;
+
+        // Keep the panel open if focus moved to Windows' on-screen / touch keyboard during text entry.
+        if (Input.TextInputMode.IsActive)
+        {
+            var front = ForegroundWindow.Current;
+            if (Platform.QuickActions.IsTouchKeyboardWindow(front)
+                || (front == 0 && Platform.QuickActions.IsTouchKeyboardVisible()))
+            {
+                return;
+            }
+        }
+
+        _ = CloseAsync();
+    }
+
+    /// <summary>
+    /// Temporarily yields UIAccess topmost priority while editing text (such as renaming a custom fan profile)
+    /// so Windows' on-screen keyboard renders above the panel, then restores full topmost priority when done.
+    /// </summary>
+    public void SetYieldToKeyboard(bool yield)
+    {
+        if (_yieldToKeyboard == yield) return;
+        _yieldToKeyboard = yield;
+
+        var handle = new WindowInteropHelper(this).Handle;
+        if (yield)
+        {
+            Topmost = false;
+            if (handle != 0)
+            {
+                User32.SetWindowPos(handle, User32.HWND_NOTOPMOST, 0, 0, 0, 0,
+                    User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE);
+            }
+        }
+        else
+        {
+            Topmost = true;
+            if (IsOpen && handle != 0) RaiseAboveEverything();
+        }
     }
 
     private bool IsRightSide => _panel.Settings.Controls.OpenOnRight;
@@ -140,6 +185,8 @@ public partial class OverlayWindow
         if (!awaitRelease) _settling.Start();
 
         // Activate on a real open, even if an early-boot WarmUp() has not finished hiding yet.
+        _yieldToKeyboard = false;
+        Topmost = true;
         ShowActivated = !awaitRelease;
         Show();
         RaiseAboveEverything();
@@ -296,7 +343,7 @@ public partial class OverlayWindow
     // Nothing a program without uiAccess makes can go above Start or Search themselves, or take the foreground from them.
     private void StayOverTaskbar()
     {
-        if (IsOpen && TaskbarIsAbove()) RaiseAboveEverything();
+        if (IsOpen && !_yieldToKeyboard && TaskbarIsAbove()) RaiseAboveEverything();
     }
 
     /// <summary>Whether the taskbar sits above the panel in the stacking order. Never true while it is lifted out of it.</summary>
@@ -322,7 +369,7 @@ public partial class OverlayWindow
     private void HoldTheFront()
     {
         // Every tick, in front or not: the taskbar can land on top of a panel that has the focus (see StayOverTaskbar).
-        if (IsOpen) RaiseAboveEverything();
+        if (IsOpen && !_yieldToKeyboard) RaiseAboveEverything();
 
         if (IsOpen && !ForegroundWindow.Has(this))
         {
@@ -456,6 +503,8 @@ public partial class OverlayWindow
                 ForgetFocus();
                 _zOrderChanges.Stop();
                 if (IsVisible) Hide();
+                _yieldToKeyboard = false;
+                Topmost = true;
                 DisplayClock.KeepAwake(false);
                 RightOfWay.Yield();
                 SettleLayersAfterHide();
@@ -497,6 +546,8 @@ public partial class OverlayWindow
             Controls.KeyDropdown.CloseIfOpen();
             ForgetFocus();
             if (IsVisible) Hide();
+            _yieldToKeyboard = false;
+            Topmost = true;
             SettleLayersAfterHide();
             _panel.OnClosed();
         }
@@ -647,6 +698,7 @@ public partial class OverlayWindow
             || _panel.Settings.Controls.SystemButtonsPage.IsOpen;
         var onAPage = _panel.Settings.Customization.IsOpen
             || _panel.Settings.PerformancePresets.IsOpen
+            || _panel.Settings.Fan.IsOpen
             || _panel.Settings.Controls.IsOpen
             || onControlsSubpage
             || _panel.Settings.Developer.IsOpen;
@@ -671,6 +723,7 @@ public partial class OverlayWindow
             || _panel.Settings.Controls.SystemButtonsPage.IsOpen;
         var onAPage = _panel.Settings.Customization.IsOpen
             || _panel.Settings.PerformancePresets.IsOpen
+            || _panel.Settings.Fan.IsOpen
             || _panel.Settings.Controls.IsOpen
             || onControlsSubpage
             || _panel.Settings.Developer.IsOpen;
@@ -679,7 +732,7 @@ public partial class OverlayWindow
         UpscalingScreen.IsCovered = _panel.Upscaling.HasPageOpen;
         RtssScreen.IsCovered = _panel.Rtss.Download.IsOpen;
         SyncLayerInteractivity();
-        StepAside(_panel.Settings.IsOpen || _panel.Fan.IsOpen || _panel.Lighting.IsOpen || _panel.Upscaling.IsOpen || _panel.Rtss.IsOpen);
+        StepAside(_panel.Settings.IsOpen || _panel.Settings.Fan.IsOpen || _panel.Lighting.IsOpen || _panel.Upscaling.IsOpen || _panel.Rtss.IsOpen);
 
         if (layer.IsOpen || !_focusBeneath.TryPop(out var beneath)) return;
         if (!IsOpen) return;

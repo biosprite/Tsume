@@ -81,23 +81,96 @@ public static class QuickActions
     /// <summary>Shows or hides the Windows touch keyboard.</summary>
     public static void ToggleTouchKeyboard()
     {
-        if (TryToggleTouchKeyboard()) return;
+        if (TryToggleTouchKeyboard(0)) return;
 
         // The keyboard's host process starts on demand; wake it and ask again.
-        Launch(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFiles),
-            @"microsoft shared\ink\TabTip.exe"));
-
+        WakeTouchKeyboardHost();
         Thread.Sleep(400);
-        TryToggleTouchKeyboard();
+        TryToggleTouchKeyboard(0);
     }
 
-    private static bool TryToggleTouchKeyboard()
+    /// <summary>Shows or hides the Windows touch keyboard without blocking the UI thread if TabTip needs to start.</summary>
+    public static async Task ToggleTouchKeyboardAsync(nint window = 0)
+    {
+        if (TryToggleTouchKeyboard(window)) return;
+
+        WakeTouchKeyboardHost();
+        await Task.Delay(400);
+        TryToggleTouchKeyboard(window);
+    }
+
+    /// <summary>
+    /// Ensures the Windows touch keyboard is visible, without toggling it off if it is already shown.
+    /// Returns true if this call opened it.
+    /// </summary>
+    public static async Task<bool> ShowTouchKeyboardAsync(nint window = 0)
+    {
+        if (IsTouchKeyboardVisible()) return false;
+
+        await ToggleTouchKeyboardAsync(window);
+        return true;
+    }
+
+    /// <summary>Dismisses the Windows touch keyboard if it is currently visible.</summary>
+    public static void HideTouchKeyboard(nint window = 0)
+    {
+        if (IsTouchKeyboardVisible()) TryToggleTouchKeyboard(window);
+    }
+
+    /// <summary>True when Windows' touch keyboard input pane is currently shown on screen.</summary>
+    public static bool IsTouchKeyboardVisible()
+    {
+        try
+        {
+            var pane = (IFrameworkInputPane)new FrameworkInputPane();
+            return pane.Location(out var rect) == 0 && rect.Right > rect.Left && rect.Bottom > rect.Top;
+        }
+        catch (COMException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>True if <paramref name="window"/> belongs to Windows' on-screen / touch keyboard host.</summary>
+    public static bool IsTouchKeyboardWindow(nint window)
+    {
+        if (window == 0) return false;
+
+        var buffer = new char[128];
+        var length = User32.GetClassName(window, buffer, buffer.Length);
+        if (length > 0)
+        {
+            var className = new string(buffer, 0, length);
+            if (className.Equals("IPTip_Main_Window", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        User32.GetWindowThreadProcessId(window, out var processId);
+        if (processId == 0) return false;
+
+        try
+        {
+            using var process = Process.GetProcessById((int)processId);
+            return process.ProcessName.Equals("TextInputHost", StringComparison.OrdinalIgnoreCase)
+                || process.ProcessName.Equals("TabTip", StringComparison.OrdinalIgnoreCase)
+                || process.ProcessName.Equals("osk", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return false;
+        }
+    }
+
+    private static void WakeTouchKeyboardHost() => Launch(Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFiles),
+        @"microsoft shared\ink\TabTip.exe"));
+
+    private static bool TryToggleTouchKeyboard(nint window)
     {
         try
         {
             var host = (ITipInvocation)new UIHostNoLaunch();
-            host.Toggle(User32.GetDesktopWindow());
+            host.Toggle(window != 0 ? window : User32.GetDesktopWindow());
             return true;
         }
         catch (COMException)
@@ -119,5 +192,17 @@ public static class QuickActions
     private interface ITipInvocation
     {
         void Toggle(nint window);
+    }
+
+    [ComImport, Guid("D5120AA3-46BA-44C5-822D-CA8092C1FC72")]
+    private class FrameworkInputPane;
+
+    [ComImport, Guid("5752238B-24F0-495A-82F1-2FD593056796"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IFrameworkInputPane
+    {
+        int Advise(nint pWindow, nint pHandler, out uint pdwCookie);
+        int AdviseWithHWND(nint hwnd, nint pHandler, out uint pdwCookie);
+        int Unadvise(uint dwCookie);
+        int Location(out User32.RECT prcInputPaneScreenLocation);
     }
 }

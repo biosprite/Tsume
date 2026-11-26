@@ -427,7 +427,7 @@ public partial class App
                 break;
 
             case DedicatedAction.ToggleFanBoost:
-                panel.Performance.CycleFan.Execute(null);
+                panel.Performance.CycleFanMode.Execute(null);
                 break;
 
             case DedicatedAction.ToggleControllerMode:

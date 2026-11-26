@@ -29,12 +29,18 @@ public sealed class SavedState
     /// <summary>How many custom fan profiles there are.</summary>
     public const int FanProfileCount = 3;
 
+    /// <summary>Maximum characters kept for a custom fan profile's name.</summary>
+    public const int MaxFanProfileNameLength = 20;
+
     /// <summary>
     /// The custom fan profiles: per profile, one speed per temperature point of the machine's curve, coolest first.
     /// A null slot was never edited and starts as the machine's own curve. May be short or long in an older or
     /// hand-edited file; read it through <see cref="FanCurveIn"/>.
     /// </summary>
     public List<List<int>?>? FanCurves { get; set; }
+
+    /// <summary>Custom names for the custom fan profiles, 0-based. Null or blank entries fall back to "Profile 1"…</summary>
+    public List<string?>? FanProfileNames { get; set; }
 
     /// <summary>The active custom fan profile, 0-based. Read it through <see cref="ActiveFanProfile"/>, which keeps it in range.</summary>
     public int FanProfile { get; set; }
@@ -65,6 +71,32 @@ public sealed class SavedState
         var curves = FanCurves ??= [];
         while (curves.Count < FanProfileCount) curves.Add(null);
         curves[profile] = curve;
+    }
+
+    /// <summary>A profile's saved custom name, trimmed; null when unnamed.</summary>
+    public string? FanProfileNameIn(int profile)
+    {
+        if (FanProfileNames is not { } names || profile < 0 || profile >= names.Count) return null;
+        var name = names[profile]?.Trim();
+        return string.IsNullOrEmpty(name) ? null : name;
+    }
+
+    /// <summary>Sets or clears a profile's custom name. Not saved until <see cref="Save"/>.</summary>
+    public void KeepFanProfileName(int profile, string? name)
+    {
+        if (profile < 0 || profile >= FanProfileCount) return;
+
+        var trimmed = name?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) trimmed = null;
+        else if (trimmed.Length > MaxFanProfileNameLength) trimmed = trimmed[..MaxFanProfileNameLength].TrimEnd();
+
+        if (trimmed is null && (FanProfileNames is null || profile >= FanProfileNames.Count)) return;
+
+        var names = FanProfileNames ??= [];
+        while (names.Count < FanProfileCount) names.Add(null);
+        names[profile] = trimmed;
+
+        if (names.All(entry => entry is null)) FanProfileNames = null;
     }
 
     /// <summary>A curve made on a build before profiles becomes the first profile, so nobody loses it.</summary>

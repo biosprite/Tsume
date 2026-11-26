@@ -109,6 +109,14 @@
                        Detail="{x:Static lang:Strings.PerformancePresetsDetail}"
                        Command="{Binding PerformancePresets.Open}" />
 
+        <!-- Hidden on a machine whose fans cannot be controlled. -->
+        <controls:Tile Style="{StaticResource Tile.Link}"
+                       Visibility="{Binding Fan.Card}"
+                       Glyph="{x:Static theme:Glyphs.Fan}"
+                       Label="{x:Static lang:Strings.Fans}"
+                       Detail="{x:Static lang:Strings.FansSettingsDetail}"
+                       Command="{Binding Fan.Open}" />
+
         <controls:Tile Style="{StaticResource Tile.Link}"
                        Glyph="{x:Static theme:Glyphs.Customize}"
                        Label="{x:Static lang:Strings.Customization}"

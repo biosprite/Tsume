@@ -22,6 +22,7 @@ public static class StepOut
         };
 
         if (direction is null || Keyboard.FocusedElement is not FrameworkElement from) return;
+        if (from is System.Windows.Controls.Primitives.TextBoxBase && e.Key is Key.Left or Key.Right) return;
         if (from.PredictFocus(direction.Value) is UIElement next) e.Handled = next.Focus();
     };
 }

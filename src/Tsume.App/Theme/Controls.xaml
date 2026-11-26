@@ -1357,4 +1357,55 @@
     </Setter>
   </Style>
 
+  <!-- Compact rounded-square text box for inline renaming (e.g. custom fan profiles). -->
+  <Style x:Key="Input.Text" TargetType="TextBox">
+    <Setter Property="FontFamily" Value="{StaticResource Font.Words}" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource Text}" />
+    <Setter Property="Background" Value="{DynamicResource Surface}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Panel.Edge}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CaretBrush" Value="{DynamicResource Text}" />
+    <Setter Property="SelectionBrush" Value="{x:Static theme:Accent.Brush}" />
+    <Setter Property="SelectionOpacity" Value="0.4" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Padding" Value="12,0" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="TextBox">
+          <Grid>
+            <Border x:Name="Face"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="12">
+              <ScrollViewer x:Name="PART_ContentHost" Focusable="False"
+                            HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"
+                            VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
+            </Border>
+            <Border x:Name="Ring" Style="{StaticResource Focus.Ring}" CornerRadius="12"
+                    BorderBrush="{x:Static theme:Accent.Brush}" />
+          </Grid>
+
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Face" Property="Background" Value="{DynamicResource Surface.Hover}" />
+            </Trigger>
+
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Trigger.EnterActions><BeginStoryboard Storyboard="{StaticResource Ring.Show}" /></Trigger.EnterActions>
+              <Trigger.ExitActions><BeginStoryboard Storyboard="{StaticResource Ring.Hide}" /></Trigger.ExitActions>
+            </Trigger>
+
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Opacity" Value="0.4" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
 </ResourceDictionary>

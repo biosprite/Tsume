@@ -9,8 +9,8 @@ using Tsume.Core.Cooling;
 namespace Tsume.App.ViewModels;
 
 /// <summary>
-/// The fan screen, opened from the Fans tile: the fan mode, and a custom curve drawn on a chart. The user's own mode is
-/// Auto or Custom; Max is a boost on top of it. The fan state itself lives in <see cref="PerformanceViewModel"/>,
+/// The fan screen, opened from Settings → Customization: the fan mode (Auto or Custom), named custom profiles,
+/// and a custom curve drawn on a chart. The fan state itself lives in <see cref="PerformanceViewModel"/>,
 /// which sees every reply from the helper; this screen only holds the curve while it is being changed.
 /// </summary>
 public sealed class FanViewModel : LayerViewModel
@@ -35,6 +35,9 @@ public sealed class FanViewModel : LayerViewModel
     /// <summary>The profile the unsent change was made on, so it is never saved into another one.</summary>
     private int _editProfile;
 
+    /// <summary>The profile currently being renamed, so a concurrent switch never writes to another slot.</summary>
+    private int _renamingProfile;
+
     public FanViewModel(PerformanceViewModel performance)
     {
         _performance = performance;
@@ -45,10 +48,19 @@ public sealed class FanViewModel : LayerViewModel
             if (!IsDragging) Keep();   // a finger still on it sends when it lifts
         };
         Reset = new Command(BackToStock);
-        ReselectMode = new Command(() => { if (Mode == FanMode.Custom) Resend(); });
+        ReselectMode = new Command(() =>
+        {
+            if (Mode == FanMode.Custom) Resend();
+            else if (Mode == FanMode.Max) Choose(FanMode.Auto);
+        });
         ReselectProfile = new Command(Resend);
+        StartRename = new Command(BeginRename);
+        CommitRename = new Command(SaveRename);
+        CancelRename = new Command(StopRename);
 
         performance.PropertyChanged += OnPerformanceChanged;
+        performance.FanProfileNamesChanged += RefreshProfileLabels;
+        RefreshProfileLabels();
         LayOut();
     }
 
@@ -99,6 +111,9 @@ public sealed class FanViewModel : LayerViewModel
     /// <summary>False on a machine whose fans cannot be controlled, hiding the empty mode selector.</summary>
     public bool ShowsModes => Modes.Count > 0;
 
+    /// <summary>The card in Settings → Customization; hidden on a machine whose fans cannot be controlled.</summary>
+    public Visibility Card => ShowsModes ? Visibility.Visible : Visibility.Collapsed;
+
     /// <summary>Segment labels: the fan modes this machine offers.</summary>
     public IReadOnlyList<string> Modes { get; private set => Set(ref field, value); } = [];
 
@@ -118,9 +133,8 @@ public sealed class FanViewModel : LayerViewModel
     /// <summary>Custom, while there is no curve to start it from.</summary>
     public IReadOnlySet<int>? Unavailable => !CurveShown && IndexOf(FanMode.Custom) is >= 0 and var custom ? new HashSet<int> { custom } : null;
 
-    /// <summary>Segment labels for the custom profiles: "Profile 1"…</summary>
-    public IReadOnlyList<string> Profiles { get; } =
-        [.. Enumerable.Range(1, SavedState.FanProfileCount).Select(Strings.FanProfile)];
+    /// <summary>Segment labels for the custom profiles: user-chosen names, or "Profile 1"…</summary>
+    public IReadOnlyList<string> Profiles { get; private set => Set(ref field, value); } = [];
 
     /// <summary>The active profile; bound to the profile selector.</summary>
     public int ProfileIndex
@@ -131,6 +145,25 @@ public sealed class FanViewModel : LayerViewModel
 
     /// <summary>The profile selector shows on Custom, while there is a curve to edit.</summary>
     public bool ShowsProfiles => CurveShown && Mode == FanMode.Custom;
+
+    /// <summary>True while the inline profile name editor is open.</summary>
+    public bool IsRenamingProfile
+    {
+        get;
+        private set
+        {
+            if (Set(ref field, value)) Notify(nameof(IsNotRenamingProfile));
+        }
+    }
+
+    public bool IsNotRenamingProfile => !IsRenamingProfile;
+
+    /// <summary>Text currently being typed into the inline profile name box.</summary>
+    public string DraftProfileName { get; set => Set(ref field, value); } = "";
+
+    public ICommand StartRename { get; }
+    public ICommand CommitRename { get; }
+    public ICommand CancelRename { get; }
 
     /// <summary>The selector works only while the helper does and this machine offers fan modes.</summary>
     public bool CanChoose => _performance.IsHelperOnline && ShowsModes;
@@ -185,7 +218,7 @@ public sealed class FanViewModel : LayerViewModel
     public string DeviceName => _performance.Device.Name;
 
     /// <summary>
-    /// Why there is no chart, or what the chart shows on Auto and Max. On Custom, only a warning: the fans are
+    /// Why there is no chart, or what the chart shows on Auto. On Custom, only a warning: the fans are
     /// off the active profile, or the machine's own curve is unknown.
     /// </summary>
     public string Note =>
@@ -195,8 +228,7 @@ public sealed class FanViewModel : LayerViewModel
         : Mode switch
         {
             FanMode.Auto => Strings.FanAutoNote,
-            FanMode.Max  => Strings.FanMaxNote,
-            _ when Adrift => Strings.FanProfileAdrift(_performance.FanProfile + 1),
+            _ when Adrift => Strings.FanProfileAdrift(_performance.FanProfileLabel(_performance.FanProfile)),
             _ when _performance.FanCurve is { StockKnown: false } => Strings.FanStockUnknown,
             _ => "",
         };
@@ -241,12 +273,13 @@ public sealed class FanViewModel : LayerViewModel
     private void LayOut()
     {
         var device = _performance.Device;
-        FanMode[] order = [FanMode.Auto, FanMode.Custom, FanMode.Max];
+        FanMode[] order = [FanMode.Auto, FanMode.Custom];
 
         _modes = [.. order.Where(mode => mode == FanMode.Custom ? ListsCustom : device.Offers(mode))];
         Modes = [.. _modes.Select(Label)];
 
         Notify(nameof(ShowsModes));
+        Notify(nameof(Card));
         Notify(nameof(Limits));
         Notify(nameof(DeviceName));
         Notify(nameof(WarnCelsius));
@@ -256,7 +289,6 @@ public sealed class FanViewModel : LayerViewModel
     private static string Label(FanMode mode) => mode switch
     {
         FanMode.Custom => Strings.FanCustom,
-        FanMode.Max    => Strings.FanMax,
         _              => Strings.FanAuto,
     };
 
@@ -315,11 +347,10 @@ public sealed class FanViewModel : LayerViewModel
 
     private IReadOnlyList<int> SpeedsFor(FanMode mode)
     {
-        if (_performance.FanCurve is not { } curve || Limits is not { } limits) return [];
+        if (_performance.FanCurve is not { } curve || Limits is null) return [];
 
         return mode switch
         {
-            FanMode.Max    => [.. curve.Temperatures.Select(_ => limits.MaxSpeed)],
             // On Custom, always the active profile: an edit must start from it, never from a curve in force that
             // is not its own (set elsewhere, or left by a send that failed). The note says when they differ.
             FanMode.Custom => _performance.ProfileCurve(_performance.FanProfile, curve),
@@ -351,15 +382,48 @@ public sealed class FanViewModel : LayerViewModel
         Notify(nameof(ShowsProfiles));
         Notify(nameof(CanReset));
         if (IsReadOnly) IsEditing = false;
+        if (!ShowsProfiles) IsRenamingProfile = false;
+    }
+
+    private void RefreshProfileLabels()
+    {
+        Profiles = [.. Enumerable.Range(0, SavedState.FanProfileCount).Select(_performance.FanProfileLabel)];
+        Notify(nameof(Note));
+    }
+
+    private void BeginRename()
+    {
+        if (!ShowsProfiles) return;
+
+        IsEditing = false;
+        _renamingProfile = _performance.FanProfile;
+        DraftProfileName = _performance.CustomFanProfileName(_renamingProfile) ?? _performance.FanProfileLabel(_renamingProfile);
+        IsRenamingProfile = true;
+    }
+
+    private void SaveRename()
+    {
+        if (!IsRenamingProfile) return;
+
+        _performance.RenameFanProfile(_renamingProfile, DraftProfileName);
+        IsRenamingProfile = false;
+    }
+
+    private void StopRename()
+    {
+        IsRenamingProfile = false;
     }
 
     private void BackToStock()
     {
         if (IsReadOnly || Stock is not { } stock) return;
 
+        _settle.Stop();
+        _changed = false;
         IsEditing = false;
-        Speeds = stock;
-        Keep();
+        IsRenamingProfile = false;
+        Show(stock);
+        _performance.ResetFanCurve(_performance.FanProfile, send: _performance.WantedFan == FanMode.Custom);
     }
 
     /// <summary>
@@ -423,6 +487,8 @@ public sealed class FanViewModel : LayerViewModel
     protected override void OnOpened()
     {
         IsEditing = false;
+        IsRenamingProfile = false;
+        RefreshProfileLabels();
         LayOut();
         Sync();
         Refresh();
@@ -431,14 +497,25 @@ public sealed class FanViewModel : LayerViewModel
     protected override void OnClosed()
     {
         IsEditing = false;
+        IsRenamingProfile = false;
         Keep();
     }
 
-    public override void FlushPending() => Keep();
+    public override void FlushPending()
+    {
+        IsRenamingProfile = false;
+        Keep();
+    }
 
-    /// <summary>Back while editing with the controller only stops editing.</summary>
+    /// <summary>Back while renaming or editing with the controller only stops that action.</summary>
     public override bool GoBack()
     {
+        if (IsRenamingProfile)
+        {
+            StopRename();
+            return true;
+        }
+
         if (!IsEditing) return false;
 
         IsEditing = false;
