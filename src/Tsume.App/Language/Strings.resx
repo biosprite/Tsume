@@ -905,6 +905,10 @@
   <data name="TileSoundOn" xml:space="preserve"><value>Sound on</value></data>
   <data name="TileSteam" xml:space="preserve"><value>Steam</value></data>
   <data name="TileGameBar" xml:space="preserve"><value>Game Bar</value></data>
+  <data name="TileCpuBoost" xml:space="preserve"><value>CPU Boost</value></data>
+  <data name="TileCpuBoostOn" xml:space="preserve"><value>On</value></data>
+  <data name="TileCpuBoostOff" xml:space="preserve"><value>Off</value></data>
+  <data name="TileCpuBoostUnavailable" xml:space="preserve"><value>Unavailable</value></data>
 
   <data name="HardwareButtonsHeading" xml:space="preserve"><value>DEDICATED BUTTONS</value></data>
   <data name="GameBarButton" xml:space="preserve"><value>Game Bar button</value></data>

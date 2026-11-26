@@ -638,6 +638,10 @@ public static class Strings
     public static string TileSoundOn => Find();
     public static string TileSteam => Find();
     public static string TileGameBar => Find();
+    public static string TileCpuBoost => Find();
+    public static string TileCpuBoostOn => Find();
+    public static string TileCpuBoostOff => Find();
+    public static string TileCpuBoostUnavailable => Find();
     public static string HardwareButtonsHeading => Find();
     public static string GameBarButton => Find();
     public static string GameBarDefault => Find();

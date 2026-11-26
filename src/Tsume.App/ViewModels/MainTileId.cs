@@ -16,4 +16,5 @@ public enum MainTileId
     Mute,
     SteamBigPicture,
     XboxGameBar,
+    CpuBoost,
 }

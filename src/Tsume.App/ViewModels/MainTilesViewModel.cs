@@ -47,6 +47,7 @@ public sealed class MainTilesViewModel : LayerViewModel
         MainTileId.Mute,
         MainTileId.SteamBigPicture,
         MainTileId.XboxGameBar,
+        MainTileId.CpuBoost,
     ];
 
     private readonly SavedState _state;
@@ -218,6 +219,7 @@ public sealed class MainTilesViewModel : LayerViewModel
         Register(MainTileId.Mute, Glyphs.Muted, Strings.TileMute);
         Register(MainTileId.SteamBigPicture, Glyphs.Game, Strings.TileSteam);
         Register(MainTileId.XboxGameBar, Glyphs.Buttons, Strings.TileGameBar);
+        Register(MainTileId.CpuBoost, Glyphs.Chip, Strings.TileCpuBoost);
     }
 
     private void Register(MainTileId id, string glyph, string label)

@@ -38,6 +38,8 @@ public static class HelperPipe
 [JsonDerivedType(typeof(GetHardwareInventory), "discovery.inventory")]
 [JsonDerivedType(typeof(GetHardwareState),     "discovery.state")]
 [JsonDerivedType(typeof(RunFirmwareCheck),     "firmware.check")]
+[JsonDerivedType(typeof(GetCpuBoost),          "cpuboost.get")]
+[JsonDerivedType(typeof(SetCpuBoost),          "cpuboost.set")]
 public abstract record HelperRequest;
 
 /// <summary>Read the current state without changing anything.</summary>
@@ -156,6 +158,12 @@ public enum FirmwareCheckKind
 /// </summary>
 public sealed record RunFirmwareCheck(FirmwareCheckKind Kind, bool PollOnly = false) : HelperRequest;
 
+/// <summary>Reads whether Windows Processor Performance Boost Mode is currently enabled on the active power plan.</summary>
+public sealed record GetCpuBoost : HelperRequest;
+
+/// <summary>Enables or disables Windows Processor Performance Boost Mode on the active power plan (AC and DC).</summary>
+public sealed record SetCpuBoost(bool Enabled) : HelperRequest;
+
 /// <summary>The helper's answer to any request.</summary>
 public sealed record HelperReply
 {
@@ -186,6 +194,9 @@ public sealed record HelperReply
 
     /// <summary>Sent with the answer to <see cref="SetRtssOverlay"/>: true when RTSS must restart to load the change.</summary>
     public bool? RtssOverlayChanged { get; init; }
+
+    /// <summary>Sent with answers to <see cref="GetCpuBoost"/> and <see cref="SetCpuBoost"/>: true when CPU boost is active.</summary>
+    public bool? CpuBoostEnabled { get; init; }
 
     /// <summary>JSON payload for read-only discovery requests (<see cref="GetHardwareInventory"/> and <see cref="GetHardwareState"/>).</summary>
     public string? PayloadJson { get; init; }

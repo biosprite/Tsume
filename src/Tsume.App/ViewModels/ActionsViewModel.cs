@@ -72,7 +72,8 @@ public sealed class ActionsViewModel : Observable
         PadModeViewModel padMode,
         UpscalingViewModel upscaling,
         RtssViewModel rtss,
-        LevelsViewModel levels)
+        LevelsViewModel levels,
+        CpuBoostViewModel cpuBoost)
     {
         if (_catalog.Count > 0) return;
 
@@ -114,6 +115,12 @@ public sealed class ActionsViewModel : Observable
 
         Add(MainTileId.SteamBigPicture, Glyphs.Game, Strings.TileSteam, SteamBigPicture);
         Add(MainTileId.XboxGameBar, Glyphs.Buttons, Strings.TileGameBar, XboxGameBar);
+
+        Add(MainTileId.CpuBoost, Glyphs.Chip, Strings.TileCpuBoost, cpuBoost.Toggle)
+            .Watch(cpuBoost,
+                detail: () => cpuBoost.Detail,
+                isOn: () => cpuBoost.IsOn,
+                propertyNames: [nameof(CpuBoostViewModel.Detail), nameof(CpuBoostViewModel.IsOn)]);
     }
 
     /// <summary>Updates the main screen's visible tiles and column count.</summary>

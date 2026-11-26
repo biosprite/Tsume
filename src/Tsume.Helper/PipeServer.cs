@@ -134,6 +134,28 @@ public sealed class PipeServer(RequestHandler handler)
         if (request is RunFirmwareCheck check)
             return DiscoveryWorker.HandleFirmwareCheck(check);
 
+        if (request is GetCpuBoost)
+        {
+            var enabled = Hardware.CpuBoostControl.Read();
+            return enabled is { } active
+                ? new HelperReply { Ok = true, CpuBoostEnabled = active }
+                : HelperReply.Failure("CPU boost state could not be read.");
+        }
+
+        if (request is SetCpuBoost boost)
+        {
+            var result = Hardware.CpuBoostControl.Set(boost.Enabled);
+            if (!result.Ok)
+                Log.Write($"SetCpuBoost({boost.Enabled}) failed: {result.Error}");
+
+            return new HelperReply
+            {
+                Ok = result.Ok,
+                Error = result.Error,
+                CpuBoostEnabled = result.Enabled,
+            };
+        }
+
         return handler.Handle(request);
     }
 

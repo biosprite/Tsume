@@ -24,6 +24,7 @@ public sealed class PanelViewModel : IDisposable
 
         Status = new StatusViewModel();
         Performance = new PerformanceViewModel(helper, state);
+        CpuBoost = new CpuBoostViewModel(helper);
         Levels = new LevelsViewModel();
         Actions = new ActionsViewModel(dismiss);
         Power = new PowerViewModel(dismiss, padIsolation is null ? null : () => padIsolation.EnsureRestoredAsync());
@@ -32,13 +33,14 @@ public sealed class PanelViewModel : IDisposable
 
         Settings = new SettingsViewModel(helper, state, Performance, dismiss, _rtssService.SetFeatureEnabled);
         Performance.SnapshotReceived += Settings.ChargeLimit.AbsorbSnapshot;
+        Performance.SnapshotReceived += _ => { if (!CpuBoost.IsAvailable) CpuBoost.RefreshInBackground(); };
         Lighting = new LightingViewModel(Performance);
         PadMode = new PadModeViewModel(padIsolation);
         Upscaling = new UpscalingViewModel(dismiss);
         Rtss = new RtssViewModel(_rtssService, dismiss);
         Quit = new QuitViewModel(quit);
 
-        Actions.InitializeTiles(Performance, Lighting, PadMode, Upscaling, Rtss, Levels);
+        Actions.InitializeTiles(Performance, Lighting, PadMode, Upscaling, Rtss, Levels, CpuBoost);
         var mainTiles = Settings.Controls.MainTilesPage;
         mainTiles.LayoutChanged += Actions.ApplyLayout;
         Actions.ApplyLayout(mainTiles.ActiveIds, mainTiles.Columns);
@@ -57,6 +59,7 @@ public sealed class PanelViewModel : IDisposable
 
     public StatusViewModel Status { get; }
     public PerformanceViewModel Performance { get; }
+    public CpuBoostViewModel CpuBoost { get; }
     public LevelsViewModel Levels { get; }
     public ActionsViewModel Actions { get; }
     public PowerViewModel Power { get; }
@@ -117,7 +120,7 @@ public sealed class PanelViewModel : IDisposable
         if (Rtss.IsOpen) Rtss.RefreshRunningState();
         _tick.Start();
 
-        await Task.WhenAll(Levels.RefreshAsync(), Performance.RefreshAsync(), RefreshControllerTilesAsync());
+        await Task.WhenAll(Levels.RefreshAsync(), Performance.RefreshAsync(), CpuBoost.RefreshAsync(), RefreshControllerTilesAsync());
 
         // Reopened on the fan page: after the snapshot, so the helper is known to be there and the requests do not overlap.
         if (Fan.IsOpen) Fan.Refresh();
@@ -138,8 +141,12 @@ public sealed class PanelViewModel : IDisposable
         await Task.WhenAll(tasks);
     }
 
-    /// <summary>Called once the panel has gone: stops all polling.</summary>
-    public void OnClosed() => _tick.Stop();
+    /// <summary>Called once the panel has gone: stops all polling and commits any pending tile toggle.</summary>
+    public void OnClosed()
+    {
+        _tick.Stop();
+        CpuBoost.FlushPending();
+    }
 
     public void Dispose()
     {
