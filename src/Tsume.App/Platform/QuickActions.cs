@@ -149,6 +149,32 @@ public static class QuickActions
         return false;
     }
 
+    /// <summary>
+    /// Subscribes to instant Windows touch keyboard showing/hiding notifications for <paramref name="window"/>
+    /// via <c>IFrameworkInputPane.AdviseWithHWND</c>. Returns null if COM registration is unavailable.
+    /// </summary>
+    internal static IDisposable? WatchTouchKeyboard(nint window, Action<User32.RECT> onShowing, Action onHiding)
+    {
+        if (window == 0) return null;
+
+        IFrameworkInputPane? pane = null;
+        try
+        {
+            pane = (IFrameworkInputPane)new FrameworkInputPane();
+            var handler = new InputPaneHandler(onShowing, onHiding);
+            if (pane.AdviseWithHWND(window, handler, out var cookie) == 0 && cookie != 0)
+                return new InputPaneSubscription(pane, handler, cookie);
+
+            Marshal.ReleaseComObject(pane);
+            return null;
+        }
+        catch (COMException)
+        {
+            if (pane is not null) Marshal.ReleaseComObject(pane);
+            return null;
+        }
+    }
+
     /// <summary>True if <paramref name="window"/> belongs to Windows' on-screen / touch keyboard host.</summary>
     public static bool IsTouchKeyboardWindow(nint window)
     {
@@ -215,12 +241,62 @@ public static class QuickActions
     [ComImport, Guid("D5120AA3-46BA-44C5-822D-CA8092C1FC72")]
     private class FrameworkInputPane;
 
+    [ComImport, Guid("226C537B-1E76-4D9E-A760-33DB29922F18"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IFrameworkInputPaneHandler
+    {
+        [PreserveSig] int Showing([In] ref User32.RECT prcInputPaneScreenLocation, [MarshalAs(UnmanagedType.Bool)] bool fEnsureFocusedElementInView);
+        [PreserveSig] int Hiding([MarshalAs(UnmanagedType.Bool)] bool fEnsureFocusedElementInView);
+    }
+
     [ComImport, Guid("5752238B-24F0-495A-82F1-2FD593056796"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IFrameworkInputPane
     {
-        [PreserveSig] int Advise(nint pWindow, nint pHandler, out uint pdwCookie);
-        [PreserveSig] int AdviseWithHWND(nint hwnd, nint pHandler, out uint pdwCookie);
+        [PreserveSig] int Advise(nint pWindow, [MarshalAs(UnmanagedType.Interface)] IFrameworkInputPaneHandler pHandler, out uint pdwCookie);
+        [PreserveSig] int AdviseWithHWND(nint hwnd, [MarshalAs(UnmanagedType.Interface)] IFrameworkInputPaneHandler pHandler, out uint pdwCookie);
         [PreserveSig] int Unadvise(uint dwCookie);
         [PreserveSig] int Location(out User32.RECT prcInputPaneScreenLocation);
+    }
+
+    private sealed class InputPaneHandler(Action<User32.RECT> onShowing, Action onHiding) : IFrameworkInputPaneHandler
+    {
+        public int Showing(ref User32.RECT prcInputPaneScreenLocation, bool fEnsureFocusedElementInView)
+        {
+            onShowing(prcInputPaneScreenLocation);
+            return 0;
+        }
+
+        public int Hiding(bool fEnsureFocusedElementInView)
+        {
+            onHiding();
+            return 0;
+        }
+    }
+
+    private sealed class InputPaneSubscription(IFrameworkInputPane pane, InputPaneHandler handler, uint cookie) : IDisposable
+    {
+        // Keep a strong reference to the COM callback object for the lifetime of the registration.
+        private readonly InputPaneHandler _handler = handler;
+        private IFrameworkInputPane? _pane = pane;
+        private uint _cookie = cookie;
+
+        public void Dispose()
+        {
+            var pane = Interlocked.Exchange(ref _pane, null);
+            if (pane is null) return;
+
+            try
+            {
+                if (_cookie != 0) pane.Unadvise(_cookie);
+            }
+            catch (COMException)
+            {
+            }
+            finally
+            {
+                _cookie = 0;
+                Marshal.ReleaseComObject(pane);
+                GC.KeepAlive(_handler);
+            }
+        }
     }
 }

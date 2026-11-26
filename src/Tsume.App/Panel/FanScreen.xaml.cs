@@ -85,6 +85,8 @@ public partial class FanScreen
             // Only pop up Windows' on-screen keyboard when no external USB/Bluetooth keyboard is connected.
             if (PhysicalKeyboard.IsConnected()) return;
 
+            PreShrinkForTouchKeyboard();
+
             var token = ResetTouchKeyboardOp();
             var hwnd = WindowHandle();
             var opened = await QuickActions.ShowTouchKeyboardAsync(hwnd, token);
@@ -152,6 +154,12 @@ public partial class FanScreen
             overlay.SetYieldToKeyboard(yield);
     }
 
+    private void PreShrinkForTouchKeyboard()
+    {
+        if (Window.GetWindow(this) is OverlayWindow overlay)
+            overlay.PreShrinkForTouchKeyboard();
+    }
+
     private void OnProfileNameKeyDown(object sender, KeyEventArgs e)
     {
         if (_fan is null) return;
@@ -177,6 +185,7 @@ public partial class FanScreen
         var token = ResetTouchKeyboardOp();
         var hwnd = WindowHandle();
         var wasVisible = QuickActions.IsTouchKeyboardVisible();
+        if (!wasVisible) PreShrinkForTouchKeyboard();
         var toggled = await QuickActions.ToggleTouchKeyboardAsync(hwnd, token);
         if (!toggled) return;
 

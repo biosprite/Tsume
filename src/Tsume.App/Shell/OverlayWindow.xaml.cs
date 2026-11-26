@@ -53,10 +53,15 @@ public partial class OverlayWindow
 
     /// <summary>What had focus as each layer opened, so focus can go back there as each one closes.</summary>
     private readonly Stack<IInputElement?> _focusBeneath = new();
-    private readonly DispatcherTimer _keyboardAvoidance = new() { Interval = TimeSpan.FromMilliseconds(60) };
+    private readonly DispatcherTimer _keyboardAvoidance = new() { Interval = TimeSpan.FromMilliseconds(25) };
+    private IDisposable? _inputPaneWatch;
     private bool _resettingLayers;
     private bool _yieldToKeyboard;
     private bool _keyboardClearedHeight;
+    private double _targetClearedHeightDip;
+    private double _lastDockedKeyboardTopDip;
+    private long _preShrinkUntilTick;
+    private int _heightAnimGen;
     private bool _hasWindowRegion;
     private User32.RECT _cutoutKeyboardRect;
     private User32.RECT _cutoutWindowRect;
@@ -74,6 +79,7 @@ public partial class OverlayWindow
             HideFromAltTab();
             SeeThrough.Apply(this);
         };
+        Closed += (_, _) => StopKeyboardAvoidance();
         Deactivated += (_, _) => OnWindowDeactivated();
         _settling.Tick += (_, _) => HoldTheFront();
         _awaitingRelease.Tick += (_, _) => OnAwaitingReleaseTick();
@@ -120,39 +126,106 @@ public partial class OverlayWindow
 
         if (yield)
         {
-            SyncKeyboardAvoidance();
-            _keyboardAvoidance.Start();
+            StartKeyboardAvoidance();
         }
         else
         {
-            _keyboardAvoidance.Stop();
-            ClearKeyboardAvoidance(restoreHeight: IsOpen);
+            StopKeyboardAvoidance();
+            ClearKeyboardAvoidance(restoreHeight: IsOpen, animate: IsOpen);
             if (IsOpen && new WindowInteropHelper(this).Handle != 0) RaiseAboveEverything();
         }
+    }
+
+    /// <summary>
+    /// Smoothly begins retracting the panel before Windows finishes raising the touch keyboard, so the panel
+    /// glides out of the way proactively rather than retracting over an already-visible keyboard.
+    /// </summary>
+    public void PreShrinkForTouchKeyboard()
+    {
+        if (!IsOpen || !_yieldToKeyboard) return;
+
+        if (Platform.QuickActions.TryGetTouchKeyboardRect(out var liveRect))
+        {
+            ApplyKeyboardRect(liveRect);
+            return;
+        }
+
+        var fullHeight = ScreenHeight();
+        if (fullHeight <= 0) return;
+
+        var scale = Fit.ScaleY > 0 ? Fit.ScaleY : 1;
+        var minHeight = Math.Min(fullHeight, 180 * scale);
+        var predicted = _lastDockedKeyboardTopDip > 0 ? _lastDockedKeyboardTopDip : fullHeight * 0.52;
+        var targetHeight = Math.Clamp(predicted, minHeight, fullHeight);
+
+        _preShrinkUntilTick = Environment.TickCount64 + 900;
+        AnimateClearedHeight(targetHeight);
+    }
+
+    private void StartKeyboardAvoidance()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (_inputPaneWatch is null && handle != 0)
+        {
+            _inputPaneWatch = Platform.QuickActions.WatchTouchKeyboard(
+                handle,
+                onShowing: rect => Dispatcher.BeginInvoke(DispatcherPriority.Send, () =>
+                {
+                    if (IsOpen && _yieldToKeyboard) ApplyKeyboardRect(rect);
+                }),
+                onHiding: () => Dispatcher.BeginInvoke(DispatcherPriority.Send, () =>
+                {
+                    if (!IsOpen || !_yieldToKeyboard) return;
+                    _preShrinkUntilTick = 0;
+                    ClearKeyboardAvoidance(restoreHeight: true, animate: true);
+                }));
+        }
+
+        SyncKeyboardAvoidance();
+        _keyboardAvoidance.Start();
+    }
+
+    private void StopKeyboardAvoidance()
+    {
+        _keyboardAvoidance.Stop();
+        _preShrinkUntilTick = 0;
+        _inputPaneWatch?.Dispose();
+        _inputPaneWatch = null;
     }
 
     private void SyncKeyboardAvoidance()
     {
         if (!IsOpen || !_yieldToKeyboard)
         {
-            _keyboardAvoidance.Stop();
-            ClearKeyboardAvoidance(restoreHeight: IsOpen);
+            StopKeyboardAvoidance();
+            ClearKeyboardAvoidance(restoreHeight: IsOpen, animate: IsOpen);
             return;
         }
 
-        var handle = new WindowInteropHelper(this).Handle;
-        if (handle == 0 || !Platform.QuickActions.TryGetTouchKeyboardRect(out var kbRect))
+        if (Platform.QuickActions.TryGetTouchKeyboardRect(out var kbRect))
         {
-            ClearKeyboardAvoidance(restoreHeight: true);
+            ApplyKeyboardRect(kbRect);
             return;
         }
 
+        // Give a proactive pre-shrink a short window for Windows to raise the touch keyboard before expanding back.
+        if (_preShrinkUntilTick > Environment.TickCount64) return;
+        _preShrinkUntilTick = 0;
+        ClearKeyboardAvoidance(restoreHeight: true, animate: true);
+    }
+
+    private void ApplyKeyboardRect(User32.RECT kbRect)
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == 0 || kbRect.Right <= kbRect.Left || kbRect.Bottom <= kbRect.Top) return;
+
+        _preShrinkUntilTick = 0;
         if (!User32.GetWindowRect(handle, out var winRect)) return;
 
         // No overlap with the panel's horizontal span: keep full panel height.
         if (kbRect.Right <= winRect.Left || kbRect.Left >= winRect.Right)
         {
-            ClearKeyboardAvoidance(restoreHeight: true);
+            ClearKeyboardAvoidance(restoreHeight: true, animate: true);
             return;
         }
 
@@ -171,15 +244,15 @@ public partial class OverlayWindow
             var scale = Fit.ScaleY > 0 ? Fit.ScaleY : 1;
             var minHeight = Math.Min(fullHeight, 180 * scale);
             var targetHeight = Math.Clamp(kbRect.Top / dpi.DpiScaleY, minHeight, fullHeight);
-            if (Math.Abs(Height - targetHeight) > 0.5) Height = targetHeight;
-            _keyboardClearedHeight = targetHeight < fullHeight - 0.5;
+            _lastDockedKeyboardTopDip = targetHeight;
+            AnimateClearedHeight(targetHeight);
             return;
         }
 
         // Top-docked or floating keyboard with a reported rect: keep full height and punch out its rect from our window region.
         if (_keyboardClearedHeight)
         {
-            RestoreFullHeight();
+            RestoreFullHeight(animate: false);
             if (!User32.GetWindowRect(handle, out winRect)) return;
         }
 
@@ -214,19 +287,103 @@ public partial class OverlayWindow
         }
     }
 
-    private void ClearKeyboardAvoidance(bool restoreHeight)
+    private void AnimateClearedHeight(double targetDip)
+    {
+        var fullHeight = ScreenHeight();
+        if (fullHeight <= 0) return;
+
+        if (targetDip >= fullHeight - 0.5)
+        {
+            RestoreFullHeight(animate: true);
+            return;
+        }
+
+        if (_keyboardClearedHeight && Math.Abs(_targetClearedHeightDip - targetDip) <= 0.5)
+            return;
+
+        var scale = Fit.ScaleY > 0 ? Fit.ScaleY : 1;
+        var targetStageH = Math.Max(120, (targetDip / scale) - 24);
+        var currentStageH = Stage.ActualHeight > 0 ? Stage.ActualHeight : DesignHeight - 24;
+
+        var gen = ++_heightAnimGen;
+        _keyboardClearedHeight = true;
+        _targetClearedHeightDip = targetDip;
+
+        Stage.VerticalAlignment = VerticalAlignment.Top;
+        Stage.Snap(HeightProperty, currentStageH);
+
+        if (targetDip > Height + 0.5)
+        {
+            // Growing slightly (e.g. predicted height was shorter than the actual keyboard): expand HWND first so nothing clips.
+            Height = targetDip;
+            Stage.Animate(HeightProperty, targetStageH, Motion.Quick, Motion.Glide);
+            return;
+        }
+
+        if (Math.Abs(currentStageH - targetStageH) <= 2)
+        {
+            Stage.Snap(HeightProperty, targetStageH);
+            if (Math.Abs(Height - targetDip) > 0.5) Height = targetDip;
+            return;
+        }
+
+        // Smooth GPU-composited shrink of Stage, followed by a single Win32 Window.Height resize when it lands.
+        Stage.Animate(HeightProperty, targetStageH, Motion.Quick, Motion.Glide, then: () =>
+        {
+            if (gen != _heightAnimGen || !IsOpen || !_keyboardClearedHeight) return;
+            if (Math.Abs(Height - targetDip) > 0.5) Height = targetDip;
+        });
+    }
+
+    private void ClearKeyboardAvoidance(bool restoreHeight, bool animate = false)
     {
         var handle = new WindowInteropHelper(this).Handle;
         if (handle != 0) ClearWindowRegion(handle);
-        if (restoreHeight && _keyboardClearedHeight) RestoreFullHeight();
-        else if (!restoreHeight) _keyboardClearedHeight = false;
+        if (restoreHeight && _keyboardClearedHeight) RestoreFullHeight(animate);
+        else if (!restoreHeight) ResetStageHeight();
     }
 
-    private void RestoreFullHeight()
+    private void RestoreFullHeight(bool animate)
     {
-        _keyboardClearedHeight = false;
         var fullHeight = ScreenHeight();
+        var wasCleared = _keyboardClearedHeight;
+        _keyboardClearedHeight = false;
+        _targetClearedHeightDip = 0;
+        _preShrinkUntilTick = 0;
+
+        if (!animate || !wasCleared || !IsOpen || !IsVisible)
+        {
+            ResetStageHeight();
+            if (fullHeight > 0 && Math.Abs(Height - fullHeight) > 0.5) Height = fullHeight;
+            return;
+        }
+
+        var gen = ++_heightAnimGen;
+        var currentStageH = Stage.ActualHeight > 0 ? Stage.ActualHeight : DesignHeight - 24;
+        var fullStageH = DesignHeight - 24;
+
+        Stage.VerticalAlignment = VerticalAlignment.Top;
+        Stage.Snap(HeightProperty, currentStageH);
         if (fullHeight > 0 && Math.Abs(Height - fullHeight) > 0.5) Height = fullHeight;
+
+        Stage.Animate(HeightProperty, fullStageH, Motion.Smooth, Motion.Glide, then: () =>
+        {
+            if (gen != _heightAnimGen) return;
+            Stage.BeginAnimation(HeightProperty, null);
+            Stage.ClearValue(HeightProperty);
+            Stage.VerticalAlignment = VerticalAlignment.Stretch;
+        });
+    }
+
+    private void ResetStageHeight()
+    {
+        _heightAnimGen++;
+        _keyboardClearedHeight = false;
+        _targetClearedHeightDip = 0;
+        _preShrinkUntilTick = 0;
+        Stage.BeginAnimation(HeightProperty, null);
+        Stage.ClearValue(HeightProperty);
+        Stage.VerticalAlignment = VerticalAlignment.Stretch;
     }
 
     private void ClearWindowRegion(nint handle)
@@ -307,7 +464,7 @@ public partial class OverlayWindow
         _yieldToKeyboard = yieldToKeyboard;
         if (!yieldToKeyboard)
         {
-            _keyboardAvoidance.Stop();
+            StopKeyboardAvoidance();
             ClearKeyboardAvoidance(restoreHeight: false);
 
             // Promote into ZBID_UIACCESS before Show() activates the window so the very first open never
@@ -319,11 +476,7 @@ public partial class OverlayWindow
         ShowActivated = !awaitRelease;
         Show();
         if (!yieldToKeyboard) RaiseAboveEverything();
-        else
-        {
-            SyncKeyboardAvoidance();
-            _keyboardAvoidance.Start();
-        }
+        else StartKeyboardAvoidance();
 
         if (awaitRelease) AwaitRelease();
         else _tookAtOnce = ForegroundWindow.Take(this);
@@ -639,7 +792,7 @@ public partial class OverlayWindow
             {
                 ForgetFocus();
                 _zOrderChanges.Stop();
-                _keyboardAvoidance.Stop();
+                StopKeyboardAvoidance();
                 if (IsVisible) Hide();
                 _yieldToKeyboard = false;
                 ClearKeyboardAvoidance(restoreHeight: false);
@@ -683,7 +836,7 @@ public partial class OverlayWindow
         {
             Controls.KeyDropdown.CloseIfOpen();
             ForgetFocus();
-            _keyboardAvoidance.Stop();
+            StopKeyboardAvoidance();
             if (IsVisible) Hide();
             _yieldToKeyboard = false;
             ClearKeyboardAvoidance(restoreHeight: false);
