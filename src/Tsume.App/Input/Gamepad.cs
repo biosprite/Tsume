@@ -1,7 +1,9 @@
 using System.Numerics;
 using Tsume.App.Controls;
+using Tsume.App.Platform;
 using Tsume.App.Platform.Interop;
 using Tsume.Core.Controller;
+using Tsume.Core.Diagnostics;
 
 namespace Tsume.App.Input;
 
@@ -30,7 +32,10 @@ public sealed class Gamepad : IDisposable
 
     private static readonly TimeSpan IdlePoll = TimeSpan.FromMilliseconds(60);
     private static readonly TimeSpan ActivePoll = TimeSpan.FromMilliseconds(16);
+    private static readonly TimeSpan ErrorBackoff = TimeSpan.FromSeconds(1);
     private const long ResumeSettleMs = 2500;
+
+    private static readonly Journal Errors = new("errors");
 
     private sealed record PadActionBinding(
         DedicatedAction Action,
@@ -43,6 +48,7 @@ public sealed class Gamepad : IDisposable
     private readonly HashSet<DedicatedAction> _latchedActions = [];
     private volatile PadActionBinding[] _actionBindings = [];
     private volatile bool _resetOnResume;
+    private bool _loggedWatchError;
     private long _resumeAfterTick;
 
     /// <summary>Raised on a background thread when the summon chord is pressed.</summary>
@@ -161,14 +167,28 @@ public sealed class Gamepad : IDisposable
                 _latchedActions.Clear();
             }
 
-            var navigating = IsNavigating && !SuppressNavigation;
-            var skipSlotZero = navigating && SuppressBuiltInSlot;
-            var (summoned, pressed) = presses.Step(ReadButtons(skipSlotZero), navigating, DateTime.UtcNow);
+            try
+            {
+                var navigating = IsNavigating && !SuppressNavigation;
+                var skipSlotZero = navigating && SuppressBuiltInSlot;
+                var (summoned, pressed) = presses.Step(ReadButtons(skipSlotZero), navigating, DateTime.UtcNow);
 
-            if (summoned) Summoned?.Invoke();
-            foreach (var button in Each(pressed)) Pressed?.Invoke(button);
+                if (summoned) Summoned?.Invoke();
+                foreach (var button in Each(pressed)) Pressed?.Invoke(button);
 
-            PollDedicatedActions();
+                PollDedicatedActions();
+            }
+            catch (Exception error)
+            {
+                if (!_loggedWatchError)
+                {
+                    _loggedWatchError = true;
+                    Errors.Write($"Gamepad watch failed: {error}");
+                }
+
+                _stop.Token.WaitHandle.WaitOne(ErrorBackoff);
+                continue;
+            }
 
             _stop.Token.WaitHandle.WaitOne(IsNavigating ? ActivePoll : IdlePoll);
         }
@@ -247,7 +267,9 @@ public sealed class Gamepad : IDisposable
     private static PadButton ReadButtons(bool skipSlotZero)
     {
         var buttons = ReadXInput(skipSlotZero);
-        return buttons != PadButton.None ? buttons : ReadWinMm(skipSlotZero);
+        return buttons != PadButton.None || !FullScreenExperience.IsActive
+            ? buttons
+            : ReadWinMm(skipSlotZero);
     }
 
     private static PadButton ReadXInput(bool skipSlotZero)
@@ -279,10 +301,10 @@ public sealed class Gamepad : IDisposable
         const uint threshold = 16_000;
 
         var buttons = PadButton.None;
-        var info = WinMm.JOYINFOEX.Create();
 
         for (uint id = skipSlotZero ? 1u : 0u; id < WinMm.MaxControllers; id++)
         {
+            var info = WinMm.JOYINFOEX.Create();
             if (WinMm.joyGetPosEx(id, ref info) != WinMm.JOYERR_NOERROR) continue;
 
             if ((info.Buttons & WinMm.ButtonA) != 0) buttons |= PadButton.A;

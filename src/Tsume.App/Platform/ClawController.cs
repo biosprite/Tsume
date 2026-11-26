@@ -105,7 +105,14 @@ public sealed class ClawController : IDisposable
                 && d.Caps.OutputReportByteLength == ReportLength
                 && d.Caps.InputReportByteLength == ReportLength)
             {
-                return new ClawController(handle, Hid.Version(handle) ?? 0);
+                try
+                {
+                    return new ClawController(handle, Hid.Version(handle) ?? 0);
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or ObjectDisposedException)
+                {
+                    // Device disconnected or access was blocked (e.g. HidHide) mid-open; skip it.
+                }
             }
 
             handle.Dispose();
@@ -191,7 +198,7 @@ public sealed class ClawController : IDisposable
             await _stream.WriteAsync(Packet(SwitchMode, (byte)mode, mKeys));
             return true;
         }
-        catch (Exception error) when (error is IOException or ObjectDisposedException or OperationCanceledException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ObjectDisposedException or OperationCanceledException)
         {
             return false;
         }
@@ -297,7 +304,7 @@ public sealed class ClawController : IDisposable
 
             return null;
         }
-        catch (Exception error) when (error is IOException or ObjectDisposedException or OperationCanceledException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ObjectDisposedException or OperationCanceledException)
         {
             // Unplugged or asleep, or this handle was disposed while the exchange waited its turn.
             return null;

@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
 using Tsume.App.Controls;
+using Tsume.App.Platform;
 using Tsume.App.Platform.Interop;
 using Tsume.Core.Controller;
 using Tsume.Core.Diagnostics;
@@ -344,14 +345,14 @@ public static class DedicatedActionKeys
             if (state.RightTrigger >= TriggerThreshold) result |= GamepadInput.Rt;
         }
 
-        // Fall back to WinMM HID buttons/POV when XInput reports nothing (e.g. under Xbox FSE InputHost),
+        // Fall back to WinMM HID buttons/POV when XInput reports nothing under Xbox FSE InputHost,
         // and always read WinMM when back buttons (bits 10/11) are needed.
-        var needWinMmFallback = result == GamepadInput.None;
+        var needWinMmFallback = result == GamepadInput.None && FullScreenExperience.IsActive;
         if (includeBackButtons || needWinMmFallback)
         {
-            var info = WinMm.JOYINFOEX.Create();
             for (uint id = 0; id < WinMm.MaxControllers; id++)
             {
+                var info = WinMm.JOYINFOEX.Create();
                 if (WinMm.joyGetPosEx(id, ref info) != WinMm.JOYERR_NOERROR) continue;
 
                 if (includeBackButtons)

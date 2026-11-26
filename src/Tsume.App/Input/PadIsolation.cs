@@ -617,16 +617,19 @@ public sealed class PadIsolation : IDisposable
             }
         }
 
-        var joy = WinMm.JOYINFOEX.Create();
-        if (WinMm.joyGetPosEx(0, ref joy) == WinMm.JOYERR_NOERROR)
+        if (FullScreenExperience.IsActive)
         {
-            const int center = 32_767;
-            if (joy.Buttons != 0
-                || joy.Pov < WinMm.JOY_POVCENTERED
-                || Math.Abs((int)joy.X - center) > LatchedStickDeadzone
-                || Math.Abs((int)joy.Y - center) > LatchedStickDeadzone)
+            var joy = WinMm.JOYINFOEX.Create();
+            if (WinMm.joyGetPosEx(0, ref joy) == WinMm.JOYERR_NOERROR)
             {
-                return BuiltInInput.LeftOrButtons;
+                const int center = 32_767;
+                if (joy.Buttons != 0
+                    || joy.Pov < WinMm.JOY_POVCENTERED
+                    || Math.Abs((int)joy.X - center) > LatchedStickDeadzone
+                    || Math.Abs((int)joy.Y - center) > LatchedStickDeadzone)
+                {
+                    return BuiltInInput.LeftOrButtons;
+                }
             }
         }
 

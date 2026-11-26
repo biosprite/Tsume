@@ -218,13 +218,16 @@ public static class ControllerMode
             }
         }
 
-        var joy = Interop.WinMm.JOYINFOEX.Create();
-        for (uint id = 0; id < Interop.WinMm.MaxControllers; id++)
+        if (FullScreenExperience.IsActive)
         {
-            if (Interop.WinMm.joyGetPosEx(id, ref joy) == Interop.WinMm.JOYERR_NOERROR
-                && (joy.Buttons & Interop.WinMm.ButtonA) != 0)
+            for (uint id = 0; id < Interop.WinMm.MaxControllers; id++)
             {
-                return true;
+                var joy = Interop.WinMm.JOYINFOEX.Create();
+                if (Interop.WinMm.joyGetPosEx(id, ref joy) == Interop.WinMm.JOYERR_NOERROR
+                    && (joy.Buttons & Interop.WinMm.ButtonA) != 0)
+                {
+                    return true;
+                }
             }
         }
 
