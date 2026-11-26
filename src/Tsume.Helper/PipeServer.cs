@@ -136,24 +136,40 @@ public sealed class PipeServer(RequestHandler handler)
 
         if (request is GetCpuBoost)
         {
-            var enabled = Hardware.CpuBoostControl.Read();
-            return enabled is { } active
-                ? new HelperReply { Ok = true, CpuBoostEnabled = active }
-                : HelperReply.Failure("CPU boost state could not be read.");
+            try
+            {
+                var enabled = Hardware.CpuBoostControl.Read();
+                return enabled is { } active
+                    ? new HelperReply { Ok = true, CpuBoostEnabled = active }
+                    : HelperReply.Failure("CPU boost state could not be read.");
+            }
+            catch (Exception error)
+            {
+                Log.Write($"GetCpuBoost failed: {error.Message}");
+                return HelperReply.Failure(error.Message);
+            }
         }
 
         if (request is SetCpuBoost boost)
         {
-            var result = Hardware.CpuBoostControl.Set(boost.Enabled);
-            if (!result.Ok)
-                Log.Write($"SetCpuBoost({boost.Enabled}) failed: {result.Error}");
-
-            return new HelperReply
+            try
             {
-                Ok = result.Ok,
-                Error = result.Error,
-                CpuBoostEnabled = result.Enabled,
-            };
+                var result = Hardware.CpuBoostControl.Set(boost.Enabled);
+                if (!result.Ok)
+                    Log.Write($"SetCpuBoost({boost.Enabled}) failed: {result.Error}");
+
+                return new HelperReply
+                {
+                    Ok = result.Ok,
+                    Error = result.Error,
+                    CpuBoostEnabled = result.Enabled,
+                };
+            }
+            catch (Exception error)
+            {
+                Log.Write($"SetCpuBoost({boost.Enabled}) failed: {error.Message}");
+                return HelperReply.Failure(error.Message);
+            }
         }
 
         return handler.Handle(request);

@@ -14,6 +14,7 @@ public sealed class PanelViewModel : IDisposable
     private readonly DispatcherTimer _tick = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly RtssOverlayService _rtssService;
     private readonly PadIsolation? _padIsolation;
+    private bool _hasCpuBoostTile;
 
     /// <param name="dismiss">Closes the panel and completes once it is fully off screen.</param>
     /// <param name="quit">Exits Tsume.</param>
@@ -33,7 +34,16 @@ public sealed class PanelViewModel : IDisposable
 
         Settings = new SettingsViewModel(helper, state, Performance, dismiss, _rtssService.SetFeatureEnabled);
         Performance.SnapshotReceived += Settings.ChargeLimit.AbsorbSnapshot;
-        Performance.SnapshotReceived += _ => { if (!CpuBoost.IsAvailable) CpuBoost.RefreshInBackground(); };
+        Performance.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PerformanceViewModel.IsHelperOnline)
+                && Performance.IsHelperOnline
+                && _hasCpuBoostTile
+                && !CpuBoost.IsAvailable)
+            {
+                _ = CpuBoost.RefreshAsync();
+            }
+        };
         Lighting = new LightingViewModel(Performance);
         PadMode = new PadModeViewModel(padIsolation);
         Upscaling = new UpscalingViewModel(dismiss);
@@ -42,7 +52,8 @@ public sealed class PanelViewModel : IDisposable
 
         Actions.InitializeTiles(Performance, Lighting, PadMode, Upscaling, Rtss, Levels, CpuBoost);
         var mainTiles = Settings.Controls.MainTilesPage;
-        mainTiles.LayoutChanged += Actions.ApplyLayout;
+        _hasCpuBoostTile = mainTiles.ActiveIds.Contains(MainTileId.CpuBoost);
+        mainTiles.LayoutChanged += OnMainTilesLayoutChanged;
         Actions.ApplyLayout(mainTiles.ActiveIds, mainTiles.Columns);
 
         Layers = [Power, Settings, Settings.PerformancePresets, Settings.Fan, Settings.Customization, Settings.Controls, Settings.Controls.MainTilesPage, Settings.Controls.DedicatedActionsPage, Settings.Controls.SystemButtonsPage, Settings.Developer, Lighting, Upscaling, .. Upscaling.Pages, Upscaling.RestoreAll, Rtss, Rtss.Download, Quit];
@@ -120,10 +131,31 @@ public sealed class PanelViewModel : IDisposable
         if (Rtss.IsOpen) Rtss.RefreshRunningState();
         _tick.Start();
 
-        await Task.WhenAll(Levels.RefreshAsync(), Performance.RefreshAsync(), CpuBoost.RefreshAsync(), RefreshControllerTilesAsync());
+        await Task.WhenAll(Levels.RefreshAsync(), RefreshHelperTilesAsync(), RefreshControllerTilesAsync());
 
         // Reopened on the fan page: after the snapshot, so the helper is known to be there and the requests do not overlap.
         if (Fan.IsOpen) Fan.Refresh();
+    }
+
+    private void OnMainTilesLayoutChanged(IReadOnlyList<MainTileId> activeIds, int columns)
+    {
+        Actions.ApplyLayout(activeIds, columns);
+
+        var hasCpuBoost = activeIds.Contains(MainTileId.CpuBoost);
+        var added = hasCpuBoost && !_hasCpuBoostTile;
+        _hasCpuBoostTile = hasCpuBoost;
+        if (added) _ = CpuBoost.RefreshAsync();
+    }
+
+    /// <summary>
+    /// Refreshes the performance snapshot first, then the opt-in CPU Boost tile sequentially so they
+    /// never contend on the helper's single-instance pipe.
+    /// </summary>
+    private async Task RefreshHelperTilesAsync()
+    {
+        await Performance.RefreshAsync();
+        if (_hasCpuBoostTile)
+            await CpuBoost.RefreshAsync();
     }
 
     /// <summary>
@@ -151,6 +183,7 @@ public sealed class PanelViewModel : IDisposable
     public void Dispose()
     {
         _tick.Stop();
+        CpuBoost.Dispose();
         _rtssService.Dispose();
         Settings.Controls.Dispose();
     }

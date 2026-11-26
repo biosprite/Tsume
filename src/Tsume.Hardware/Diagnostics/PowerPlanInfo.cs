@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-using System.Text;
 using Tsume.Core.Diagnostics;
 
 namespace Tsume.Hardware.Diagnostics;
@@ -10,17 +8,14 @@ namespace Tsume.Hardware.Diagnostics;
 /// </summary>
 public static class PowerPlanInfo
 {
-    private static readonly Guid SubProcessor = new("54533251-82be-4824-96c1-47b60b740d00");
-    private static readonly Guid PerfBoostMode = new("be337238-0d82-4146-a960-4f3749d470c7");
-
     private static readonly Guid OverlayBetterBattery = new("961cc777-2547-4f9d-8174-7d86181b8a7a");
     private static readonly Guid OverlayBalanced = new("00000000-0000-0000-0000-000000000000");
     private static readonly Guid OverlayBestPerformance = new("ded574b5-45a0-4f42-8737-46345c09c238");
 
     public static PowerPlanSnapshot Read()
     {
-        Guid? active = GetActiveScheme();
-        Guid? overlay = GetEffectiveOverlay();
+        Guid? active = PowerSchemes.GetActiveScheme();
+        Guid? overlay = PowerSchemes.GetEffectiveOverlay();
 
         uint? boostAc = null;
         uint? boostDc = null;
@@ -28,9 +23,9 @@ public static class PowerPlanInfo
 
         if (active is { } scheme)
         {
-            schemeName = ReadFriendlyName(scheme);
-            boostAc = ReadSettingIndex(scheme, SubProcessor, PerfBoostMode, ac: true);
-            boostDc = ReadSettingIndex(scheme, SubProcessor, PerfBoostMode, ac: false);
+            schemeName = PowerSchemes.ReadFriendlyName(scheme);
+            boostAc = PowerSchemes.ReadSettingIndex(scheme, PowerSchemes.SubProcessor, PowerSchemes.PerfBoostMode, ac: true);
+            boostDc = PowerSchemes.ReadSettingIndex(scheme, PowerSchemes.SubProcessor, PowerSchemes.PerfBoostMode, ac: false);
         }
 
         return new PowerPlanSnapshot
@@ -44,65 +39,6 @@ public static class PowerPlanInfo
             CpuBoostModeDc = boostDc,
             CpuBoostModeDcLabel = LabelBoostMode(boostDc),
         };
-    }
-
-    private static Guid? GetActiveScheme()
-    {
-        try
-        {
-            if (PowerGetActiveScheme(0, out var ptr) != 0 || ptr == 0) return null;
-            try { return Marshal.PtrToStructure<Guid>(ptr); }
-            finally { LocalFree(ptr); }
-        }
-        catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException)
-        {
-            return null;
-        }
-    }
-
-    private static Guid? GetEffectiveOverlay()
-    {
-        try
-        {
-            return PowerGetEffectiveOverlayScheme(out var overlay) == 0 ? overlay : null;
-        }
-        catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException)
-        {
-            return null;
-        }
-    }
-
-    private static string? ReadFriendlyName(Guid scheme)
-    {
-        try
-        {
-            uint size = 0;
-            var res = PowerReadFriendlyName(0, ref scheme, 0, 0, null, ref size);
-            if ((res != 0 && res != 234) || size == 0 || size > 4096) return null;
-
-            var buffer = new byte[size];
-            if (PowerReadFriendlyName(0, ref scheme, 0, 0, buffer, ref size) != 0) return null;
-            return Encoding.Unicode.GetString(buffer, 0, (int)size).TrimEnd('\0');
-        }
-        catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException)
-        {
-            return null;
-        }
-    }
-
-    private static uint? ReadSettingIndex(Guid scheme, Guid subGroup, Guid setting, bool ac)
-    {
-        try
-        {
-            var status = ac
-                ? PowerReadACValueIndex(0, ref scheme, ref subGroup, ref setting, out var value)
-                : PowerReadDCValueIndex(0, ref scheme, ref subGroup, ref setting, out value);
-            return status == 0 ? value : null;
-        }
-        catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException)
-        {
-            return null;
-        }
     }
 
     private static string? LabelOverlay(Guid? overlay)
@@ -126,26 +62,4 @@ public static class PowerPlanInfo
         6 => "Efficient Aggressive At Guaranteed",
         _ => $"Unknown ({mode})",
     };
-
-    [DllImport("powrprof.dll")]
-    private static extern uint PowerGetActiveScheme(nint userRootPowerKey, out nint activePolicyGuid);
-
-    [DllImport("powrprof.dll")]
-    private static extern uint PowerGetEffectiveOverlayScheme(out Guid effectiveOverlayPolicyGuid);
-
-    [DllImport("powrprof.dll")]
-    private static extern uint PowerReadFriendlyName(
-        nint rootPowerKey, ref Guid schemeGuid, nint subGroupOfPowerSettingsGuid, nint powerSettingGuid,
-        [Out] byte[]? buffer, ref uint bufferSize);
-
-    [DllImport("powrprof.dll")]
-    private static extern uint PowerReadACValueIndex(
-        nint rootPowerKey, ref Guid schemeGuid, ref Guid subGroupOfPowerSettingsGuid, ref Guid powerSettingGuid, out uint acValueIndex);
-
-    [DllImport("powrprof.dll")]
-    private static extern uint PowerReadDCValueIndex(
-        nint rootPowerKey, ref Guid schemeGuid, ref Guid subGroupOfPowerSettingsGuid, ref Guid powerSettingGuid, out uint dcValueIndex);
-
-    [DllImport("kernel32.dll")]
-    private static extern nint LocalFree(nint hMem);
 }
