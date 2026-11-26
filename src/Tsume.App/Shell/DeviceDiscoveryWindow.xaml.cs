@@ -16,6 +16,12 @@ namespace Tsume.App.Shell;
 /// </summary>
 public partial class DeviceDiscoveryWindow
 {
+    private const double DefaultWidth = 980;
+    private const double DefaultHeight = 700;
+    private const double DefaultMinWidth = 720;
+    private const double DefaultMinHeight = 440;
+    private const double WorkAreaMargin = 24;
+
     private static DeviceDiscoveryWindow? _openInstance;
 
     private readonly DeviceDiscoveryViewModel _vm;
@@ -34,6 +40,7 @@ public partial class DeviceDiscoveryWindow
             _hwnd = new WindowInteropHelper(this).Handle;
             _vm.AttachWindowHandle(() => _hwnd);
             ApplyTitleBarTheme();
+            FitToWorkArea(recenter: true);
         };
 
         Colours.Changed += OnThemeChanged;
@@ -139,6 +146,7 @@ public partial class DeviceDiscoveryWindow
         {
             if (existing.WindowState == WindowState.Minimized)
                 existing.WindowState = WindowState.Normal;
+            existing.FitToWorkArea(recenter: false);
             existing.Activate();
             return;
         }
@@ -147,6 +155,70 @@ public partial class DeviceDiscoveryWindow
         _openInstance = window;
         window.Show();
         window.Activate();
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        FitToWorkArea(recenter: false);
+    }
+
+    /// <summary>
+    /// Keeps the window inside the current monitor's usable work area (above the taskbar),
+    /// clamping initial and minimum sizes on smaller displays such as 7" 1080p handhelds at 150–200% DPI.
+    /// </summary>
+    private void FitToWorkArea(bool recenter)
+    {
+        if (WindowState != WindowState.Normal) return;
+
+        var work = GetCurrentWorkAreaDip();
+        if (work.Width <= 0 || work.Height <= 0) return;
+
+        var maxWidth = Math.Max(320, work.Width - WorkAreaMargin);
+        var maxHeight = Math.Max(320, work.Height - WorkAreaMargin);
+
+        MinWidth = Math.Min(DefaultMinWidth, maxWidth);
+        MinHeight = Math.Min(DefaultMinHeight, maxHeight);
+
+        if (recenter)
+        {
+            Width = Math.Min(DefaultWidth, maxWidth);
+            Height = Math.Min(DefaultHeight, maxHeight);
+            Left = work.Left + Math.Max(0, (work.Width - Width) / 2);
+            Top = work.Top + Math.Max(0, (work.Height - Height) / 2);
+        }
+        else
+        {
+            if (Width > maxWidth) Width = maxWidth;
+            if (Height > maxHeight) Height = maxHeight;
+            Left = Math.Clamp(Left, work.Left, Math.Max(work.Left, work.Right - Width));
+            Top = Math.Clamp(Top, work.Top, Math.Max(work.Top, work.Bottom - Height));
+        }
+    }
+
+    private Rect GetCurrentWorkAreaDip()
+    {
+        if (_hwnd != 0)
+        {
+            var monitor = User32.MonitorFromWindow(_hwnd, User32.MONITOR_DEFAULTTONEAREST);
+            if (monitor != 0)
+            {
+                var info = User32.MONITORINFO.Create();
+                if (User32.GetMonitorInfo(monitor, ref info))
+                {
+                    var dpi = VisualTreeHelper.GetDpi(this);
+                    var scaleX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+                    var scaleY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
+                    var left = info.WorkArea.Left / scaleX;
+                    var top = info.WorkArea.Top / scaleY;
+                    var width = (info.WorkArea.Right - info.WorkArea.Left) / scaleX;
+                    var height = (info.WorkArea.Bottom - info.WorkArea.Top) / scaleY;
+                    if (width > 0 && height > 0) return new Rect(left, top, width, height);
+                }
+            }
+        }
+
+        return SystemParameters.WorkArea;
     }
 
     private void OnSelectQuickScan(object sender, RoutedEventArgs e) => _vm.ActiveTabIndex = 0;

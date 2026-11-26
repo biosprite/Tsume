@@ -454,6 +454,26 @@ internal static partial class User32
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool ClientToScreen(nint window, ref POINT point);
 
+    public const uint MONITOR_DEFAULTTONEAREST = 0x0000_0002;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MONITORINFO
+    {
+        public uint Size;
+        public RECT Monitor;
+        public RECT WorkArea;
+        public uint Flags;
+
+        public static MONITORINFO Create() => new() { Size = (uint)Marshal.SizeOf<MONITORINFO>() };
+    }
+
+    [LibraryImport("user32.dll")]
+    public static partial nint MonitorFromWindow(nint window, uint flags);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetMonitorInfoW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetMonitorInfo(nint monitor, ref MONITORINFO info);
+
     [StructLayout(LayoutKind.Sequential)]
     public struct MSLLHOOKSTRUCT
     {
