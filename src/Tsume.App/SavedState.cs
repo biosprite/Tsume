@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Tsume.Core.Devices;
 using Tsume.Core.Performance;
 
@@ -24,6 +25,59 @@ public sealed class SavedState
 
     /// <summary>The same on battery, on a machine whose limits differ there. Null: none changed.</summary>
     public Dictionary<PerformanceMode, PowerLimits>? BatteryPresets { get; set; }
+
+    /// <summary>How many custom fan profiles there are.</summary>
+    public const int FanProfileCount = 3;
+
+    /// <summary>
+    /// The custom fan profiles: per profile, one speed per temperature point of the machine's curve, coolest first.
+    /// A null slot was never edited and starts as the machine's own curve. May be short or long in an older or
+    /// hand-edited file; read it through <see cref="FanCurveIn"/>.
+    /// </summary>
+    public List<List<int>?>? FanCurves { get; set; }
+
+    /// <summary>The active custom fan profile, 0-based. Read it through <see cref="ActiveFanProfile"/>, which keeps it in range.</summary>
+    public int FanProfile { get; set; }
+
+    /// <summary>Before profiles there was one custom curve. Moved into the first profile and then left null.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<int>? FanCurve { get; set; }
+
+    /// <summary>True when the user's own fan mode, the one Max returns to, is Custom (the active profile) rather than Auto.</summary>
+    public bool FanCurveOn { get; set; }
+
+    [JsonIgnore]
+    public int ActiveFanProfile => Math.Clamp(FanProfile, 0, FanProfileCount - 1);
+
+    /// <summary>A profile's saved curve; null if it was never edited.</summary>
+    public List<int>? FanCurveIn(int profile)
+    {
+        MoveOldFanCurve();
+        return FanCurves is { } curves && profile >= 0 && profile < curves.Count ? curves[profile] : null;
+    }
+
+    /// <summary>Puts a curve into a profile, or empties it with null. Not saved until <see cref="Save"/>.</summary>
+    public void KeepFanCurve(int profile, List<int>? curve)
+    {
+        if (profile < 0 || profile >= FanProfileCount) return;
+
+        MoveOldFanCurve();
+        var curves = FanCurves ??= [];
+        while (curves.Count < FanProfileCount) curves.Add(null);
+        curves[profile] = curve;
+    }
+
+    /// <summary>A curve made on a build before profiles becomes the first profile, so nobody loses it.</summary>
+    private void MoveOldFanCurve()
+    {
+        if (FanCurve is not { } old) return;
+
+        FanCurves ??= [];
+        while (FanCurves.Count < FanProfileCount) FanCurves.Add(null);
+        FanCurves[0] ??= old;
+        FanCurve = null;
+    }
+
     /// <summary>The helper's last device profile, so the panel can lay out before the helper answers. Null until it first has.</summary>
     public DeviceProfile? Device { get; set; }
 

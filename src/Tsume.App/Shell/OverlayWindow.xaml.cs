@@ -679,7 +679,7 @@ public partial class OverlayWindow
         UpscalingScreen.IsCovered = _panel.Upscaling.HasPageOpen;
         RtssScreen.IsCovered = _panel.Rtss.Download.IsOpen;
         SyncLayerInteractivity();
-        StepAside(_panel.Settings.IsOpen || _panel.Lighting.IsOpen || _panel.Upscaling.IsOpen || _panel.Rtss.IsOpen);
+        StepAside(_panel.Settings.IsOpen || _panel.Fan.IsOpen || _panel.Lighting.IsOpen || _panel.Upscaling.IsOpen || _panel.Rtss.IsOpen);
 
         if (layer.IsOpen || !_focusBeneath.TryPop(out var beneath)) return;
         if (!IsOpen) return;

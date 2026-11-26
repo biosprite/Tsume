@@ -42,6 +42,13 @@ public sealed record DeviceProfile
     public IReadOnlyList<FanMode> FanModes { get; init; } = [];
 
     /// <summary>
+    /// What a custom fan curve may hold; null if the machine takes none. Set exactly when <see cref="FanModes"/>
+    /// lists <see cref="FanMode.Custom"/>. Omitted from JSON when null, so profiles without one are sent as before.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public FanCurveLimits? FanCurve { get; init; }
+
+    /// <summary>
     /// The percentages the battery can stop charging at, lowest first; 100 charges to full.
     /// Empty if charging cannot be capped.
     /// </summary>
@@ -141,6 +148,7 @@ public sealed record DeviceProfile
         && ManualDefault == other.ManualDefault
         && BatteryCap == other.BatteryCap
         && FanModes.SequenceEqual(other.FanModes)
+        && (FanCurve is null ? other.FanCurve is null : other.FanCurve is not null && FanCurve.Matches(other.FanCurve))
         && ChargeLimits.SequenceEqual(other.ChargeLimits)
         && ChargeResumeGap == other.ChargeResumeGap
         && TempWarnC == other.TempWarnC

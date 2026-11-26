@@ -83,8 +83,11 @@ static async Task ServeAsync(CancellationToken stop)
     var (machine, found) = DeviceCatalog.Open();
     using var device = found;
 
+    var fan = device is null ? null : new FanCurveKeeper(device);
+    var keeper = device is null ? null : new ModeKeeper(device) { AfterRestore = fan!.RestoreIfForgotten };
+
     await new PipeServer(new RequestHandler(
-        machine, device,
-        device is null ? null : new ModeKeeper(device),
-        device is null ? null : new ChargeKeeper(device))).RunAsync(stop);
+        machine, device, keeper,
+        device is null ? null : new ChargeKeeper(device),
+        fan)).RunAsync(stop);
 }

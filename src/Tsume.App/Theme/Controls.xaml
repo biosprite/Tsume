@@ -163,6 +163,108 @@
     </Setter>
   </Style>
 
+  <!-- The fan curve: the chosen point and live readings above, the chart, and controller hint chips below. -->
+  <Style TargetType="controls:FanCurveEditor">
+    <Setter Property="Height" Value="268" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="controls:FanCurveEditor">
+          <Grid Background="Transparent">
+            <Border Background="{DynamicResource Surface}" CornerRadius="{StaticResource Radius.Control}" Padding="12,10,14,8">
+              <DockPanel>
+                <DockPanel DockPanel.Dock="Top" Margin="4,0,0,6">
+                  <!-- Live CPU temperature & fan speed, styled as a compact pill with a vertical divider. -->
+                  <Border x:Name="LiveBadge" DockPanel.Dock="Right"
+                          Background="{DynamicResource Surface.Hover}"
+                          BorderBrush="{DynamicResource Surface.Divider}" BorderThickness="1"
+                          CornerRadius="6" Padding="7,2.5" Margin="8,0,0,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <TextBlock Style="{StaticResource Text.Caption}" FontSize="11"
+                                 Foreground="{DynamicResource Text}" VerticalAlignment="Center"
+                                 Text="{TemplateBinding LiveTemperature}" />
+                      <Border x:Name="LiveDivider" Width="1" Height="10" Margin="6,0"
+                              VerticalAlignment="Center" Background="{DynamicResource Surface.Divider}" />
+                      <TextBlock x:Name="LiveRpmText" Style="{StaticResource Text.Caption}" FontSize="11"
+                                 Foreground="{DynamicResource Text.Muted}" VerticalAlignment="Center"
+                                 Text="{TemplateBinding LiveRpm}" />
+                    </StackPanel>
+                  </Border>
+
+                  <!-- Chosen curve point: accent temperature chip, speed percentage, vertical divider, and rough RPM. -->
+                  <StackPanel x:Name="PointReadout" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="{x:Static theme:Accent.Tint}"
+                            BorderBrush="{x:Static theme:Accent.Wash}" BorderThickness="1"
+                            CornerRadius="5" Padding="6,2" Margin="0,0,7,0" VerticalAlignment="Center">
+                      <TextBlock Style="{StaticResource Text.Caption}" FontSize="11.5" FontWeight="SemiBold"
+                                 Foreground="{x:Static theme:Accent.Brush}" VerticalAlignment="Center"
+                                 Text="{TemplateBinding PointTemperature}" />
+                    </Border>
+                    <TextBlock Style="{StaticResource Text.Body}" FontSize="13.5" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Text="{TemplateBinding PointPercent}" />
+                    <Border Width="1" Height="11" Margin="7,0" VerticalAlignment="Center"
+                            Background="{DynamicResource Surface.Divider}" />
+                    <TextBlock Style="{StaticResource Text.Caption}" FontSize="12"
+                               VerticalAlignment="Center" Text="{TemplateBinding PointRpm}" />
+                  </StackPanel>
+                </DockPanel>
+
+                <!-- Hidden rather than collapsed, so the chart does not jump as the hint chips come and go. -->
+                <ItemsControl x:Name="HintBar" DockPanel.Dock="Bottom" Height="21" Margin="0,3,0,0"
+                              HorizontalAlignment="Center" Focusable="False"
+                              ItemsSource="{TemplateBinding HintItems}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Orientation="Horizontal" VerticalAlignment="Center" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Border Background="{DynamicResource Surface.Hover}"
+                              BorderBrush="{DynamicResource Surface.Divider}"
+                              BorderThickness="1" CornerRadius="4" Padding="6,1.5" Margin="2.5,0">
+                        <TextBlock Style="{StaticResource Text.Caption}" FontSize="10.5"
+                                   Foreground="{DynamicResource Text.Muted}" VerticalAlignment="Center"
+                                   Text="{Binding}" />
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Border x:Name="PART_Plot" />
+              </DockPanel>
+            </Border>
+            <Border x:Name="Ring" Style="{StaticResource Focus.Ring}" BorderBrush="{x:Static theme:Accent.Brush}" />
+          </Grid>
+
+          <ControlTemplate.Triggers>
+            <Trigger Property="PointTemperature" Value="">
+              <Setter TargetName="PointReadout" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+
+            <Trigger Property="LiveTemperature" Value="">
+              <Setter TargetName="LiveBadge" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+
+            <Trigger Property="LiveRpm" Value="">
+              <Setter TargetName="LiveDivider" Property="Visibility" Value="Collapsed" />
+              <Setter TargetName="LiveRpmText" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+
+            <Trigger Property="HasHint" Value="False">
+              <Setter TargetName="HintBar" Property="Visibility" Value="Hidden" />
+            </Trigger>
+
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Trigger.EnterActions><BeginStoryboard Storyboard="{StaticResource Ring.Show}" /></Trigger.EnterActions>
+              <Trigger.ExitActions><BeginStoryboard Storyboard="{StaticResource Ring.Hide}" /></Trigger.ExitActions>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <Style TargetType="controls:Tile">
     <Setter Property="Height" Value="78" />
     <Setter Property="Margin" Value="4" />

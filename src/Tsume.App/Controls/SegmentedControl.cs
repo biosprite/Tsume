@@ -66,6 +66,19 @@ public sealed class SegmentedControl : Control
         set => SetValue(DisabledIndicesProperty, value);
     }
 
+    public static readonly DependencyProperty ReselectProperty = DependencyProperty.Register(
+        nameof(Reselect), typeof(ICommand), typeof(SegmentedControl), new PropertyMetadata(null));
+
+    /// <summary>
+    /// Run when the chosen segment is picked again (tapped, or A), which otherwise does nothing. For a choice
+    /// that may need applying again, such as a fan profile the fans have drifted off.
+    /// </summary>
+    public ICommand? Reselect
+    {
+        get => (ICommand?)GetValue(ReselectProperty);
+        set => SetValue(ReselectProperty, value);
+    }
+
     private bool IsDisabled(int index) => DisabledIndices?.Contains(index) == true;
 
     public override void OnApplyTemplate()
@@ -128,6 +141,13 @@ public sealed class SegmentedControl : Control
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (e.Key is Key.Space or Key.Enter && Reselect is { } again)
+        {
+            if (again.CanExecute(SelectedIndex)) again.Execute(SelectedIndex);
+            e.Handled = true;
+            return;
+        }
+
         var step = e.Key switch { Key.Left => -1, Key.Right => +1, _ => 0 };
         if (step == 0) return;
 
@@ -150,7 +170,11 @@ public sealed class SegmentedControl : Control
 
         var x = e.GetPosition(_labels).X;
         var target = Math.Clamp((int)(x / (_labels.ActualWidth / Segments.Count)), 0, Segments.Count - 1);
-        if (!IsDisabled(target)) SelectedIndex = target;
+        if (target != SelectedIndex)
+        {
+            if (!IsDisabled(target)) SelectedIndex = target;
+        }
+        else if (Reselect is { } again && again.CanExecute(target)) again.Execute(target);
         e.Handled = true;
     }
 }

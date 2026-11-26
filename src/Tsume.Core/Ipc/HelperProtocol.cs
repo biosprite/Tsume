@@ -23,6 +23,8 @@ public static class HelperPipe
 [JsonDerivedType(typeof(GetReadings),    "readings.get")]
 [JsonDerivedType(typeof(SetPerformance), "performance.set")]
 [JsonDerivedType(typeof(SetFan),         "fan.set")]
+[JsonDerivedType(typeof(GetFanCurve),    "fan.curve.get")]
+[JsonDerivedType(typeof(SetFanCurve),    "fan.curve.set")]
 [JsonDerivedType(typeof(SetChargeLimit), "charge.set")]
 [JsonDerivedType(typeof(StartPanel),     "panel.start")]
 [JsonDerivedType(typeof(GetLog),            "log.get")]
@@ -54,6 +56,16 @@ public sealed record SetPerformance(
 
 /// <summary>Switch fan behaviour.</summary>
 public sealed record SetFan(FanMode Mode) : HelperRequest;
+
+/// <summary>Read the fan curve: its temperatures, the speeds it holds, and the firmware's own. Changes nothing.</summary>
+public sealed record GetFanCurve : HelperRequest;
+
+/// <summary>
+/// Make the fans follow this curve and switch them to <see cref="FanMode.Custom"/>. <paramref name="Speeds"/> holds
+/// one speed per temperature point of <see cref="FanCurveState.Temperatures"/>, coolest first; the helper clamps
+/// them with <see cref="FanCurveLimits.Clamp"/>. <see cref="SetFan"/> with Custom is refused: a curve comes this way.
+/// </summary>
+public sealed record SetFanCurve(IReadOnlyList<int> Speeds) : HelperRequest;
 
 /// <summary>Stop charging the battery at this level. Only a level the machine's profile lists is accepted; 100 charges to full.</summary>
 public sealed record SetChargeLimit(int Percent) : HelperRequest;
@@ -159,6 +171,12 @@ public sealed record HelperReply
 
     /// <summary>Sent only with the answer to <see cref="GetSnapshot"/>.</summary>
     public DeviceProfile? Device { get; init; }
+
+    /// <summary>
+    /// Sent with the answers to <see cref="GetFanCurve"/> and <see cref="SetFanCurve"/>, and to <see cref="SetFan"/>
+    /// on a machine that takes a curve. Null when the firmware's curve could not be read or made no sense.
+    /// </summary>
+    public FanCurveState? FanCurve { get; init; }
 
     /// <summary>Sent only with the answer to <see cref="GetLog"/>.</summary>
     public string? Log { get; init; }

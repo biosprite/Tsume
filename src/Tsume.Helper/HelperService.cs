@@ -5,8 +5,9 @@ using Tsume.Hardware;
 namespace Tsume.Helper;
 
 /// <summary>
-/// The helper as an installed Windows service. It answers the pipe and keeps the chosen mode and charge
-/// limit in place across restarts and sleep (<see cref="ModeKeeper"/>, <see cref="ChargeKeeper"/>).
+/// The helper as an installed Windows service. It answers the pipe and keeps the chosen mode, charge limit and
+/// custom fan curve in place across restarts and sleep (<see cref="ModeKeeper"/>, <see cref="ChargeKeeper"/>,
+/// <see cref="FanCurveKeeper"/>).
 /// </summary>
 public sealed class HelperService : ServiceBase
 {
@@ -23,6 +24,7 @@ public sealed class HelperService : ServiceBase
     private Task? _serving;
     private volatile ModeKeeper? _keeper;
     private volatile ChargeKeeper? _charge;
+    private volatile FanCurveKeeper? _fan;
     private nint _screenWatch;
 
     public HelperService()
@@ -90,11 +92,12 @@ public sealed class HelperService : ServiceBase
                 : null;
 
         // Answer Windows at once; the firmware is talked to on another thread.
-        if (occasion is not null && _keeper is { } keeper && _charge is { } charge)
+        if (occasion is not null && _keeper is { } keeper && _charge is { } charge && _fan is { } fan)
             Task.Run(() =>
             {
                 keeper.RestoreIfForgotten(occasion);
                 charge.RestoreIfForgotten(occasion);
+                fan.RestoreIfForgotten(occasion);
             });
 
         // A switch between wall power and battery (Windows sends this for battery level changes too). Only boards
@@ -164,12 +167,24 @@ public sealed class HelperService : ServiceBase
 
                 var keeper = found is null ? null : new ModeKeeper(found);
                 var charge = found is null ? null : new ChargeKeeper(found);
+                var fan = found is null ? null : new FanCurveKeeper(found);
+                if (keeper is not null && fan is not null) keeper.AfterRestore = fan.RestoreIfForgotten;
 
-                keeper?.RestoreIfForgotten("start-up");
-                charge?.RestoreIfForgotten("start-up");
+                // A keeper that fails must not keep the pipe at "still starting up".
+                try
+                {
+                    keeper?.RestoreIfForgotten("start-up");
+                    charge?.RestoreIfForgotten("start-up");
+                }
+                catch (Exception error)
+                {
+                    Log.Write($"Restoring settings at start-up failed: {error.Message}");
+                }
+                fan?.RestoreIfForgotten("start-up");   // never throws
+                _fan = fan;
                 _charge = charge;
                 _keeper = keeper;
-                handler.SetHardware(machine, found, keeper, charge);
+                handler.SetHardware(machine, found, keeper, charge, fan);
             }
             catch (OperationCanceledException) { }
             catch (Exception error)
@@ -192,6 +207,7 @@ public sealed class HelperService : ServiceBase
         {
             _keeper = null;
             _charge = null;
+            _fan = null;
             try { await hardwareReady; }
             catch (OperationCanceledException) { }
             ownedDevice?.Dispose();

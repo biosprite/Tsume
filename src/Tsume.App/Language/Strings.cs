@@ -52,6 +52,48 @@ public static class Strings
     public static string FanMax => Find();
     public static string FanCustom => Find();
     public static string FanUnavailable => Find();
+
+    public static string FanCurve => Find();
+    public static string FanReset => Find();
+    public static string FanSaved => Find();
+    public static string FanFloorHint => Find();
+    public static string FanAutoNote => Find();
+    public static string FanMaxNote => Find();
+    public static string FanCurveUnavailable => Find();
+    public static string FanCustomElsewhere => Find();
+    public static string FanProfiles => Find();
+    public static string FanStockUnknown => Find();
+
+    /// <summary>"The fans aren't on Profile 2's curve. Pick Profile 2 again to send it."</summary>
+    public static string FanProfileAdrift(int profile) => Fill(Find(), profile);
+
+    /// <summary>"Custom 2", on the main screen's Fans tile.</summary>
+    public static string FanCustomProfile(int profile) => Fill(Find(), profile);
+
+    /// <summary>"Profile 2", a segment of the profile selector.</summary>
+    public static string FanProfile(int profile) => Fill(Find(), profile);
+    public static string FanCurveUnreadable => Find();
+    public static string FanCurveReading => Find();
+    public static string FanEditPrompt => Find();
+    public static string FanEditSpeed => Find();
+    public static string FanEditPoint => Find();
+    public static string FanEditDone => Find();
+
+    /// <summary>"62%"</summary>
+    public static string FanPercent(int percent) => Fill(Find(), percent);
+
+    /// <summary>"~3,400 rpm"</summary>
+    public static string FanApproxRpm(int rpm) => Fill(Find(), rpm.ToString("N0", CultureInfo.CurrentCulture));
+
+    /// <summary>"4k", on the fan curve's speed axis.</summary>
+    public static string FanRpmTick(string thousands) => Fill(Find(), thousands);
+
+    /// <summary>"70°", on the fan curve's temperature axis.</summary>
+    public static string FanDegreesTick(int celsius) => Fill(Find(), celsius);
+
+    /// <summary>"Up to ~8,000 rpm"</summary>
+    public static string FanMaxRpm(int rpm) => Fill(Find(), rpm.ToString("N0", CultureInfo.CurrentCulture));
+
     public static string Keyboard => Find();
     public static string Screenshot => Find();
     public static string TaskManager => Find();

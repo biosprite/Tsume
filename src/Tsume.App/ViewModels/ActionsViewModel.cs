@@ -68,6 +68,7 @@ public sealed class ActionsViewModel : Observable
     /// <summary>Builds the catalog of all main-screen tiles and binds their live states.</summary>
     public void InitializeTiles(
         PerformanceViewModel performance,
+        FanViewModel fan,
         LightingViewModel lighting,
         PadModeViewModel padMode,
         UpscalingViewModel upscaling,
@@ -80,7 +81,7 @@ public sealed class ActionsViewModel : Observable
             .Watch(this, detail: () => RefreshRateDetail, isOn: () => IsHighRefreshRate,
                 propertyNames: [nameof(RefreshRateDetail), nameof(IsHighRefreshRate)]);
 
-        Add(MainTileId.Fans, Glyphs.Fan, Strings.Fans, performance.CycleFan)
+        Add(MainTileId.Fans, Glyphs.Fan, Strings.Fans, fan.Open)
             .Watch(performance, detail: () => performance.FanDetail, isOn: () => performance.IsFanMax,
                 propertyNames: [nameof(PerformanceViewModel.FanDetail), nameof(PerformanceViewModel.IsFanMax)]);
 

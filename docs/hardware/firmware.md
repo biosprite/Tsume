@@ -50,6 +50,9 @@ Calls need administrator rights, which is why Tsume has a helper service.
 | `Get_WMI` | none | Interface version: major, then minor |
 | `Get_EC` | none | Firmware version text |
 | `Get_Fan` | 0 | Fan speed (see [Fans](#fans)) |
+| `Get_Fan` / `Set_Fan` | 1, 2 | Fan 1 or fan 2 curve speeds (see [Custom curves](#custom-curves)) |
+| `Get_Temperature` / `Set_Temperature` | 1, 2 | Fan 1 or fan 2 curve rising temperatures (see [Custom curves](#custom-curves)) |
+| `Get_Thermal` / `Set_Thermal` | 1, 2 | Fan 1 or fan 2 falling hysteresis temperatures on Intel boards (see [Custom curves](#custom-curves)) |
 
 ## Registers
 
@@ -62,7 +65,7 @@ Calls need administrator rights, which is why Tsume has a helper service.
 | `0x98` | Bit 7: fans at full speed | all | writes |
 | `0xC5` | Extra AMD boost. Bit 7: available. Bit 0: turn it off. | MS-1T8K | writes |
 | `0xD2` | Shift mode | all | writes |
-| `0xD4` | Bit 7: fans follow a custom curve | all | clears |
+| `0xD4` | Bit 7: fans follow a custom curve | all | writes |
 | `0xD7` | Charge limit | all | writes |
 
 ## Shift mode
@@ -157,13 +160,70 @@ board. Battery presets go up to 35 / 35 W.
 
 | Setting | What Tsume writes |
 |---|---|
-| Auto | Clears bit 7 of `0x98` and bit 7 of `0xD4` |
-| Max | Sets bit 7 of `0x98` |
+| Auto | Clears bit 7 of `0x98`, writes the firmware's own speeds back, then clears bit 7 of `0xD4` |
+| Custom | Writes the curve to both fans, sets bit 7 of `0xD4`, then clears bit 7 of `0x98` |
+| Max | Sets bit 7 of `0x98`. A custom curve stays underneath. |
 
 Fan speed comes from `Get_Fan(0)`: data bytes 0–1 are a big-endian period, and
 `RPM = 480000 / period`. A period of 0 means the fan is stopped.
 
-Custom fan curves are not built yet.
+### Custom curves
+
+A curve has six points. You choose one speed for each, and for custom curves Tsume
+also writes a chipset-appropriate temperature scale to the firmware (restoring the
+firmware's own temperatures and hysteresis on Auto).
+
+| Call | Data |
+|---|---|
+| `Get_Temperature(1\|2)` / `Set_Temperature(1\|2)` | Eight bytes per fan. Byte 2 (`0x70`/`0x88`) is the critical shutdown threshold and is never modified. Rising points sit at bytes `0, 3, 4, 5, 6, 7` on MS-1T91 (`0x69..0x6E`) and bytes `3, 4, 5, 6, 7, 1` on MS-1T52, MS-1T42, MS-1T41 and MS-1T8K (`0x6A..0x6F`, leaving byte 0 at 0). |
+| `Get_Fan(1\|2)` / `Set_Fan(1\|2)` | Eight bytes per fan. Bytes 1–6 are the six speeds; bytes 0 and 7 are left as read. |
+| `Get_Thermal(1\|2)` / `Set_Thermal(1\|2)` | Seven bytes per fan. On Intel boards bytes 1–6 (`0x7A..0x7F`, `0x92..0x97`) hold absolute falling hysteresis temperatures (set 6 °C below each rising point); on MS-1T8K they hold relative deltas (`7` °C) and are left untouched. |
+
+Tsume reads each table, updates only the curve bytes, and writes all bytes back. It
+writes the same curve to fan 2 when the firmware has a table for it and its own
+tables are known. A fan 2 table that is refused, or reads all zeros while fan 1's
+does not, counts as no table. Speeds are in the firmware's own units, and both the
+top of the scale and custom temperature range differ by board/chipset:
+
+| Board | Chipset | Top speed | Custom curve temperatures, °C | EC critical (`0x70`) |
+|---|---|---|---|---|
+| MS-1T91 | Intel Arc G3 / G3 Extreme | 100 | 50, 60, 70, 80, 90, 100 | 105 °C |
+| MS-1T52, MS-1T42 | Intel Core Ultra 7 258V (Lunar Lake) | 150 | 45, 55, 65, 75, 85, 95 | 100 °C |
+| MS-1T41 | Intel Core Ultra 5 135H / 7 155H (Meteor Lake) | 150 | 50, 60, 70, 80, 90, 100 | 110 °C |
+| MS-1T8K | AMD Ryzen Z2 Extreme | 130 | 45, 55, 65, 75, 85, 95 | 102 °C |
+
+Rules:
+
+- Tsume writes no curve unless the read temperatures are non-decreasing within
+  20–110 °C, custom temperatures sit strictly below the EC critical threshold
+  (`0x70`), and every speed is within the board's top speed.
+- A curve never slows down as it gets hotter. It also has floors, counted from
+  the board's warning temperature: from 25 °C below it at least 30, from
+  15 °C below it at least 50, and from it on at least 75. Where the firmware's
+  own curve (sampled at the active temperatures) is slower, the floor drops to it.
+- The firmware keeps following its tables even with bit 7 of `0xD4` clear, so
+  Auto must put the firmware's own speeds, temperatures, and falling hysteresis
+  back. Tsume saves them from tables it knows are untouched, and marks the
+  tables on disk before its first custom write so a custom curve is never taken
+  for the firmware's own.
+- If the firmware's own tables are not known, MS-1T91 uses the ones below. On
+  other boards Auto then only clears bit 7 of `0xD4`, and Tsume writes no
+  curve it could not undo.
+- Every table is read back. If a write fails or does not stick, Tsume puts
+  back all modified tables, bit 7 of `0xD4` and Cooler Boost as it found them,
+  then reports the failure.
+
+On MS-1T91 the firmware's own curve is:
+
+| Temperature, °C | 47 | 50 | 57 | 64 | 71 | 78 |
+|---|---|---|---|---|---|---|
+| Speed | 60 | 64 | 68 | 74 | 80 | 84 |
+
+Fan 2's table is the same, with falling hysteresis at `48, 51, 58, 65, 72, 79` °C.
+Byte 0 of `Get_Fan` is the speed the fan is running at right now, in the same units;
+on this unit one unit is about 61 RPM. Byte 7 (`94` on this unit) is the high-temp
+failsafe step engaged once temperature crosses the 6th point (`0x6E`) and is left
+as the firmware has it.
 
 ## Charge limit
 
@@ -206,16 +266,22 @@ with a keyboard hook.
 
 ## Keeping the settings
 
-The firmware forgets the mode and the charge limit across sleep and restarts.
-The helper puts them back, and only when what it finds differs from what you
-chose.
+The firmware forgets the mode, the charge limit and the custom fan curve
+across sleep and restarts. The helper puts them back, and only when what it
+finds differs from what you chose.
 
-| When | Mode and limits | Charge limit |
-|---|---|---|
-| Helper start-up | checked | checked |
-| Wake | checked | checked |
-| Screen turning on or off | checked | checked |
-| Plugging in or unplugging | checked on MS-1T41 | not checked |
+| When | Mode and limits | Charge limit | Fan curve |
+|---|---|---|---|
+| Helper start-up | checked | checked | checked |
+| Wake | checked | checked | checked |
+| Screen turning on or off | checked | checked | checked |
+| Plugging in or unplugging | checked on MS-1T41 | not checked | not checked |
+
+It is not known whether changing the mode makes the firmware reload its own
+fan tables, so the fan curve is also checked after every mode change.
+
+The fan curve is not put back while Max is on. Choosing Auto forgets it, even
+if writing Auto fails part-way.
 
 It stands back while MSI Center M is running. See
 [msi-center-m.md](msi-center-m.md).

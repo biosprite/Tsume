@@ -88,6 +88,63 @@
   <data name="FanMax" xml:space="preserve"><value>Max</value></data>
   <data name="FanCustom" xml:space="preserve"><value>Custom</value></data>
   <data name="FanUnavailable" xml:space="preserve"><value>Unavailable</value></data>
+  <data name="FanCurve" xml:space="preserve"><value>Fan curve</value></data>
+  <data name="FanReset" xml:space="preserve"><value>Reset to default</value></data>
+  <data name="FanSaved" xml:space="preserve"><value>Changes apply at once and are kept.</value></data>
+  <data name="FanFloorHint" xml:space="preserve"><value>Tsume keeps a minimum fan speed when it gets hot, so the shaded area is off limits.</value></data>
+  <data name="FanAutoNote" xml:space="preserve"><value>Auto follows the device's own curve, shown here.</value></data>
+  <data name="FanMaxNote" xml:space="preserve"><value>Max runs the fans at full speed. Turn it off to go back to your curve or Auto.</value></data>
+  <data name="FanCurveUnavailable" xml:space="preserve"><value>This device doesn't take a custom fan curve.</value></data>
+  <data name="FanCustomElsewhere" xml:space="preserve"><value>The fans are following a custom curve set outside Tsume.</value></data>
+  <data name="FanProfiles" xml:space="preserve"><value>Custom fan profiles</value></data>
+  <data name="FanStockUnknown" xml:space="preserve"><value>The device's own curve couldn't be read, so Reset to default is off.</value></data>
+  <data name="FanProfileAdrift" xml:space="preserve">
+    <value>The fans aren't on Profile {0}'s curve. Pick Profile {0} again to send it.</value>
+    <comment>On the Fans page when the curve in force is not the active profile's; {0} = the profile's number, 1 to 3</comment>
+  </data>
+  <data name="FanCustomProfile" xml:space="preserve">
+    <value>Custom {0}</value>
+    <comment>The Fans tile while a custom profile is in force; {0} = the profile's number, 1 to 3</comment>
+  </data>
+  <data name="FanProfile" xml:space="preserve">
+    <value>Profile {0}</value>
+    <comment>A segment of the custom fan profile selector; {0} = 1 to 3</comment>
+  </data>
+  <data name="FanCurveUnreadable" xml:space="preserve"><value>Couldn't read the fan curve. Updating Tsume may help.</value></data>
+  <data name="FanCurveReading" xml:space="preserve"><value>Reading the fan curve…</value></data>
+  <data name="FanEditPrompt" xml:space="preserve"><value>Press A to edit</value></data>
+  <data name="FanEditSpeed" xml:space="preserve">
+    <value>Up/Down speed</value>
+    <comment>Chip shown while editing the fan curve with a controller</comment>
+  </data>
+  <data name="FanEditPoint" xml:space="preserve">
+    <value>Left/Right point</value>
+    <comment>Chip shown while editing the fan curve with a controller</comment>
+  </data>
+  <data name="FanEditDone" xml:space="preserve">
+    <value>B done</value>
+    <comment>Chip shown while editing the fan curve with a controller</comment>
+  </data>
+  <data name="FanPercent" xml:space="preserve">
+    <value>{0}%</value>
+    <comment>Chosen fan curve point speed percentage; {0} = 0 to 100</comment>
+  </data>
+  <data name="FanApproxRpm" xml:space="preserve">
+    <value>~{0} rpm</value>
+    <comment>Rough RPM for the chosen fan curve point; {0} = revolutions per minute, already grouped</comment>
+  </data>
+  <data name="FanRpmTick" xml:space="preserve">
+    <value>{0}k</value>
+    <comment>A label on the fan curve's speed axis; {0} = thousands of rpm, e.g. 4 or 2.5</comment>
+  </data>
+  <data name="FanDegreesTick" xml:space="preserve">
+    <value>{0}°</value>
+    <comment>A label on the fan curve's temperature axis; {0} = degrees Celsius</comment>
+  </data>
+  <data name="FanMaxRpm" xml:space="preserve">
+    <value>Up to ~{0} rpm</value>
+    <comment>Right-aligned under the fan curve; {0} = the fan's rough top speed, already grouped</comment>
+  </data>
   <data name="Keyboard" xml:space="preserve"><value>Keyboard</value></data>
   <data name="Screenshot" xml:space="preserve"><value>Screenshot</value></data>
   <data name="TaskManager" xml:space="preserve"><value>Task Manager</value></data>

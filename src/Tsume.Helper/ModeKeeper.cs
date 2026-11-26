@@ -16,6 +16,13 @@ public sealed class ModeKeeper(IDevice device)
         Core.DataFolder.Path, "chosen-mode.json");
 
     private readonly Lock _gate = new();
+
+    /// <summary>
+    /// Called with the occasion after this keeper has put a mode back. Whether that makes the firmware reload its
+    /// own fan tables is not known, so the fan curve keeper checks then. Must not throw.
+    /// </summary>
+    public Action<string>? AfterRestore { get; set; }
+
     private SetPerformance? _last;
     private bool _loaded;
     private bool? _lastOnBattery;
@@ -168,6 +175,7 @@ public sealed class ModeKeeper(IDevice device)
                 ? $"{chosen.Mode}"
                 : $"{chosen.Mode} (shift {expectedHardwareMode})";
             Log.Write($"On {occasion} the firmware had {mode}, {limits}. Put back {applied}, {wanted}.");
+            AfterRestore?.Invoke(occasion);
             return true;
         }
         catch (Exception error) when (error is FirmwareException or ArgumentOutOfRangeException or System.Management.ManagementException or System.Runtime.InteropServices.COMException)

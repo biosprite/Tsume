@@ -48,6 +48,17 @@ public static class MsiBoards
 
         PowerFloor = 8,
 
+        FanTemperatures = MsiFanTemperatureMap.Base68,
+
+        // Measured on MS-1T91; both fans share the same table.
+        StockFanCurve = new(
+            Fan1: [60, 64, 68, 74, 80, 84],
+            Fan2: [60, 64, 68, 74, 80, 84],
+            Temperatures: [47, 50, 57, 64, 71, 78],
+            OverflowTemp: 85,
+            Falling1: [48, 51, 58, 65, 72, 79],
+            Falling2: [48, 51, 58, 65, 72, 79]),
+
         Profile = new()
         {
             Name = "MSI Claw 8 EX AI+ (MS-1T91)",
@@ -60,7 +71,8 @@ public static class MsiBoards
             ],
             ManualRange = new PowerRange(Min: 8, MaxSustained: 35, MaxBoost: 45, MinBoostHeadroom: 2),
             ManualDefault = new PowerLimits(Sustained: 25, Boost: 28),
-            FanModes = [FanMode.Auto, FanMode.Max],
+            FanModes = [FanMode.Auto, FanMode.Custom, FanMode.Max],
+            FanCurve = FanCurveFor(maxSpeed: 100, maxRpm: 6100, warnC: 85, customTemperatures: [50, 60, 70, 80, 90, 100]),   // ~61 RPM/unit measured; top estimated
             ChargeLimits = [80, 90, 100],   // the owner's choice; MSI Center M's own are 60, 80 and 100
             ChargeResumeGap = 10,
             TempWarnC = 85,
@@ -166,7 +178,8 @@ public static class MsiBoards
             ],
             ManualRange = new PowerRange(Min: 8, MaxSustained: 30, MaxBoost: 37, MinBoostHeadroom: 1),
             ManualDefault = new PowerLimits(Sustained: 17, Boost: 20),
-            FanModes = [FanMode.Auto, FanMode.Max],
+            FanModes = [FanMode.Auto, FanMode.Custom, FanMode.Max],
+            FanCurve = FanCurveFor(maxSpeed: 150, maxRpm: 8000, warnC: 85, customTemperatures: [45, 55, 65, 75, 85, 95]),   // maxRpm estimated
             ChargeLimits = [80, 90, 100],
             ChargeResumeGap = 10,
             TempWarnC = 85,
@@ -255,7 +268,8 @@ public static class MsiBoards
             ],
             ManualRange = new PowerRange(Min: 8, MaxSustained: 30, MaxBoost: 37, MinBoostHeadroom: 1),
             ManualDefault = new PowerLimits(Sustained: 17, Boost: 20),
-            FanModes = [FanMode.Auto, FanMode.Max],
+            FanModes = [FanMode.Auto, FanMode.Custom, FanMode.Max],
+            FanCurve = FanCurveFor(maxSpeed: 150, maxRpm: 8000, warnC: 85, customTemperatures: [45, 55, 65, 75, 85, 95]),   // maxRpm estimated
             ChargeLimits = [80, 90, 100],
             ChargeResumeGap = 10,
             TempWarnC = 85,
@@ -347,7 +361,8 @@ public static class MsiBoards
             ManualRange = new PowerRange(Min: 20, MaxSustained: 43, MaxBoost: 45),
             ManualDefault = new PowerLimits(Sustained: 30, Boost: 35),
             BatteryCap = new PowerLimits(Sustained: 35, Boost: 35),
-            FanModes = [FanMode.Auto, FanMode.Max],
+            FanModes = [FanMode.Auto, FanMode.Custom, FanMode.Max],
+            FanCurve = FanCurveFor(maxSpeed: 150, maxRpm: 8000, warnC: 85, customTemperatures: [50, 60, 70, 80, 90, 100]),   // maxRpm estimated
             ChargeLimits = [80, 90, 100],
             ChargeResumeGap = 10,
             TempWarnC = 85,
@@ -429,6 +444,8 @@ public static class MsiBoards
         PowerFloor = 7,
         BoostFloor = 9,
 
+        FanTemperatures = MsiFanTemperatureMap.ShiftedRelative,
+
         Profile = new()
         {
             Name = "MSI Claw A8 (MS-1T8K)",
@@ -444,7 +461,8 @@ public static class MsiBoards
                 MinBoostHeadroom: 0, MinBoostFloor: 9,
                 MaxFastBoost: 55, MinFastBoostHeadroom: 0, MinFastBoostFloor: 11),
             ManualDefault = new PowerLimits(Sustained: 20, Boost: 33, FastBoost: 43),
-            FanModes = [FanMode.Auto, FanMode.Max],
+            FanModes = [FanMode.Auto, FanMode.Custom, FanMode.Max],
+            FanCurve = FanCurveFor(maxSpeed: 130, maxRpm: 8000, warnC: 75, customTemperatures: [45, 55, 65, 75, 85, 95]),   // maxRpm estimated
             ChargeLimits = [80, 90, 100],
             ChargeResumeGap = 10,
             TempWarnC = 75,
@@ -474,6 +492,23 @@ public static class MsiBoards
                 },
             },
         },
+    };
+
+    /// <summary>
+    /// Custom fan curve limits with chipset temperatures and minimum speed floors (30 at warn−25 °C, 50 at warn−15 °C,
+    /// 75 at warn °C; lowered to the stock curve where stock is slower).
+    /// </summary>
+    private static FanCurveLimits FanCurveFor(int maxSpeed, int maxRpm, int warnC, int[] customTemperatures) => new()
+    {
+        MaxSpeed = maxSpeed,
+        MaxRpm = maxRpm,
+        CustomTemperatures = customTemperatures,
+        Floors =
+        [
+            new(FromCelsius: warnC - 25, MinSpeed: 30),
+            new(FromCelsius: warnC - 15, MinSpeed: 50),
+            new(FromCelsius: warnC,      MinSpeed: 75),
+        ],
     };
 
     private static readonly MsiBoard[] Known = [Claw8, Claw8AiPlus, Claw7AiPlus, ClawA1M, ClawA8];

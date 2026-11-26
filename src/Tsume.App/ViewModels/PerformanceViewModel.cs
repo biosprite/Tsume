@@ -106,6 +106,8 @@ public sealed class PerformanceViewModel : Observable
         Notify(nameof(ModeIndex));
         Notify(nameof(ShowsLimitSliders));
         Notify(nameof(FanDetail));
+        Notify(nameof(FanLimits));
+        if (FanLimits is null) FanCurve = null;
         NotifyLimits();
         Notify(nameof(BatteryCapNote));
         ReadPowerSource();
@@ -438,14 +440,43 @@ public sealed class PerformanceViewModel : Observable
     /// <summary>Fan speed, e.g. "3,200 rpm", or a dash when the firmware did not answer.</summary>
     public string FanReading { get; private set => Set(ref field, value); } = Strings.NoReading;
 
+    /// <summary>Processor temperature in °C, for the fan curve; null when the firmware did not answer.</summary>
+    public int? CpuCelsius { get; private set => Set(ref field, value); }
+
+    /// <summary>Fan speed in RPM, for the fan curve; null when the firmware did not answer.</summary>
+    public int? FanRpm { get; private set => Set(ref field, value); }
+
+    /// <summary>
+    /// Takes the firmware's fan mode. Outside Max it is also the user's own mode, the one Max returns to: whatever
+    /// set it (this panel, MSI Center M, a restart), the panel follows the fans rather than an older choice.
+    /// </summary>
+    private void TakeFan(FanMode mode)
+    {
+        Fan = mode;
+        if (mode == FanMode.Max || FanLimits is null) return;
+
+        var curveOn = mode == FanMode.Custom;
+        if (_state.FanCurveOn == curveOn) return;
+
+        _state.FanCurveOn = curveOn;
+        _state.Save();
+    }
+
     private void Show(int? cpuCelsius, int? fanRpm)
     {
         CpuReading = cpuCelsius is { } celsius ? Strings.Temperature(celsius) : Strings.NoReading;
         FanReading = fanRpm is { } rpm ? Strings.FanSpeed(rpm) : Strings.NoReading;
+        CpuCelsius = cpuCelsius;
+        FanRpm = fanRpm;
     }
 
+    /// <summary>
+    /// Toggles Max. Max is a boost on top of the user's own fan mode, so turning it off goes back to that mode:
+    /// their custom curve if they chose one, otherwise Auto.
+    /// </summary>
     public ICommand CycleFan { get; }
 
+    /// <summary>The fan mode in force, as the firmware last reported it.</summary>
     public FanMode Fan
     {
         get;
@@ -460,18 +491,271 @@ public sealed class PerformanceViewModel : Observable
     public string FanDetail => !IsHelperOnline || !Device.Offers(FanMode.Max) ? Strings.FanUnavailable : Fan switch
     {
         FanMode.Max    => Strings.FanMax,
-        FanMode.Custom => Strings.FanCustom,
+        FanMode.Custom => FanProfileInForce is { } profile ? Strings.FanCustomProfile(profile + 1) : Strings.FanCustom,
         _              => Strings.FanAuto,
     };
 
     public bool IsFanMax => Fan == FanMode.Max;
 
-    private async void NextFanMode()
+    /// <summary>What a custom fan curve may hold on this machine; null on one that takes none.</summary>
+    public FanCurveLimits? FanLimits => Device.Offers(FanMode.Custom) ? Device.FanCurve : null;
+
+    /// <summary>
+    /// The machine's fan curve as last read: its temperatures, the speeds it holds, and its own. Null until the
+    /// helper has sent one, and on a helper too old to know about curves.
+    /// </summary>
+    public FanCurveState? FanCurve
+    {
+        get;
+        private set
+        {
+            if (Set(ref field, value)) Notify(nameof(FanDetail));   // which profile is in force
+        }
+    }
+
+    /// <summary>True once the helper has answered a request for the curve, whether or not it sent one.</summary>
+    public bool FanCurveAsked { get; private set => Set(ref field, value); }
+
+    /// <summary>True while fan requests are on their way. Readings from before them are not shown, and polling waits.</summary>
+    public bool IsFanBusy { get; private set => Set(ref field, value); }
+
+    /// <summary>
+    /// The newest fan request waiting to go. Fan requests go one at a time, since the pipe keeps no order between
+    /// them, and a newer choice replaces one still waiting: only the latest intention reaches the fans.
+    /// </summary>
+    private Func<Task>? _fanNext;
+
+    /// <summary>The mode the newest fan request is heading for; null once they have all been answered.</summary>
+    private FanMode? _fanWanted;
+
+    /// <summary>Where the fans are heading: the mode last asked for if it is still on its way, otherwise the one in force.</summary>
+    public FanMode WantedFan => _fanWanted ?? Fan;
+
+    private void NextFanMode()
     {
         if (!IsHelperOnline || !Device.Offers(FanMode.Max)) return;
 
-        var next = Fan == FanMode.Max ? FanMode.Auto : FanMode.Max;
-        Absorb(await _helper.SendAsync(new SetFan(next)));
+        if (WantedFan != FanMode.Max) Queue(() => SendFanAsync(new SetFan(FanMode.Max)), FanMode.Max);
+        else if (_state.FanCurveOn && FanLimits is not null) Queue(ReturnFromMaxAsync, FanMode.Custom, FanProfile);
+        else Queue(ReturnFromMaxAsync, FanMode.Auto);
+    }
+
+    /// <summary>
+    /// Puts the fans on Auto or Max, replacing any fan request still waiting. Custom goes through
+    /// <see cref="ChooseFanProfile"/> or <see cref="KeepFanCurve"/>.
+    /// </summary>
+    public void ChooseFan(FanMode mode)
+    {
+        if (!IsHelperOnline || mode == FanMode.Custom || !Device.Offers(mode)) return;
+        Queue(() => SendFanAsync(new SetFan(mode)), mode);
+    }
+
+    /// <summary>
+    /// Keeps <paramref name="speeds"/> in <paramref name="profile"/> and, with <paramref name="send"/>, makes the fans
+    /// follow it, leaving Max and replacing any fan request still waiting. Without, the curve is only kept for
+    /// later: an edit that lands after the user moved on (to Auto, Max, or another profile) must not undo that choice.
+    /// </summary>
+    public void KeepFanCurve(int profile, IReadOnlyList<int> speeds, bool send)
+    {
+        if (FanLimits is not { } limits || FanCurve is not { } curve || speeds.Count != curve.Temperatures.Count) return;
+
+        var temperatures = CustomTemperaturesOf(curve);
+        var legal = limits.Clamp(temperatures, speeds, StockForCustom(curve));
+        _state.KeepFanCurve(profile, [.. legal]);
+        _state.Save();   // the base mode is taken from the fans' answer, not set here
+
+        if (send && IsHelperOnline) Queue(() => SendFanAsync(new SetFanCurve(legal)), FanMode.Custom, profile);
+        Notify(nameof(FanDetail));
+    }
+
+    /// <summary>The active custom fan profile, 0-based.</summary>
+    public int FanProfile => _state.ActiveFanProfile;
+
+    /// <summary>
+    /// Makes <paramref name="profile"/> the active one and, with <paramref name="send"/>, has the fans follow it: just
+    /// another curve in the fan line, so a newer choice still replaces it while it waits.
+    /// </summary>
+    public void ChooseFanProfile(int profile, bool send)
+    {
+        if (profile < 0 || profile >= SavedState.FanProfileCount) return;
+
+        if (profile != _state.FanProfile)
+        {
+            _state.FanProfile = profile;
+            _state.Save();
+            Notify(nameof(FanProfile));
+            Notify(nameof(FanDetail));
+        }
+
+        if (send && IsHelperOnline && FanCurve is { } curve)
+            Queue(() => SendFanAsync(new SetFanCurve(ProfileCurve(profile, curve))), FanMode.Custom, profile);
+    }
+
+    /// <summary>Temperature points for Custom and Max: chipset custom scale when configured, else firmware temperatures.</summary>
+    public IReadOnlyList<int> CustomTemperaturesOf(FanCurveState curve) =>
+        FanLimits?.CustomTemperatures is { Count: var count } custom && count == curve.Temperatures.Count
+            ? custom
+            : curve.Temperatures;
+
+    /// <summary>Stock speeds resampled onto <see cref="CustomTemperaturesOf"/>, or null when stock is unknown.</summary>
+    public IReadOnlyList<int>? StockForCustom(FanCurveState curve)
+    {
+        if (!curve.StockKnown) return null;
+
+        var target = CustomTemperaturesOf(curve);
+        var stockTemps = curve.EffectiveStockTemperatures;
+        return stockTemps.SequenceEqual(target)
+            ? curve.Stock
+            : FanCurveLimits.Sample(stockTemps, curve.Stock, target);
+    }
+
+    /// <summary>
+    /// A profile's curve, made legal for <paramref name="curve"/>. One never edited, or saved for a curve with a
+    /// different number of points (another machine or firmware), starts from the firmware's own curve sampled onto
+    /// the chipset's custom temperatures; when that is unknown, the curve in force. Nothing is saved until edited.
+    /// </summary>
+    public IReadOnlyList<int> ProfileCurve(int profile, FanCurveState curve)
+    {
+        if (FanLimits is not { } limits) return curve.Speeds;
+
+        var temperatures = CustomTemperaturesOf(curve);
+        var stock = StockForCustom(curve);
+        var saved = _state.FanCurveIn(profile);
+        var speeds = saved is not null && saved.Count == temperatures.Count ? saved
+            : stock ?? curve.Speeds;
+        return limits.Clamp(temperatures, speeds, stock);
+    }
+
+    /// <summary>True while the fans are on Custom and follow the active profile's temperatures and speeds exactly.</summary>
+    public bool ActiveProfileInForce =>
+        Fan == FanMode.Custom && FanCurve is { } curve && FanLimits is not null
+        && curve.Temperatures.SequenceEqual(CustomTemperaturesOf(curve))
+        && ProfileCurve(FanProfile, curve).SequenceEqual(curve.Speeds);
+
+    /// <summary>
+    /// The profile whose curve the fans follow, for the Fans tile: the one on its way while a profile is being sent,
+    /// otherwise the active one or another that matches the curve in force. Null when that is not known (no curve
+    /// on this machine, or not read yet) or matches none, as when another tool set it.
+    /// </summary>
+    public int? FanProfileInForce
+    {
+        get
+        {
+            if (FanLimits is null) return null;
+            if (_sendingProfile is { } sending) return sending;
+            if (FanCurve is not { } curve) return null;
+            if (!curve.Temperatures.SequenceEqual(CustomTemperaturesOf(curve))) return null;
+            if (ProfileCurve(FanProfile, curve).SequenceEqual(curve.Speeds)) return FanProfile;
+
+            for (var profile = 0; profile < SavedState.FanProfileCount; profile++)
+                if (ProfileCurve(profile, curve).SequenceEqual(curve.Speeds)) return profile;
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Max goes off: back to the active profile if the user's mode is Custom, otherwise Auto. Auto makes the helper
+    /// forget the curve, so a curve that cannot be checked against the machine's is sent anyway for the helper to clamp.
+    /// </summary>
+    private async Task ReturnFromMaxAsync()
+    {
+        if (_state.FanCurveOn && FanLimits is not null)
+        {
+            if (FanCurve is null) await ReadFanCurveAsync();
+
+            if (FanCurve is { } curve)
+            {
+                await SendFanAsync(new SetFanCurve(ProfileCurve(FanProfile, curve)));
+                return;
+            }
+
+            if (_state.FanCurveIn(FanProfile) is { } saved)
+            {
+                await SendFanAsync(new SetFanCurve([.. saved]));
+                return;
+            }
+        }
+
+        await SendFanAsync(new SetFan(FanMode.Auto));
+    }
+
+    /// <summary>
+    /// Reads the machine's fan curve, unless a fan request is already waiting (its answer carries the curve).
+    /// Returns whether it was asked for.
+    /// </summary>
+    public bool RefreshFanCurve()
+    {
+        if (!IsHelperOnline || FanLimits is null || _fanNext is not null) return false;
+        Queue(ReadFanCurveAsync, wanted: null);
+        return true;
+    }
+
+    /// <summary>True once the curve has been asked for since the helper last came online, so the Fans tile can name the profile.</summary>
+    private bool _curveSought;
+
+    private async Task ReadFanCurveAsync()
+    {
+        var reply = await SendFanAsync(new GetFanCurve());
+        if (!reply.Unreachable) FanCurveAsked = true;
+    }
+
+    /// <summary>The profile whose curve is on its way to the fans, so the tile keeps naming it until the answer comes.</summary>
+    private int? _sendingProfile;
+
+    /// <summary>Puts a fan request at the back of the line, in place of any still waiting, and starts the line moving.</summary>
+    /// <param name="wanted">The mode it heads for; null for a request that only reads.</param>
+    /// <param name="profile">The custom profile it sends, if any.</param>
+    private async void Queue(Func<Task> request, FanMode? wanted, int? profile = null)
+    {
+        _fanNext = request;
+        if (wanted is not null)
+        {
+            _fanWanted = wanted;
+            _sendingProfile = profile;
+            Notify(nameof(FanDetail));
+        }
+        if (IsFanBusy) return;
+
+        IsFanBusy = true;
+        try
+        {
+            while (_fanNext is { } next)
+            {
+                _fanNext = null;
+                await next();
+            }
+        }
+        finally
+        {
+            _fanWanted = null;
+            _sendingProfile = null;
+            IsFanBusy = false;
+            Notify(nameof(FanDetail));
+        }
+    }
+
+    private async Task<HelperReply> SendFanAsync(HelperRequest request)
+    {
+        var reply = await _helper.SendAsync(request);
+
+        // A failure without a snapshot (as from a helper too old to know the request) is still an answer, and
+        // Absorb would show the helper as offline. So only a snapshot, no answer at all, or an unsupported
+        // machine changes what is shown.
+        if (reply.Snapshot is not null || reply.Unreachable || reply.Unsupported) Absorb(reply, fanReply: true);
+        else TakeCurve(reply.FanCurve);
+
+        return reply;
+    }
+
+    /// <summary>Keeps a curve from the helper, if this machine takes one and it holds a speed for every point.</summary>
+    private void TakeCurve(FanCurveState? curve)
+    {
+        if (curve is null || FanLimits is null) return;
+
+        var points = curve.Temperatures.Count;
+        if (points == 0 || curve.Speeds.Count != points || curve.Stock.Count != points) return;
+
+        FanCurve = curve;
     }
 
     public bool IsHelperOnline
@@ -519,7 +803,7 @@ public sealed class PerformanceViewModel : Observable
     /// </summary>
     public async Task RefreshTelemetryAsync()
     {
-        if (_applying) return;
+        if (_applying || IsFanBusy) return;
 
         if (!IsHelperOnline)
         {
@@ -585,7 +869,8 @@ public sealed class PerformanceViewModel : Observable
         Device.BatteryCap is not null && Device.ManualRange is { } range && read == Device.CapForBattery(range.Clamp(Manual));
 
     /// <summary>Shows a helper reply. The mode and manual limits are taken from it only when <paramref name="adoptMode"/> is set.</summary>
-    private void Absorb(HelperReply reply, bool adoptMode = false)
+    /// <param name="fanReply">The answer to a fan request, so its fan mode is the newest there is.</param>
+    private void Absorb(HelperReply reply, bool adoptMode = false, bool fanReply = false)
     {
         if (reply.Device is { } device) Adopt(device);
 
@@ -593,9 +878,19 @@ public sealed class PerformanceViewModel : Observable
         IsHelperOnline = reply.Snapshot is not null;
         if (Device.FollowsPowerSource) Notify(nameof(ShowsBatteryCapNote));   // it hides while the helper is offline
 
-        if (reply.Snapshot is not { } snapshot) return;
+        TakeCurve(reply.FanCurve);
+        if (reply.Snapshot is not { } snapshot)
+        {
+            _curveSought = false;   // ask again once the helper is back
+            return;
+        }
 
-        Fan = snapshot.Fan;
+        // A reading taken before a fan request was answered would put the old mode back for a moment.
+        if (fanReply || !IsFanBusy) TakeFan(snapshot.Fan);
+
+        // On Custom the Fans tile names the profile in force, which needs the curve: read it once, in the fan line
+        // behind anything the user asked for, without waiting for the Fans page to be opened.
+        if (snapshot.Fan == FanMode.Custom && FanCurve is null && !_curveSought) _curveSought = RefreshFanCurve();
         Show(snapshot.CpuTemperature, snapshot.FanRpm);
         ReadPowerSource();   // nothing on a machine whose limits are the same on battery
 

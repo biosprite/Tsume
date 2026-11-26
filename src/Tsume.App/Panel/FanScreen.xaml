@@ -1,0 +1,104 @@
+<UserControl x:Class="Tsume.App.Panel.FanScreen"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Tsume.App.Controls"
+             xmlns:theme="clr-namespace:Tsume.App.Theme"
+             xmlns:lang="clr-namespace:Tsume.App.Language"
+             Focusable="False">
+
+  <!-- The fan mode, and a custom curve on a chart. Opened from the Fans tile. -->
+
+  <DockPanel DataContext="{Binding Fan}">
+
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,20">
+      <controls:Tile DockPanel.Dock="Left" Style="{StaticResource Tile.Icon}"
+                     Glyph="{x:Static theme:Glyphs.Back}"
+                     AutomationProperties.Name="{x:Static lang:Strings.Back}"
+                     Command="{Binding Close}" />
+
+      <TextBlock Style="{StaticResource Text.Title}" Text="{x:Static lang:Strings.Fans}"
+                 Margin="16,0,0,0" VerticalAlignment="Center" />
+    </DockPanel>
+
+    <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+               Text="{x:Static lang:Strings.FanSaved}" Margin="4,12,0,0" />
+
+    <ScrollViewer x:Name="List" Focusable="False"
+                  VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
+      <StackPanel>
+
+        <controls:SegmentedControl controls:Screen.TakesFocus="True"
+                                   AutomationProperties.Name="{x:Static lang:Strings.Fans}"
+                                   Visibility="{Binding ShowsModes, Converter={StaticResource VisibleWhenTrue}}"
+                                   Segments="{Binding Modes}" SelectedIndex="{Binding ModeIndex}"
+                                   DisabledIndices="{Binding Unavailable}"
+                                   Reselect="{Binding ReselectMode}"
+                                   IsEnabled="{Binding CanChoose}" />
+
+        <!-- Three custom profiles, on Custom only; the chart below edits the active one. -->
+        <controls:Reveal IsOpen="{Binding ShowsProfiles}">
+          <controls:SegmentedControl Margin="0,8,0,0" Height="40"
+                                     AutomationProperties.Name="{x:Static lang:Strings.FanProfiles}"
+                                     Segments="{Binding Profiles}" SelectedIndex="{Binding ProfileIndex}"
+                                     Reselect="{Binding ReselectProfile}" />
+        </controls:Reveal>
+
+        <!-- Editable on Custom; on Auto it shows the machine's own curve, on Max full speed. -->
+        <controls:FanCurveEditor Margin="0,10,0,0"
+                                 AutomationProperties.Name="{x:Static lang:Strings.FanCurve}"
+                                 Visibility="{Binding CurveShown, Converter={StaticResource VisibleWhenTrue}}"
+                                 Limits="{Binding Limits}"
+                                 Temperatures="{Binding Temperatures}"
+                                 Stock="{Binding Stock}"
+                                 Speeds="{Binding Speeds}"
+                                 IsReadOnly="{Binding IsReadOnly}"
+                                 IsEditing="{Binding IsEditing}"
+                                 IsDragging="{Binding IsDragging}"
+                                 CurrentCelsius="{Binding CpuCelsius}"
+                                 CurrentRpm="{Binding FanRpm}"
+                                 WarnCelsius="{Binding WarnCelsius}"
+                                 HotCelsius="{Binding HotCelsius}" />
+
+        <DockPanel Margin="4,8,4,0"
+                   Visibility="{Binding CurveShown, Converter={StaticResource VisibleWhenTrue}}">
+          <TextBlock DockPanel.Dock="Right" Style="{StaticResource Text.Caption}"
+                     Margin="10,0,0,0" VerticalAlignment="Center"
+                     Text="{Binding MaxRpmNote}" />
+          <TextBlock Style="{StaticResource Text.Caption}"
+                     VerticalAlignment="Center"
+                     Text="{Binding DeviceName}" />
+        </DockPanel>
+
+        <TextBlock Style="{StaticResource Text.Caption}" Margin="4,8,0,0"
+                   TextWrapping="Wrap" TextTrimming="None"
+                   Text="{Binding Note}"
+                   Visibility="{Binding ShowsNote, Converter={StaticResource VisibleWhenTrue}}" />
+
+        <controls:Tile Style="{StaticResource Tile.Row}" Margin="0,14,0,8"
+                       Glyph="{x:Static theme:Glyphs.Update}"
+                       Label="{x:Static lang:Strings.FanReset}"
+                       Command="{Binding Reset}"
+                       IsEnabled="{Binding CanReset}"
+                       Visibility="{Binding CurveShown, Converter={StaticResource VisibleWhenTrue}}" />
+
+        <!-- Why part of the chart cannot be reached: the helper keeps the fans above a floor when hot. -->
+        <Border Style="{StaticResource Card.Info}"
+                Background="{x:Static theme:Accent.Tint}"
+                BorderBrush="{x:Static theme:Accent.Wash}"
+                Visibility="{Binding ShowsFloorHint, Converter={StaticResource VisibleWhenTrue}}">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Icon}" FontSize="14"
+                       Foreground="{x:Static theme:Accent.Brush}" VerticalAlignment="Center" Margin="0,0,10,0"
+                       Text="{x:Static theme:Glyphs.Info}" />
+            <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
+                       TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center"
+                       Text="{x:Static lang:Strings.FanFloorHint}" />
+          </DockPanel>
+        </Border>
+
+      </StackPanel>
+    </ScrollViewer>
+
+  </DockPanel>
+
+</UserControl>

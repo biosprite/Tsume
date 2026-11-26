@@ -54,7 +54,41 @@ public interface IDevice : IDisposable
     /// </summary>
     PerformanceMode HardwareModeFor(PerformanceMode mode, PowerLimits limits) => mode;
 
+    /// <summary>
+    /// Switches the fans to Auto (the firmware's own curve) or Max. Custom is refused here: a curve is needed, and
+    /// it comes through <see cref="SetFanCurve"/>.
+    /// </summary>
     void SetFan(FanMode mode);
+
+    /// <summary>The fan setting in force right now. Cheap: asked on every wake.</summary>
+    FanMode Fan() => Snapshot().Fan;
+
+    /// <summary>
+    /// The fan curve as the firmware holds it, or null when the machine takes no curve or the firmware's tables
+    /// make no sense — and then <see cref="SetFanCurve"/> refuses too.
+    /// </summary>
+    FanCurveState? FanCurve() => null;
+
+    /// <summary>
+    /// Makes the fans follow these speeds, one per temperature point of <see cref="FanCurve"/>, clamped to
+    /// <see cref="DeviceProfile.FanCurve"/>, and switches the fans to Custom (Max is turned off).
+    /// </summary>
+    /// <returns>The speeds written, after clamping: what <see cref="HoldsFanCurve"/> should later be asked about.</returns>
+    /// <exception cref="FirmwareException">The firmware refused, or did not keep the curve; it has been put back as it was.</exception>
+    IReadOnlyList<int> SetFanCurve(IReadOnlyList<int> speeds) =>
+        throw new NotSupportedException("This device takes no custom fan curve.");
+
+    /// <summary>
+    /// True when the fans are on Custom and the firmware still holds exactly these speeds, as returned by
+    /// <see cref="SetFanCurve"/>. Cheap enough to ask on every wake.
+    /// </summary>
+    bool HoldsFanCurve(IReadOnlyList<int> speeds) => false;
+
+    /// <summary>
+    /// Tells the device which curve the helper keeps putting back (null: none), so tables holding it are never
+    /// taken for the firmware's own.
+    /// </summary>
+    void NoteChosenFanCurve(IReadOnlyList<int>? speeds) { }
 
     /// <summary>Stops charging at this level, which must be one of the profile's <see cref="DeviceProfile.ChargeLimits"/>.</summary>
     void SetChargeLimit(int percent);

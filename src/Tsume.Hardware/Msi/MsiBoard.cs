@@ -40,7 +40,38 @@ public sealed record MsiBoard
     /// value. Null on boards without such a rule.
     /// </summary>
     public SustainedShiftRule? SustainedShift { get; init; }
+
+    /// <summary>Firmware stock fan curve, used when live tables cannot be trusted. Null on unverified boards.</summary>
+    public StockFanSpeeds? StockFanCurve { get; init; }
+
+    /// <summary>EC temperature-table layout and falling hysteresis mode.</summary>
+    public MsiFanTemperatureMap FanTemperatures { get; init; } = MsiFanTemperatureMap.Shifted;
 }
+
+/// <summary>
+/// Indices of the six rising temperatures in <c>Get_Temperature(1|2)</c>, optional 7th slot, and falling hysteresis
+/// in °C for <c>Get_Thermal(1|2)[1..6]</c> (null when the EC stores relative deltas there).
+/// </summary>
+public sealed record MsiFanTemperatureMap(int[] Points, int? OverflowIndex = null, int? FallingHysteresisC = 6)
+{
+    /// <summary>MS-1T91: rising points at 0x69..0x6E, 7th slot at 0x6F, absolute falling hysteresis.</summary>
+    public static readonly MsiFanTemperatureMap Base68 = new([0, 3, 4, 5, 6, 7], OverflowIndex: 1, FallingHysteresisC: 6);
+
+    /// <summary>MS-1T52, MS-1T42, MS-1T41: rising points at 0x6A..0x6F (0x69 stays 0), absolute falling hysteresis.</summary>
+    public static readonly MsiFanTemperatureMap Shifted = new([3, 4, 5, 6, 7, 1], OverflowIndex: null, FallingHysteresisC: 6);
+
+    /// <summary>MS-1T8K: rising points at 0x6A..0x6F, relative falling deltas (left untouched).</summary>
+    public static readonly MsiFanTemperatureMap ShiftedRelative = new([3, 4, 5, 6, 7, 1], OverflowIndex: null, FallingHysteresisC: null);
+}
+
+/// <summary>Stock six-point fan speeds and optional temperatures/hysteresis per fan, coolest first.</summary>
+public sealed record StockFanSpeeds(
+    int[] Fan1,
+    int[]? Fan2,
+    int[]? Temperatures = null,
+    int? OverflowTemp = null,
+    int[]? Falling1 = null,
+    int[]? Falling2 = null);
 
 /// <summary>
 /// When the sustained limit applied is <paramref name="SustainedWatts"/>, the shift register is set to
