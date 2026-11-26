@@ -19,7 +19,7 @@
 | **Opens over anything** | Games, the desktop, Xbox Full Screen Experience (FSE) and Steam Big Picture. |
 | **Performance modes** | Endurance, Balanced, Performance and Manual, set in the firmware. Presets start from your device's defaults and can be customized in Settings. |
 | **Live readings** | Processor temperature and fan speed, updated every second while the panel is open, beside the power limits in force, the battery level and the time. |
-| **Fan control** | Auto (the device's default fan profile) or Max. |
+| **Fan control** | Auto (the device's default fan profile), Custom (three saved fan curve profiles with per-chipset temperature scales and thermal safety floors) or Max. |
 | **Battery charge limit** | Stop charging at 80 %, 90 % or 100 %, kept across sleep and restarts. |
 | **Display and sound** | Screen brightness, speaker volume with mute, and a switch between the refresh rates the display offers. |
 | **Controller mode** | Switch the built-in pad between gamepad and cursor (mouse) mode. |

@@ -164,8 +164,14 @@ board. Battery presets go up to 35 / 35 W.
 | Custom | Writes the curve to both fans, sets bit 7 of `0xD4`, then clears bit 7 of `0x98` |
 | Max | Sets bit 7 of `0x98`. A custom curve stays underneath. |
 
-Fan speed comes from `Get_Fan(0)`: data bytes 0–1 are a big-endian period, and
-`RPM = 480000 / period`. A period of 0 means the fan is stopped.
+Live fan telemetry uses real firmware readings only (Tsume never estimates a
+maximum RPM):
+
+- Tachometer speed comes from `Get_Fan(0)`: data bytes 0–1 are a big-endian
+  period, and `RPM = 480000 / period` (`0` means the fan is stopped).
+- Live fan duty comes from byte 0 of `Get_Fan(1)`, in the same `0..MaxSpeed`
+  units as the fan curve. The curve chart plots speeds as a percentage of each
+  board's real `MaxSpeed` scale (`0–100%`).
 
 ### Custom curves
 
@@ -175,32 +181,33 @@ firmware's own temperatures and hysteresis on Auto).
 
 | Call | Data |
 |---|---|
-| `Get_Temperature(1\|2)` / `Set_Temperature(1\|2)` | Eight bytes per fan. Byte 2 (`0x70`/`0x88`) is the critical shutdown threshold and is never modified. Rising points sit at bytes `0, 3, 4, 5, 6, 7` on MS-1T91 (`0x69..0x6E`) and bytes `3, 4, 5, 6, 7, 1` on MS-1T52, MS-1T42, MS-1T41 and MS-1T8K (`0x6A..0x6F`, leaving byte 0 at 0). |
-| `Get_Fan(1\|2)` / `Set_Fan(1\|2)` | Eight bytes per fan. Bytes 1–6 are the six speeds; bytes 0 and 7 are left as read. |
+| `Get_Temperature(1\|2)` / `Set_Temperature(1\|2)` | Eight bytes per fan. Byte 2 (`0x70`/`0x88`) is the critical shutdown threshold and is never modified. Rising points sit at bytes `0, 3, 4, 5, 6, 7` on MS-1T91 (`0x69..0x6E`, with optional 7th overflow slot at byte 1 / `0x6F` kept above the top point and at least 2 °C below critical) and bytes `3, 4, 5, 6, 7, 1` on MS-1T52, MS-1T42, MS-1T41 and MS-1T8K (`0x6A..0x6F`, leaving byte 0 at 0). |
+| `Get_Fan(1\|2)` / `Set_Fan(1\|2)` | Eight bytes per fan. Byte 0 is the fan's live duty in the same units; bytes 1–6 are the six curve speeds; bytes 0 and 7 are left as read when writing. |
 | `Get_Thermal(1\|2)` / `Set_Thermal(1\|2)` | Seven bytes per fan. On Intel boards bytes 1–6 (`0x7A..0x7F`, `0x92..0x97`) hold absolute falling hysteresis temperatures (set 6 °C below each rising point); on MS-1T8K they hold relative deltas (`7` °C) and are left untouched. |
 
 Tsume reads each table, updates only the curve bytes, and writes all bytes back. It
 writes the same curve to fan 2 when the firmware has a table for it and its own
 tables are known. A fan 2 table that is refused, or reads all zeros while fan 1's
-does not, counts as no table. Speeds are in the firmware's own units, and both the
-top of the scale and custom temperature range differ by board/chipset:
+does not, counts as no table. Speeds are in the firmware's own units, and the top
+of the scale, custom temperatures, warning/hot thresholds, and minimum floors
+differ by board/chipset:
 
-| Board | Chipset | Top speed | Custom curve temperatures, °C | EC critical (`0x70`) |
-|---|---|---|---|---|
-| MS-1T91 | Intel Arc G3 / G3 Extreme | 100 | 50, 60, 70, 80, 90, 100 | 105 °C |
-| MS-1T52, MS-1T42 | Intel Core Ultra 7 258V (Lunar Lake) | 150 | 45, 55, 65, 75, 85, 95 | 100 °C |
-| MS-1T41 | Intel Core Ultra 5 135H / 7 155H (Meteor Lake) | 150 | 50, 60, 70, 80, 90, 100 | 110 °C |
-| MS-1T8K | AMD Ryzen Z2 Extreme | 130 | 45, 55, 65, 75, 85, 95 | 102 °C |
+| Board | Chipset | Top speed (`MaxSpeed`) | Custom curve temps (°C) | Falling hysteresis | Warn / Hot (°C) | EC critical (`0x70`) | Minimum floors (% / raw units) |
+|---|---|---|---|---|---|---|---|
+| MS-1T91 | Intel Arc G3 / G3 Extreme | 100 | 50, 60, 70, 80, 90, 100 | 44, 54, 64, 74, 84, 94 °C (−6 °C; overflow 103 °C) | 85 / 95 | 105 °C | 70 °C: 20% (20), 80 °C: 35% (35), 90 °C: 50% (50), 100 °C: 65% (65) |
+| MS-1T52, MS-1T42 | Intel Core Ultra 7 258V (Lunar Lake) | 150 | 45, 55, 65, 75, 85, 95 | 39, 49, 59, 69, 79, 89 °C (−6 °C) | 85 / 95 | 100 °C | 75 °C: 20% (30), 85 °C: 35% (53), 95 °C: 50% (75) |
+| MS-1T41 | Intel Core Ultra 5 135H / 7 155H (Meteor Lake) | 150 | 50, 60, 70, 80, 90, 100 | 44, 54, 64, 74, 84, 94 °C (−6 °C) | 85 / 95 | 110 °C | 70 °C: 15% (23), 80 °C: 25% (38), 90 °C: 35% (53), 100 °C: 50% (75) |
+| MS-1T8K | AMD Ryzen Z2 Extreme | 130 | 45, 55, 65, 75, 85, 95 | Relative deltas (`7` °C), untouched | 75 / 85 | 102 °C | 75 °C: 25% (33), 85 °C: 40% (52), 95 °C: 50% (65) |
 
 Rules:
 
 - Tsume writes no curve unless the read temperatures are non-decreasing within
   20–110 °C, custom temperatures sit strictly below the EC critical threshold
   (`0x70`), and every speed is within the board's top speed.
-- A curve never slows down as it gets hotter. It also has floors, counted from
-  the board's warning temperature: from 25 °C below it at least 30, from
-  15 °C below it at least 50, and from it on at least 75. Where the firmware's
-  own curve (sampled at the active temperatures) is slower, the floor drops to it.
+- A curve never slows down as it gets hotter. It also enforces the per-chipset
+  minimum speed floors above (converted from percent of `MaxSpeed` to firmware
+  units). Where the firmware's own curve (resampled onto the active temperatures)
+  is slower, the floor drops to match stock.
 - The firmware keeps following its tables even with bit 7 of `0xD4` clear, so
   Auto must put the firmware's own speeds, temperatures, and falling hysteresis
   back. Tsume saves them from tables it knows are untouched, and marks the
@@ -213,17 +220,17 @@ Rules:
   back all modified tables, bit 7 of `0xD4` and Cooler Boost as it found them,
   then reports the failure.
 
-On MS-1T91 the firmware's own curve is:
+On MS-1T91 the firmware's own measured stock curve is:
 
 | Temperature, °C | 47 | 50 | 57 | 64 | 71 | 78 |
 |---|---|---|---|---|---|---|
-| Speed | 60 | 64 | 68 | 74 | 80 | 84 |
+| Speed (`MaxSpeed = 100`) | 60 | 64 | 68 | 74 | 80 | 84 |
 
-Fan 2's table is the same, with falling hysteresis at `48, 51, 58, 65, 72, 79` °C.
-Byte 0 of `Get_Fan` is the speed the fan is running at right now, in the same units;
-on this unit one unit is about 61 RPM. Byte 7 (`94` on this unit) is the high-temp
-failsafe step engaged once temperature crosses the 6th point (`0x6E`) and is left
-as the firmware has it.
+Fan 2's table is the same, with stock overflow slot `85` °C (`0x6F`) and falling
+hysteresis at `48, 51, 58, 65, 72, 79` °C. Byte 0 of `Get_Fan` is the live duty
+the fan is running at right now, in the same units. Byte 7 (`94` on this unit) is
+the high-temp failsafe step engaged once temperature crosses the 6th point (`0x6E`)
+and is left as the firmware has it.
 
 ## Charge limit
 

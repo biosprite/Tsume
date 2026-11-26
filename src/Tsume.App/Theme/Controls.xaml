@@ -191,7 +191,7 @@
                     </StackPanel>
                   </Border>
 
-                  <!-- Chosen curve point: accent temperature chip, speed percentage, vertical divider, and rough RPM. -->
+                  <!-- Chosen curve point: accent temperature chip and speed percentage. -->
                   <StackPanel x:Name="PointReadout" Orientation="Horizontal" VerticalAlignment="Center">
                     <Border Background="{x:Static theme:Accent.Tint}"
                             BorderBrush="{x:Static theme:Accent.Wash}" BorderThickness="1"
@@ -202,10 +202,6 @@
                     </Border>
                     <TextBlock Style="{StaticResource Text.Body}" FontSize="13.5" FontWeight="SemiBold"
                                VerticalAlignment="Center" Text="{TemplateBinding PointPercent}" />
-                    <Border Width="1" Height="11" Margin="7,0" VerticalAlignment="Center"
-                            Background="{DynamicResource Surface.Divider}" />
-                    <TextBlock Style="{StaticResource Text.Caption}" FontSize="12"
-                               VerticalAlignment="Center" Text="{TemplateBinding PointRpm}" />
                   </StackPanel>
                 </DockPanel>
 

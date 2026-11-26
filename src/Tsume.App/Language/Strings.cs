@@ -82,17 +82,8 @@ public static class Strings
     /// <summary>"62%"</summary>
     public static string FanPercent(int percent) => Fill(Find(), percent);
 
-    /// <summary>"~3,400 rpm"</summary>
-    public static string FanApproxRpm(int rpm) => Fill(Find(), rpm.ToString("N0", CultureInfo.CurrentCulture));
-
-    /// <summary>"4k", on the fan curve's speed axis.</summary>
-    public static string FanRpmTick(string thousands) => Fill(Find(), thousands);
-
     /// <summary>"70°", on the fan curve's temperature axis.</summary>
     public static string FanDegreesTick(int celsius) => Fill(Find(), celsius);
-
-    /// <summary>"Up to ~8,000 rpm"</summary>
-    public static string FanMaxRpm(int rpm) => Fill(Find(), rpm.ToString("N0", CultureInfo.CurrentCulture));
 
     public static string Keyboard => Find();
     public static string Screenshot => Find();

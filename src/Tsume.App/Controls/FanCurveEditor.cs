@@ -10,15 +10,15 @@ using Tsume.Core.Cooling;
 namespace Tsume.App.Controls;
 
 /// <summary>
-/// A fan curve on an L-shaped chart: fan speed up the left, labeled in rough RPM, and the curve's temperature
-/// points along the bottom, one handle each. Touch or click anywhere in a point's column and drag up or down;
-/// with a controller, A starts editing, left and right pick a point, up and down set its speed, and A or B stop.
+/// A fan curve on an L-shaped chart: fan speed up the left in percent of the board's curve scale, and the curve's
+/// temperature points along the bottom, one handle each. Touch or click anywhere in a point's column and drag up or
+/// down; with a controller, A starts editing, left and right pick a point, up and down set its speed, and A or B stop.
 /// Every change goes through <see cref="FanCurveLimits.Clamp"/>, so what is drawn is what the helper writes.
 /// </summary>
 public sealed class FanCurveEditor : Control
 {
     // Room around the plot for the axis labels, and above it for a handle at full speed.
-    private const double LabelWidth = 30;
+    private const double LabelWidth = 34;
     private const double LabelHeight = 20;
     private const double Headroom = 12;
     private const double RightEdge = 4;
@@ -75,6 +75,7 @@ public sealed class FanCurveEditor : Control
     public static readonly DependencyProperty IsReadOnlyProperty = Register(nameof(IsReadOnly), typeof(bool), false);
     public static readonly DependencyProperty CurrentCelsiusProperty = Register(nameof(CurrentCelsius), typeof(int?), null);
     public static readonly DependencyProperty CurrentRpmProperty = Register(nameof(CurrentRpm), typeof(int?), null);
+    public static readonly DependencyProperty CurrentSpeedProperty = Register(nameof(CurrentSpeed), typeof(int?), null);
     public static readonly DependencyProperty WarnCelsiusProperty = Register(nameof(WarnCelsius), typeof(int), 75);
     public static readonly DependencyProperty HotCelsiusProperty = Register(nameof(HotCelsius), typeof(int), 85);
 
@@ -104,9 +105,6 @@ public sealed class FanCurveEditor : Control
     private static readonly DependencyPropertyKey PointPercentKey = DependencyProperty.RegisterReadOnly(
         nameof(PointPercent), typeof(string), typeof(FanCurveEditor), new PropertyMetadata(""));
 
-    private static readonly DependencyPropertyKey PointRpmKey = DependencyProperty.RegisterReadOnly(
-        nameof(PointRpm), typeof(string), typeof(FanCurveEditor), new PropertyMetadata(""));
-
     private static readonly DependencyPropertyKey LiveTemperatureKey = DependencyProperty.RegisterReadOnly(
         nameof(LiveTemperature), typeof(string), typeof(FanCurveEditor), new PropertyMetadata(""));
 
@@ -121,13 +119,12 @@ public sealed class FanCurveEditor : Control
 
     public static readonly DependencyProperty PointTemperatureProperty = PointTemperatureKey.DependencyProperty;
     public static readonly DependencyProperty PointPercentProperty = PointPercentKey.DependencyProperty;
-    public static readonly DependencyProperty PointRpmProperty = PointRpmKey.DependencyProperty;
     public static readonly DependencyProperty LiveTemperatureProperty = LiveTemperatureKey.DependencyProperty;
     public static readonly DependencyProperty LiveRpmProperty = LiveRpmKey.DependencyProperty;
     public static readonly DependencyProperty HintItemsProperty = HintItemsKey.DependencyProperty;
     public static readonly DependencyProperty HasHintProperty = HasHintKey.DependencyProperty;
 
-    /// <summary>What the curve may hold: the top of the graph, the RPM scale, and the safety floors.</summary>
+    /// <summary>What the curve may hold: the top of the graph and the safety floors.</summary>
     public FanCurveLimits? Limits { get => (FanCurveLimits?)GetValue(LimitsProperty); set => SetValue(LimitsProperty, value); }
 
     /// <summary>The curve's temperature points in °C, coolest first: the firmware's own on Auto, or the chipset's custom scale on Custom and Max.</summary>
@@ -145,8 +142,11 @@ public sealed class FanCurveEditor : Control
     /// <summary>The processor's temperature now, marked on the temperature axis; null when there is no reading.</summary>
     public int? CurrentCelsius { get => (int?)GetValue(CurrentCelsiusProperty); set => SetValue(CurrentCelsiusProperty, value); }
 
-    /// <summary>The fan's speed now, a dot on the current temperature's line; null when there is no reading.</summary>
+    /// <summary>The fan's live speed in RPM from the tachometer, shown in the live badge; null when there is no reading.</summary>
     public int? CurrentRpm { get => (int?)GetValue(CurrentRpmProperty); set => SetValue(CurrentRpmProperty, value); }
+
+    /// <summary>The fan's live duty in <see cref="FanCurveLimits.MaxSpeed"/> units, a dot on the current temperature's line; null when unavailable.</summary>
+    public int? CurrentSpeed { get => (int?)GetValue(CurrentSpeedProperty); set => SetValue(CurrentSpeedProperty, value); }
 
     /// <summary>From here the temperature axis is tinted amber.</summary>
     public int WarnCelsius { get => (int)GetValue(WarnCelsiusProperty); set => SetValue(WarnCelsiusProperty, value); }
@@ -168,9 +168,6 @@ public sealed class FanCurveEditor : Control
 
     /// <summary>The chosen point's speed percentage, e.g. "62%".</summary>
     public string PointPercent => (string)GetValue(PointPercentProperty);
-
-    /// <summary>The chosen point's rough speed, e.g. "~3,400 rpm".</summary>
-    public string PointRpm => (string)GetValue(PointRpmProperty);
 
     /// <summary>The live CPU temperature, e.g. "61 °C".</summary>
     public string LiveTemperature => (string)GetValue(LiveTemperatureProperty);
@@ -226,16 +223,13 @@ public sealed class FanCurveEditor : Control
         if (Chosen >= 0 && Limits is { } limits)
         {
             var speed = Speeds[Chosen];
-            var rpm = (int)Math.Round(limits.RpmAt(speed) / 100.0) * 100;
             SetValue(PointTemperatureKey, Strings.Temperature(Temperatures[Chosen]));
             SetValue(PointPercentKey, Strings.FanPercent(limits.PercentAt(speed)));
-            SetValue(PointRpmKey, Strings.FanApproxRpm(rpm));
         }
         else
         {
             SetValue(PointTemperatureKey, "");
             SetValue(PointPercentKey, "");
-            SetValue(PointRpmKey, "");
         }
 
         if (CurrentCelsius is { } celsius)
@@ -570,15 +564,14 @@ public sealed class FanCurveEditor : Control
                 new Rect(x - layout.Column / 2 + 2, layout.Top - Headroom + 2, layout.Column - 4, layout.Bottom - layout.Top + Headroom - 2), 8, 8);
         }
 
-        // Speed: grid lines at round RPM figures, labeled "2k", "4k"…
-        var tick = RpmTick(limits.MaxRpm);
+        // Speed: grid lines at 25 %, 50 %, 75 % and 100 % of the board's real fan curve scale.
         var gridPen = new Pen(divider, 1);
-        for (var rpm = tick; rpm <= limits.MaxRpm; rpm += tick)
+        for (var percent = 25; percent <= 100; percent += 25)
         {
-            var y = layout.Bottom - (double)rpm / limits.MaxRpm * layout.Height;
+            var y = layout.Bottom - percent / 100.0 * layout.Height;
             dc.DrawLine(gridPen, new Point(layout.Left, y), new Point(layout.Right, y));
 
-            var label = Words(Strings.FanRpmTick((rpm / 1000.0).ToString("0.#", CultureInfo.CurrentCulture)), 11, muted, dip);
+            var label = Words(Strings.FanPercent(percent), 11, muted, dip);
             dc.DrawText(label, new Point(layout.Left - 6 - label.Width, y - label.Height / 2));
         }
 
@@ -640,9 +633,9 @@ public sealed class FanCurveEditor : Control
             dc.DrawLine(nowPen, new Point(x, layout.Top), new Point(x, layout.Bottom));
             dc.Pop();
 
-            if (CurrentRpm is { } rpm && limits.MaxRpm > 0)
+            if (CurrentSpeed is { } liveSpeed)
             {
-                var y = Math.Max(layout.Top, layout.Bottom - (double)rpm / limits.MaxRpm * layout.Height);
+                var y = layout.Y(liveSpeed);
                 dc.DrawEllipse(text, new Pen(panel, 2), new Point(x, y), 4.5, 4.5);
             }
         }
@@ -685,14 +678,6 @@ public sealed class FanCurveEditor : Control
         }
         geometry.Freeze();
         return geometry;
-    }
-
-    /// <summary>The gap between RPM grid lines: a round figure giving two to four lines.</summary>
-    private static int RpmTick(int maxRpm)
-    {
-        foreach (var step in (int[])[500, 1000, 2000, 2500, 5000])
-            if (maxRpm / step <= 4) return step;
-        return 10000;
     }
 
     /// <summary>Thin diagonal lines: the floors read as out of bounds without hiding the grid beneath.</summary>

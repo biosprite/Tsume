@@ -938,12 +938,19 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board, string? fan
                 ChargeLimit = Profile.ChargeLimits.Count > 0 ? ReadChargeLimit() : null,
                 CpuTemperature = ReadCpuTemperature(),
                 FanRpm = ReadFanRpm(),
+                FanSpeed = ReadFanSpeed(),
                 FirmwareVersion = ReadFirmwareVersion(),
             };
         }
     }
 
-    public LiveReadings Readings() => new(ReadCpuTemperature(), ReadFanRpm());
+    public LiveReadings Readings()
+    {
+        lock (_oneIntentionAtATime)
+        {
+            return new(ReadCpuTemperature(), ReadFanRpm(), ReadFanSpeed());
+        }
+    }
 
     private FanMode ReadFanMode()
     {
@@ -969,6 +976,21 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board, string? fan
 
         var period = (reply.Data[0] << 8) | reply.Data[1];
         return period == 0 ? 0 : board.Tachometer / period;
+    }
+
+    /// <summary>
+    /// Byte 0 of <c>Get_Fan(1)</c>: the fan's live duty in the firmware's own curve units (<c>0..MaxSpeed</c>).
+    /// Null when this board takes no curve or the firmware did not answer with a sane reading.
+    /// </summary>
+    private int? ReadFanSpeed()
+    {
+        if (Profile.FanCurve is not { } limits) return null;
+
+        var reply = firmware.Get("Get_Fan", selector: 1);
+        if (!reply.Accepted || reply.Data.Length < FanTableLength) return null;
+
+        var duty = (int)reply.Data[0];
+        return duty <= Math.Max(limits.MaxSpeed, 150) ? duty : null;
     }
 
     /// <summary>The firmware's whole version text, build date and time included ("1T91EMS1.1030902202615:19:39").</summary>

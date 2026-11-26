@@ -14,9 +14,6 @@ public sealed record FanCurveLimits
     /// <summary>The highest speed a point may hold, in the firmware's own units (not percent on every board): the top of the graph.</summary>
     public required int MaxSpeed { get; init; }
 
-    /// <summary>Roughly the fan's RPM at <see cref="MaxSpeed"/>, for labeling the graph. An estimate, not a reading.</summary>
-    public required int MaxRpm { get; init; }
-
     /// <summary>The slowest speeds allowed as it gets hotter, coolest first. Empty: any speed at any temperature.</summary>
     public IReadOnlyList<FanFloor> Floors { get; init; } = [];
 
@@ -112,13 +109,9 @@ public sealed record FanCurveLimits
     /// <summary>A speed as a share of <see cref="MaxSpeed"/>, 0–100.</summary>
     public int PercentAt(int speed) => MaxSpeed <= 0 ? 0 : (int)Math.Round(100.0 * Math.Clamp(speed, 0, MaxSpeed) / MaxSpeed);
 
-    /// <summary>Roughly the RPM a speed gives, assuming RPM rises evenly up to <see cref="MaxRpm"/>.</summary>
-    public int RpmAt(int speed) => MaxSpeed <= 0 ? 0 : (int)Math.Round((double)MaxRpm * Math.Clamp(speed, 0, MaxSpeed) / MaxSpeed);
-
     /// <summary>Content equality; record equality compares the list by reference.</summary>
     public bool Matches(FanCurveLimits other) =>
         MaxSpeed == other.MaxSpeed
-        && MaxRpm == other.MaxRpm
         && Floors.SequenceEqual(other.Floors)
         && (CustomTemperatures is null
             ? other.CustomTemperatures is null

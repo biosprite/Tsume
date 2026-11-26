@@ -446,6 +446,9 @@ public sealed class PerformanceViewModel : Observable
     /// <summary>Fan speed in RPM, for the fan curve; null when the firmware did not answer.</summary>
     public int? FanRpm { get; private set => Set(ref field, value); }
 
+    /// <summary>Live fan duty in the firmware's curve units, for the fan curve dot; null when unavailable.</summary>
+    public int? FanSpeed { get; private set => Set(ref field, value); }
+
     /// <summary>
     /// Takes the firmware's fan mode. Outside Max it is also the user's own mode, the one Max returns to: whatever
     /// set it (this panel, MSI Center M, a restart), the panel follows the fans rather than an older choice.
@@ -462,12 +465,13 @@ public sealed class PerformanceViewModel : Observable
         _state.Save();
     }
 
-    private void Show(int? cpuCelsius, int? fanRpm)
+    private void Show(int? cpuCelsius, int? fanRpm, int? fanSpeed)
     {
         CpuReading = cpuCelsius is { } celsius ? Strings.Temperature(celsius) : Strings.NoReading;
         FanReading = fanRpm is { } rpm ? Strings.FanSpeed(rpm) : Strings.NoReading;
         CpuCelsius = cpuCelsius;
         FanRpm = fanRpm;
+        FanSpeed = fanSpeed;
     }
 
     /// <summary>
@@ -818,7 +822,7 @@ public sealed class PerformanceViewModel : Observable
 
         if (reply.Readings is { } readings)
         {
-            Show(readings.CpuTemperature, readings.FanRpm);
+            Show(readings.CpuTemperature, readings.FanRpm, readings.FanSpeed);
             ReadPowerSource();   // nothing on a machine whose limits are the same on battery
         }
         else Absorb(reply);   // no readings means the helper is gone
@@ -891,7 +895,7 @@ public sealed class PerformanceViewModel : Observable
         // On Custom the Fans tile names the profile in force, which needs the curve: read it once, in the fan line
         // behind anything the user asked for, without waiting for the Fans page to be opened.
         if (snapshot.Fan == FanMode.Custom && FanCurve is null && !_curveSought) _curveSought = RefreshFanCurve();
-        Show(snapshot.CpuTemperature, snapshot.FanRpm);
+        Show(snapshot.CpuTemperature, snapshot.FanRpm, snapshot.FanSpeed);
         ReadPowerSource();   // nothing on a machine whose limits are the same on battery
 
         if (!adoptMode) return;

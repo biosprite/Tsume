@@ -72,7 +72,10 @@ public static class MsiBoards
             ManualRange = new PowerRange(Min: 8, MaxSustained: 35, MaxBoost: 45, MinBoostHeadroom: 2),
             ManualDefault = new PowerLimits(Sustained: 25, Boost: 28),
             FanModes = [FanMode.Auto, FanMode.Custom, FanMode.Max],
-            FanCurve = FanCurveFor(maxSpeed: 100, maxRpm: 6100, warnC: 85, customTemperatures: [50, 60, 70, 80, 90, 100]),   // ~61 RPM/unit measured; top estimated
+            FanCurve = FanCurveFor(
+                maxSpeed: 100,
+                customTemperatures: [50, 60, 70, 80, 90, 100],
+                floors: [(70, 20), (80, 35), (90, 50), (100, 65)]),
             ChargeLimits = [80, 90, 100],   // the owner's choice; MSI Center M's own are 60, 80 and 100
             ChargeResumeGap = 10,
             TempWarnC = 85,
@@ -179,7 +182,10 @@ public static class MsiBoards
             ManualRange = new PowerRange(Min: 8, MaxSustained: 30, MaxBoost: 37, MinBoostHeadroom: 1),
             ManualDefault = new PowerLimits(Sustained: 17, Boost: 20),
             FanModes = [FanMode.Auto, FanMode.Custom, FanMode.Max],
-            FanCurve = FanCurveFor(maxSpeed: 150, maxRpm: 8000, warnC: 85, customTemperatures: [45, 55, 65, 75, 85, 95]),   // maxRpm estimated
+            FanCurve = FanCurveFor(
+                maxSpeed: 150,
+                customTemperatures: [45, 55, 65, 75, 85, 95],
+                floors: [(75, 20), (85, 35), (95, 50)]),
             ChargeLimits = [80, 90, 100],
             ChargeResumeGap = 10,
             TempWarnC = 85,
@@ -269,7 +275,10 @@ public static class MsiBoards
             ManualRange = new PowerRange(Min: 8, MaxSustained: 30, MaxBoost: 37, MinBoostHeadroom: 1),
             ManualDefault = new PowerLimits(Sustained: 17, Boost: 20),
             FanModes = [FanMode.Auto, FanMode.Custom, FanMode.Max],
-            FanCurve = FanCurveFor(maxSpeed: 150, maxRpm: 8000, warnC: 85, customTemperatures: [45, 55, 65, 75, 85, 95]),   // maxRpm estimated
+            FanCurve = FanCurveFor(
+                maxSpeed: 150,
+                customTemperatures: [45, 55, 65, 75, 85, 95],
+                floors: [(75, 20), (85, 35), (95, 50)]),
             ChargeLimits = [80, 90, 100],
             ChargeResumeGap = 10,
             TempWarnC = 85,
@@ -362,7 +371,10 @@ public static class MsiBoards
             ManualDefault = new PowerLimits(Sustained: 30, Boost: 35),
             BatteryCap = new PowerLimits(Sustained: 35, Boost: 35),
             FanModes = [FanMode.Auto, FanMode.Custom, FanMode.Max],
-            FanCurve = FanCurveFor(maxSpeed: 150, maxRpm: 8000, warnC: 85, customTemperatures: [50, 60, 70, 80, 90, 100]),   // maxRpm estimated
+            FanCurve = FanCurveFor(
+                maxSpeed: 150,
+                customTemperatures: [50, 60, 70, 80, 90, 100],
+                floors: [(70, 15), (80, 25), (90, 35), (100, 50)]),
             ChargeLimits = [80, 90, 100],
             ChargeResumeGap = 10,
             TempWarnC = 85,
@@ -462,7 +474,10 @@ public static class MsiBoards
                 MaxFastBoost: 55, MinFastBoostHeadroom: 0, MinFastBoostFloor: 11),
             ManualDefault = new PowerLimits(Sustained: 20, Boost: 33, FastBoost: 43),
             FanModes = [FanMode.Auto, FanMode.Custom, FanMode.Max],
-            FanCurve = FanCurveFor(maxSpeed: 130, maxRpm: 8000, warnC: 75, customTemperatures: [45, 55, 65, 75, 85, 95]),   // maxRpm estimated
+            FanCurve = FanCurveFor(
+                maxSpeed: 130,
+                customTemperatures: [45, 55, 65, 75, 85, 95],
+                floors: [(75, 25), (85, 40), (95, 50)]),
             ChargeLimits = [80, 90, 100],
             ChargeResumeGap = 10,
             TempWarnC = 75,
@@ -495,19 +510,21 @@ public static class MsiBoards
     };
 
     /// <summary>
-    /// Custom fan curve limits with chipset temperatures and minimum speed floors (30 at warn−25 °C, 50 at warn−15 °C,
-    /// 75 at warn °C; lowered to the stock curve where stock is slower).
+    /// Custom fan curve limits with per-chipset temperatures and percentage-based minimum speed floors
+    /// (converted to firmware units; lowered to the stock curve where stock is slower).
     /// </summary>
-    private static FanCurveLimits FanCurveFor(int maxSpeed, int maxRpm, int warnC, int[] customTemperatures) => new()
+    private static FanCurveLimits FanCurveFor(
+        int maxSpeed,
+        int[] customTemperatures,
+        (int FromCelsius, int MinPercent)[] floors) => new()
     {
         MaxSpeed = maxSpeed,
-        MaxRpm = maxRpm,
         CustomTemperatures = customTemperatures,
         Floors =
         [
-            new(FromCelsius: warnC - 25, MinSpeed: 30),
-            new(FromCelsius: warnC - 15, MinSpeed: 50),
-            new(FromCelsius: warnC,      MinSpeed: 75),
+            .. floors.Select(f => new FanFloor(
+                FromCelsius: f.FromCelsius,
+                MinSpeed: (int)Math.Round(maxSpeed * f.MinPercent / 100.0, MidpointRounding.AwayFromZero))),
         ],
     };
 

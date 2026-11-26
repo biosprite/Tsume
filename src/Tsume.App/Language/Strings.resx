@@ -129,21 +129,9 @@
     <value>{0}%</value>
     <comment>Chosen fan curve point speed percentage; {0} = 0 to 100</comment>
   </data>
-  <data name="FanApproxRpm" xml:space="preserve">
-    <value>~{0} rpm</value>
-    <comment>Rough RPM for the chosen fan curve point; {0} = revolutions per minute, already grouped</comment>
-  </data>
-  <data name="FanRpmTick" xml:space="preserve">
-    <value>{0}k</value>
-    <comment>A label on the fan curve's speed axis; {0} = thousands of rpm, e.g. 4 or 2.5</comment>
-  </data>
   <data name="FanDegreesTick" xml:space="preserve">
     <value>{0}°</value>
     <comment>A label on the fan curve's temperature axis; {0} = degrees Celsius</comment>
-  </data>
-  <data name="FanMaxRpm" xml:space="preserve">
-    <value>Up to ~{0} rpm</value>
-    <comment>Right-aligned under the fan curve; {0} = the fan's rough top speed, already grouped</comment>
   </data>
   <data name="Keyboard" xml:space="preserve"><value>Keyboard</value></data>
   <data name="Screenshot" xml:space="preserve"><value>Screenshot</value></data>

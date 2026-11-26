@@ -89,6 +89,10 @@ public sealed class FanViewModel : LayerViewModel
             case nameof(PerformanceViewModel.FanRpm):
                 Notify(nameof(FanRpm));
                 break;
+
+            case nameof(PerformanceViewModel.FanSpeed):
+                Notify(nameof(FanSpeed));
+                break;
         }
     }
 
@@ -139,6 +143,7 @@ public sealed class FanViewModel : LayerViewModel
     public int HotCelsius => _performance.Device.TempHotC;
     public int? CpuCelsius => _performance.CpuCelsius;
     public int? FanRpm => _performance.FanRpm;
+    public int? FanSpeed => _performance.FanSpeed;
 
     /// <summary>One speed per point: what the chart shows, and on Custom what the user is shaping.</summary>
     public IReadOnlyList<int> Speeds
@@ -178,9 +183,6 @@ public sealed class FanViewModel : LayerViewModel
 
     /// <summary>E.g. "MSI Claw 8 AI+ (MS-1T52)".</summary>
     public string DeviceName => _performance.Device.Name;
-
-    /// <summary>E.g. "Up to ~8,000 rpm".</summary>
-    public string MaxRpmNote => Limits is { } limits ? Strings.FanMaxRpm(limits.MaxRpm) : "";
 
     /// <summary>
     /// Why there is no chart, or what the chart shows on Auto and Max. On Custom, only a warning: the fans are
@@ -247,7 +249,6 @@ public sealed class FanViewModel : LayerViewModel
         Notify(nameof(ShowsModes));
         Notify(nameof(Limits));
         Notify(nameof(DeviceName));
-        Notify(nameof(MaxRpmNote));
         Notify(nameof(WarnCelsius));
         Notify(nameof(HotCelsius));
     }

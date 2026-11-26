@@ -56,18 +56,13 @@
                                  IsDragging="{Binding IsDragging}"
                                  CurrentCelsius="{Binding CpuCelsius}"
                                  CurrentRpm="{Binding FanRpm}"
+                                 CurrentSpeed="{Binding FanSpeed}"
                                  WarnCelsius="{Binding WarnCelsius}"
                                  HotCelsius="{Binding HotCelsius}" />
 
-        <DockPanel Margin="4,8,4,0"
-                   Visibility="{Binding CurveShown, Converter={StaticResource VisibleWhenTrue}}">
-          <TextBlock DockPanel.Dock="Right" Style="{StaticResource Text.Caption}"
-                     Margin="10,0,0,0" VerticalAlignment="Center"
-                     Text="{Binding MaxRpmNote}" />
-          <TextBlock Style="{StaticResource Text.Caption}"
-                     VerticalAlignment="Center"
-                     Text="{Binding DeviceName}" />
-        </DockPanel>
+        <TextBlock Style="{StaticResource Text.Caption}" Margin="4,8,4,0"
+                   Text="{Binding DeviceName}"
+                   Visibility="{Binding CurveShown, Converter={StaticResource VisibleWhenTrue}}" />
 
         <TextBlock Style="{StaticResource Text.Caption}" Margin="4,8,0,0"
                    TextWrapping="Wrap" TextTrimming="None"

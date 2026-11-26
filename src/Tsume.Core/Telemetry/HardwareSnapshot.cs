@@ -22,6 +22,9 @@ public sealed record HardwareSnapshot
     /// <summary>Fan speed in RPM, or null when the firmware did not answer.</summary>
     public int? FanRpm { get; init; }
 
+    /// <summary>Current fan duty in the firmware's curve units, or null when unavailable.</summary>
+    public int? FanSpeed { get; init; }
+
     /// <summary>Embedded-controller firmware string, e.g. "1T91EMS1.103".</summary>
     public string? FirmwareVersion { get; init; }
 }
