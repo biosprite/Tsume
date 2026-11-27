@@ -19,7 +19,7 @@ public sealed class PipeServer(RequestHandler handler)
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(3);
 
     /// <summary>In characters. Large enough for <c>SetRtssExclusions</c> (up to 512 executable names).</summary>
-    private const int LongestRequest = 131_072;
+    internal const int LongestRequest = 131_072;
 
     public async Task RunAsync(CancellationToken stop)
     {
@@ -235,29 +235,36 @@ public sealed class PipeServer(RequestHandler handler)
     private static extern bool ProcessIdToSessionId(uint processId, out uint sessionId);
 
     /// <summary>One line of at most <see cref="LongestRequest"/> characters; flags <c>TooLong</c> if exceeded.</summary>
-    private static async Task<(string? Line, bool TooLong)> ReadLineAsync(StreamReader reader, CancellationToken cancel)
+    internal static async Task<(string? Line, bool TooLong)> ReadLineAsync(StreamReader reader, CancellationToken cancel)
     {
         var line = new StringBuilder();
         var buffer = new char[1024];
 
-        while (line.Length <= LongestRequest)
+        while (line.Length <= LongestRequest + 1)
         {
             var read = await reader.ReadAsync(buffer.AsMemory(), cancel);
             if (read == 0)
             {
                 if (line.Length == 0) return (null, false);
-                return line.Length > LongestRequest ? (null, true) : (line.ToString(), false);
+                var contentLength = line[^1] == '\r' ? line.Length - 1 : line.Length;
+                return contentLength > LongestRequest ? (null, true) : (line.ToString(0, contentLength), false);
             }
 
             var end = Array.IndexOf(buffer, '\n', 0, read);
             if (end >= 0)
             {
                 var trimmedEnd = end > 0 && buffer[end - 1] == '\r' ? end - 1 : end;
-                if (line.Length + trimmedEnd > LongestRequest) return (null, true);
-                return (line.Append(buffer, 0, trimmedEnd).ToString().TrimEnd('\r'), false);
+                line.Append(buffer, 0, trimmedEnd);
+                if (end == 0 && line.Length > 0 && line[^1] == '\r')
+                    line.Length--;
+                return line.Length > LongestRequest ? (null, true) : (line.ToString(), false);
             }
 
-            if (line.Length + read > LongestRequest) return (null, true);
+            // Allow one extra char in flight only when the chunk ends on '\r' that may precede '\n' in the next chunk.
+            var nextLength = line.Length + read;
+            if (nextLength > LongestRequest + 1 || (nextLength == LongestRequest + 1 && buffer[read - 1] != '\r'))
+                return (null, true);
+
             line.Append(buffer, 0, read);
         }
 

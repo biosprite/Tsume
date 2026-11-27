@@ -327,10 +327,6 @@ public sealed partial class RtssOverlayDragWindow : Window
             PositionOverlayBox(_currentPhysX, _currentPhysY, placement.Alignment == RtssOverlayAlignment.Custom ? null : placement.Alignment);
             UpdateBadge(_currentPhysX, _currentPhysY, placement.Alignment);
         }
-        else
-        {
-            _service.CancelDrag();
-        }
 
         HideElementImmediate(SnapDotsLayer);
         HideElementImmediate(PositionBadge);

@@ -9,6 +9,8 @@ public sealed class BatteryGauge : FrameworkElement
     // These two follow the colour scheme: the brushes are recoloured in place.
     private static Brush Outline => Theme.Colours.MutedBrush;
     private static Brush Normal => Theme.Colours.TextBrush;
+    // Left unfrozen so Outline (MutedBrush) remains mutable when Theme.Colours recolours it in place.
+    private static readonly Pen OutlinePen = new(Outline, 1.5);
 
     private static readonly Brush Charging = Frozen(Color.FromRgb(0x3D, 0xDC, 0x97));
     private static readonly Brush Low = Frozen(Color.FromRgb(0xFF, 0x5D, 0x5D));
@@ -28,7 +30,7 @@ public sealed class BatteryGauge : FrameworkElement
         const double bodyWidth = 27, height = 15, inset = 2.5;
 
         // Body, then the little terminal nub on the right.
-        drawingContext.DrawRoundedRectangle(null, new Pen(Outline, 1.5), new Rect(0.75, 0.75, bodyWidth - 1.5, height - 1.5), 4, 4);
+        drawingContext.DrawRoundedRectangle(null, OutlinePen, new Rect(0.75, 0.75, bodyWidth - 1.5, height - 1.5), 4, 4);
         drawingContext.DrawRoundedRectangle(Outline, null, new Rect(bodyWidth + 1, 4.5, 2.5, 6), 1.2, 1.2);
 
         var level = Math.Clamp(Percent, 0, 100) / 100.0;

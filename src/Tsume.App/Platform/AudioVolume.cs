@@ -36,6 +36,7 @@ public static class AudioVolume
     {
         IMMDeviceEnumerator? enumerator = null;
         IMMDevice? device = null;
+        object? volume = null;
         IAudioEndpointVolume? endpoint = null;
         try
         {
@@ -43,7 +44,7 @@ public static class AudioVolume
             if (enumerator.GetDefaultAudioEndpoint(Render, Multimedia, out device) != 0 || device is null)
                 return default;
 
-            if (device.Activate(typeof(IAudioEndpointVolume).GUID, AllContexts, 0, out var volume) != 0 || volume is null)
+            if (device.Activate(typeof(IAudioEndpointVolume).GUID, AllContexts, 0, out volume) != 0 || volume is null)
                 return default;
 
             endpoint = (IAudioEndpointVolume)volume;
@@ -56,6 +57,7 @@ public static class AudioVolume
         finally
         {
             if (endpoint is not null) Marshal.ReleaseComObject(endpoint);
+            else if (volume is not null && Marshal.IsComObject(volume)) Marshal.ReleaseComObject(volume);
             if (device is not null) Marshal.ReleaseComObject(device);
             if (enumerator is not null) Marshal.ReleaseComObject(enumerator);
         }

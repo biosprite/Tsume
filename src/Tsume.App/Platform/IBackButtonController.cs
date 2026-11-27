@@ -50,6 +50,7 @@ internal sealed class MsiBackButtonController : IBackButtonController
 
     private readonly BackButtonsProfile _profile;
     private ClawController? _controller;
+    private bool _disposed;
 
     private MsiBackButtonController(BackButtonsProfile profile, ClawController controller)
     {
@@ -80,7 +81,7 @@ internal sealed class MsiBackButtonController : IBackButtonController
 
     public async Task<BackButtonBinding?> ReadAsync(BackButtonDefinition button)
     {
-        if (_controller is null) return null;
+        if (_disposed || _controller is null) return null;
 
         var raw = await _controller.ReadProfileAsync(button.Offset, _profile.BlockLength, _profile.ProfileLength);
         return raw is null ? null : BackButtonBinding.Decode(raw, _profile.MaxSimultaneousKeys);
@@ -88,7 +89,7 @@ internal sealed class MsiBackButtonController : IBackButtonController
 
     public Task<bool> WriteAsync(BackButtonDefinition button, BackButtonBinding binding)
     {
-        if (_controller is null) return Task.FromResult(false);
+        if (_disposed || _controller is null) return Task.FromResult(false);
 
         var encoded = binding.Encode(_profile.BlockLength, _profile.MaxSimultaneousKeys);
         return _controller.WriteBackButtonAsync(_profile, button, encoded);
@@ -97,39 +98,51 @@ internal sealed class MsiBackButtonController : IBackButtonController
     /// <summary>Sets M-key mode to 0 (custom remaps) and waits for read-back, re-opening if USB re-enumerates.</summary>
     public async Task<bool> EnsureActiveAsync()
     {
-        if (_controller is null) return false;
+        if (_disposed || _controller is null) return false;
 
         var current = await _controller.ReadModeAsync();
-        if (current is not { } now) return false;
+        if (_disposed || current is not { } now) return false;
         if (now.MKeys == 0) return true;
 
         var padMode = now.Mode == (byte)PadMode.Cursor ? PadMode.Cursor : PadMode.Gamepad;
-        if (!await _controller.SwitchModeAsync(padMode, mKeys: 0)) return false;
+        if (_controller is null || !await _controller.SwitchModeAsync(padMode, mKeys: 0)) return false;
+        if (_disposed) return false;
 
         var started = DateTime.UtcNow;
         await Task.Delay(SwitchSettle);
 
-        while (DateTime.UtcNow - started < SwitchGiveUp)
+        while (!_disposed && DateTime.UtcNow - started < SwitchGiveUp)
         {
-            if (_controller is not null)
+            if (_controller is { } controller)
             {
-                var verified = await _controller.ReadModeAsync();
+                var verified = await controller.ReadModeAsync();
+                if (_disposed) return false;
                 if (verified is { MKeys: 0 }) return true;
             }
 
             _controller?.Dispose();
             _controller = null;
             await Task.Delay(ReopenDelay);
-            _controller = await Task.Run(() => ClawController.Find(_profile.VendorId, _profile.ProductIds));
+            if (_disposed) return false;
+
+            var reopened = await Task.Run(() => ClawController.Find(_profile.VendorId, _profile.ProductIds));
+            if (_disposed)
+            {
+                reopened?.Dispose();
+                return false;
+            }
+
+            _controller = reopened;
         }
 
         return false;
     }
 
-    public Task<bool> SaveAsync() => _controller?.SaveAsync() ?? Task.FromResult(false);
+    public Task<bool> SaveAsync() => _disposed || _controller is null ? Task.FromResult(false) : _controller.SaveAsync();
 
     public void Dispose()
     {
+        _disposed = true;
         _controller?.Dispose();
         _controller = null;
     }

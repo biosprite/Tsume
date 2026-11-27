@@ -76,7 +76,11 @@ public sealed class IniFile
 
         if (start < 0)
         {
-            if (_lines.Count > 0 && _lines[^1].Text.Length > 0) AppendLine("");
+            if (_lines.Count == 1 && _lines[0].Text.Length == 0 && _lines[0].End.Length == 0)
+                _lines.Clear();
+            else if (_lines.Count > 0 && _lines[^1].Text.Length > 0)
+                AppendLine("");
+
             AppendLine($"[{section}]");
             AppendLine($"{key}={value}");
             return;
@@ -86,7 +90,13 @@ public sealed class IniFile
         // banner that lead into the next section.
         var after = end;
         while (after > start + 1 && !IsSetting(_lines[after - 1].Text)) after--;
-        if (after == start + 1) after = end;   // a section with no settings yet
+        if (after == start + 1)
+        {
+            // A section with no settings yet: insert before the next section, or before a trailing EOF sentinel.
+            after = end;
+            if (after == _lines.Count && after > start + 1 && _lines[^1].Text.Length == 0 && _lines[^1].End.Length == 0)
+                after--;
+        }
 
         if (after >= _lines.Count)
             AppendLine($"{key}={value}");

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Windows;
 using Tsume.App.Input;
 using Tsume.App.Language;
@@ -16,6 +17,7 @@ namespace Tsume.App.ViewModels;
 /// </summary>
 public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
 {
+    private readonly PerformanceViewModel _performance;
     private readonly SavedState _state;
     private readonly DedicatedActionsViewModel _dedicatedActions;
     private readonly Dictionary<string, (BackButtonDefinition Button, BackButtonBinding Binding)> _pending = [];
@@ -41,6 +43,7 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
         SavedState state,
         DedicatedActionsViewModel dedicatedActions)
     {
+        _performance = performance;
         _state = state;
         _dedicatedActions = dedicatedActions;
 
@@ -74,12 +77,14 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
         SyncFromDedicatedActions();
         _dedicatedActions.BindingsChanged += SyncFromDedicatedActions;
 
-        performance.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(PerformanceViewModel.Device)) AdoptDevice(performance.Device);
-        };
+        _performance.PropertyChanged += OnPerformancePropertyChanged;
 
-        AdoptDevice(performance.Device);
+        AdoptDevice(_performance.Device);
+    }
+
+    private void OnPerformancePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PerformanceViewModel.Device)) AdoptDevice(_performance.Device);
     }
 
     public bool HasAnyButtons =>
@@ -332,6 +337,8 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
 
     private void AdoptDevice(DeviceProfile device)
     {
+        if (_disposed) return;
+
         var next = device.Controls;
         var sameControls = _controls is null ? next is null : next is not null && _controls.Matches(next);
         if (sameControls) return;
@@ -388,10 +395,14 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
 
     private async Task ReadAsync()
     {
+        if (_disposed) return;
+
         var changesBefore = _changes;
         var controls = _controls;
 
         var msiRuns = controls?.HasMsiCenterConflict == true && await Task.Run(() => MsiCenter.IsRunning);
+        if (_disposed) return;
+
         _msiCenterRuns = msiRuns;
         Notify(nameof(GameBarDetail));
         Notify(nameof(OemButtonDetail));
@@ -404,15 +415,17 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
         }
 
         var controller = await ConnectAsync(backProfile);
-        if (controller is null) return;
+        if (_disposed || controller is null) return;
 
         var readings = new List<(BackButtonEditor Editor, BackButtonBinding Binding)>(BackButtons.Count);
         foreach (var editor in BackButtons)
         {
             var binding = await controller.ReadAsync(editor.Definition);
+            if (_disposed) return;
+
             if (binding is null)
             {
-                Lost();
+                Lost(controller);
                 return;
             }
             readings.Add((editor, binding));
@@ -428,21 +441,36 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
 
     private async Task<IBackButtonController?> ConnectAsync(BackButtonsProfile profile)
     {
+        if (_disposed) return null;
+
         if (_controller is null)
         {
             var result = await Task.Run(() => BackButtonControllers.Open(profile));
-            _controller = result.Controller;
-
-            if (_controller is null)
+            if (_disposed)
             {
-                IsControllerAvailable = false;
-                Status = result.Failure switch
-                {
-                    BackButtonOpenFailure.FirmwareTooOld => Strings.ControllerFirmwareTooOld(result.FirmwareVersion ?? ""),
-                    BackButtonOpenFailure.NotAnswering   => Strings.ControllerNotAnswering,
-                    _                                    => Strings.ControllerNotFound,
-                };
+                result.Controller?.Dispose();
                 return null;
+            }
+
+            if (_controller is not null)
+            {
+                result.Controller?.Dispose();
+            }
+            else
+            {
+                _controller = result.Controller;
+
+                if (_controller is null)
+                {
+                    IsControllerAvailable = false;
+                    Status = result.Failure switch
+                    {
+                        BackButtonOpenFailure.FirmwareTooOld => Strings.ControllerFirmwareTooOld(result.FirmwareVersion ?? ""),
+                        BackButtonOpenFailure.NotAnswering   => Strings.ControllerNotAnswering,
+                        _                                    => Strings.ControllerNotFound,
+                    };
+                    return null;
+                }
             }
         }
 
@@ -450,16 +478,19 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
         return _controller;
     }
 
-    private void Lost()
+    /// <remarks>Only drops <paramref name="failed"/> if it is still the current one, so a stale failure never discards a newer controller.</remarks>
+    private void Lost(IBackButtonController failed)
     {
-        _controller?.Dispose();
+        if (!ReferenceEquals(_controller, failed)) return;
+
+        failed.Dispose();
         _controller = null;
         Status = Strings.ControllerNotAnswering;
     }
 
     private void OnBackButtonChanged(BackButtonDefinition button, BackButtonBinding binding)
     {
-        if (_controls?.BackButtons is null) return;
+        if (_disposed || _controls?.BackButtons is null) return;
 
         _changes++;
         _pending[button.Id] = (button, binding);
@@ -473,7 +504,7 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
     {
         try
         {
-            while (_pending.Count > 0)
+            while (!_disposed && _pending.Count > 0)
             {
                 var profile = _controls?.BackButtons;
                 if (profile is null)
@@ -486,22 +517,26 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
                 _pending.Clear();
 
                 var controller = await ConnectAsync(profile);
-                if (controller is null) return;
+                if (_disposed || controller is null) return;
 
                 var ok = true;
                 var anyBound = false;
                 foreach (var (button, binding) in batch)
                 {
                     ok = await controller.WriteAsync(button, binding);
-                    if (!ok) break;
+                    if (_disposed || !ok) break;
                     if (binding.Keys.Count > 0) anyBound = true;
                 }
+
+                if (_disposed) return;
 
                 if (ok && anyBound)
                     await controller.EnsureActiveAsync();
 
+                if (_disposed) return;
+
                 if (ok) _unsaved = true;
-                else Lost();
+                else Lost(controller);
             }
         }
         finally
@@ -518,10 +553,13 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
         {
             while (_writing) await _writer;
 
-            if (_disposed || !_unsaved || _controller is null) return;
+            if (_disposed || !_unsaved || _controller is not { } controller) return;
 
-            if (await _controller.SaveAsync()) _unsaved = false;
-            else Lost();
+            var saved = await controller.SaveAsync();
+            if (_disposed) return;
+
+            if (saved) _unsaved = false;
+            else Lost(controller);
         }
         catch (Exception error)
         {
@@ -535,6 +573,7 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _performance.PropertyChanged -= OnPerformancePropertyChanged;
         _dedicatedActions.BindingsChanged -= SyncFromDedicatedActions;
         _controller?.Dispose();
         _controller = null;

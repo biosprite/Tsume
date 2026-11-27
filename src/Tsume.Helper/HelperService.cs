@@ -20,14 +20,20 @@ public sealed class HelperService : ServiceBase
     private const int BoardAttempts = 30;
     private static readonly TimeSpan BoardPause = TimeSpan.FromSeconds(2);
 
+    private sealed class DeviceSession(ModeKeeper keeper, ChargeKeeper charge, FanCurveKeeper fan)
+    {
+        public ModeKeeper Keeper { get; } = keeper;
+        public ChargeKeeper Charge { get; } = charge;
+        public FanCurveKeeper Fan { get; } = fan;
+        public HashSet<Task> Tasks { get; } = [];
+    }
+
     private readonly Lock _taskGate = new();
     private readonly HashSet<Task> _backgroundTasks = [];
     private CancellationTokenSource? _stop;
     private CancellationToken _stopToken = CancellationToken.None;
     private Task? _serving;
-    private volatile ModeKeeper? _keeper;
-    private volatile ChargeKeeper? _charge;
-    private volatile FanCurveKeeper? _fan;
+    private DeviceSession? _deviceSession;
     private nint _screenWatch;
 
     public HelperService()
@@ -100,18 +106,26 @@ public sealed class HelperService : ServiceBase
                 : null;
 
         // Answer Windows at once; the firmware is talked to on another thread.
-        if (occasion is not null && _keeper is { } keeper && _charge is { } charge && _fan is { } fan)
-            Task.Run(() =>
+        if (occasion is not null)
+            RunDeviceBackground((keeper, charge, fan, stop) =>
             {
+                if (stop.IsCancellationRequested) return;
                 keeper.RestoreIfForgotten(occasion);
+                if (stop.IsCancellationRequested) return;
                 charge.RestoreIfForgotten(occasion);
+                if (stop.IsCancellationRequested) return;
                 fan.RestoreIfForgotten(occasion);
             });
 
         // A switch between wall power and battery (Windows sends this for battery level changes too). Only boards
         // whose limits differ on battery act on it; on any other board nothing is done here.
-        if (powerStatus == PowerBroadcastStatus.PowerStatusChange && _keeper is { FollowsPowerSource: true } sourceKeeper)
-            Task.Run(sourceKeeper.OnPowerStatusChange);
+        if (powerStatus == PowerBroadcastStatus.PowerStatusChange)
+            RunDeviceBackground(
+                (keeper, _, _, stop) =>
+                {
+                    if (!stop.IsCancellationRequested) keeper.OnPowerStatusChange();
+                },
+                requirePowerSourceTracking: true);
 
         if (isWake)
             RunBackground(s => PanelStarter.EnsureRunningAfterWake(PanelStarter.ScreenSession, s));
@@ -124,22 +138,54 @@ public sealed class HelperService : ServiceBase
         lock (_taskGate)
         {
             if (_stop is null) return;
-
-            var stop = _stopToken;
-            Task? task = null;
-            task = Task.Run(() =>
-            {
-                try
-                {
-                    work(stop);
-                }
-                finally
-                {
-                    lock (_taskGate) _backgroundTasks.Remove(task!);
-                }
-            });
-            _backgroundTasks.Add(task);
+            QueueBackgroundLocked(work, deviceSession: null);
         }
+    }
+
+    private void RunDeviceBackground(
+        Action<ModeKeeper, ChargeKeeper, FanCurveKeeper, CancellationToken> work,
+        bool requirePowerSourceTracking = false)
+    {
+        lock (_taskGate)
+        {
+            if (_stop is null || _deviceSession is not { } session)
+                return;
+
+            if (requirePowerSourceTracking && !session.Keeper.FollowsPowerSource)
+                return;
+
+            QueueBackgroundLocked(stop => work(session.Keeper, session.Charge, session.Fan, stop), session);
+        }
+    }
+
+    private void QueueBackgroundLocked(Action<CancellationToken> work, DeviceSession? deviceSession)
+    {
+        var stop = _stopToken;
+        Task? task = null;
+        task = Task.Run(() =>
+        {
+            try
+            {
+                work(stop);
+            }
+            catch (OperationCanceledException) when (stop.IsCancellationRequested)
+            {
+            }
+            catch (Exception error)
+            {
+                Log.Write($"Background task failed: {error}");
+            }
+            finally
+            {
+                lock (_taskGate)
+                {
+                    _backgroundTasks.Remove(task!);
+                    deviceSession?.Tasks.Remove(task!);
+                }
+            }
+        });
+        _backgroundTasks.Add(task);
+        deviceSession?.Tasks.Add(task);
     }
 
     /// <summary>Serves until stopped. A failure is logged and serving starts over, so the service is never running yet deaf.</summary>
@@ -181,6 +227,7 @@ public sealed class HelperService : ServiceBase
     {
         var handler = new RequestHandler();
         IDevice? ownedDevice = null;
+        DeviceSession? session = null;
 
         // Start the pipe immediately so UIAccess panel launches never time out waiting on slow early-boot WMI.
         var hardwareReady = Task.Run(async () =>
@@ -209,9 +256,14 @@ public sealed class HelperService : ServiceBase
                     Log.Write($"Restoring settings at start-up failed: {error.Message}");
                 }
                 fan?.RestoreIfForgotten("start-up");   // never throws
-                _fan = fan;
-                _charge = charge;
-                _keeper = keeper;
+                if (found is not null && keeper is not null && charge is not null && fan is not null)
+                {
+                    lock (_taskGate)
+                    {
+                        if (!stop.IsCancellationRequested)
+                            _deviceSession = session = new DeviceSession(keeper, charge, fan);
+                    }
+                }
                 handler.SetHardware(machine, found, keeper, charge, fan);
             }
             catch (OperationCanceledException) { }
@@ -233,12 +285,63 @@ public sealed class HelperService : ServiceBase
         }
         finally
         {
-            _keeper = null;
-            _charge = null;
-            _fan = null;
             try { await hardwareReady; }
             catch (OperationCanceledException) { }
-            ownedDevice?.Dispose();
+
+            List<Task>? pendingDeviceTasks = null;
+            lock (_taskGate)
+            {
+                if (session is not null)
+                {
+                    if (ReferenceEquals(_deviceSession, session))
+                        _deviceSession = null;
+                    pendingDeviceTasks = [.. session.Tasks];
+                }
+            }
+
+            var deviceTasksFinished = true;
+            if (pendingDeviceTasks is { Count: > 0 })
+            {
+                var waitAll = Task.WhenAll(pendingDeviceTasks);
+                try
+                {
+                    if (!stop.IsCancellationRequested)
+                        await waitAll.WaitAsync(stop);
+                    else
+                        await waitAll.WaitAsync(StopPatience, CancellationToken.None);
+                }
+                catch (OperationCanceledException) when (stop.IsCancellationRequested)
+                {
+                    try { await waitAll.WaitAsync(StopPatience, CancellationToken.None); }
+                    catch (System.TimeoutException) { deviceTasksFinished = false; }
+                    catch (Exception) { }
+                }
+                catch (System.TimeoutException)
+                {
+                    deviceTasksFinished = false;
+                }
+                catch (Exception) { }
+
+                if (!deviceTasksFinished)
+                {
+                    Log.Write("Timed out waiting for background hardware tasks before disposing device.");
+                    if (ownedDevice is { } deferredDevice)
+                    {
+                        _ = waitAll.ContinueWith(
+                            _ =>
+                            {
+                                try { deferredDevice.Dispose(); }
+                                catch (Exception error) { Log.Write($"Deferred device disposal failed: {error.Message}"); }
+                            },
+                            CancellationToken.None,
+                            TaskContinuationOptions.ExecuteSynchronously,
+                            TaskScheduler.Default);
+                    }
+                }
+            }
+
+            if (deviceTasksFinished)
+                ownedDevice?.Dispose();
         }
     }
 

@@ -104,6 +104,49 @@ public sealed class AsyncCommandTests
     }
 
     [Fact]
+    public async Task Execute_RemainsRunningUntilAllReentrantInvocationsComplete()
+    {
+        var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSecond = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var call = 0;
+
+        var command = new AsyncCommand(async () =>
+        {
+            if (Interlocked.Increment(ref call) == 1)
+            {
+                firstStarted.TrySetResult();
+                await releaseFirst.Task;
+                firstFinished.TrySetResult();
+            }
+            else
+            {
+                secondStarted.TrySetResult();
+                await releaseSecond.Task;
+            }
+        }, allowReentrancy: true);
+
+        command.Execute(null);
+        await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        command.Execute(null);
+        await secondStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(command.IsRunning);
+
+        // First finishes early; IsRunning must remain true while the second is still in flight.
+        releaseFirst.SetResult();
+        await firstFinished.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(25);
+        Assert.True(command.IsRunning);
+
+        releaseSecond.SetResult();
+        await WaitUntilAsync(() => !command.IsRunning);
+        Assert.False(command.IsRunning);
+    }
+
+    [Fact]
     public void CanExecute_RespectsPredicateAndRaisesCanExecuteChanged()
     {
         var allowed = false;

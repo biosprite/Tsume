@@ -224,15 +224,19 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
 
     private async Task ReadAsync()
     {
+        if (_disposed) return;
+
         var changesBefore = _changes;
 
         var controller = await ConnectAsync();
-        if (controller is null) return;
+        if (_disposed || controller is null) return;
 
         var bytes = await controller.ReadProfileRangeAsync(ProfileMap.ActiveAnimation, ProfileMap.AnimationLength);
+        if (_disposed) return;
+
         if (bytes is null)
         {
-            Lost();
+            Lost(controller);
             return;
         }
 
@@ -244,6 +248,8 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
         _absorbing = false;
 
         var msiCenterRuns = await Task.Run(() => MsiCenter.IsRunning);
+        if (_disposed) return;
+
         Status = msiCenterRuns ? Strings.LightingMsiCenterRuns : Strings.LightingSaved;
     }
 
@@ -297,10 +303,22 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
 
     private async Task<ClawController?> ConnectAsync()
     {
+        if (_disposed) return null;
+
         if (_controller is null)
         {
             var found = await Task.Run(ClawController.Find);
-            if (found is not null && found.IsUnsupportedProfileFirmware(_minFirmwareVersion, _boardKnown))
+            if (_disposed)
+            {
+                found?.Dispose();
+                return null;
+            }
+
+            if (_controller is not null)
+            {
+                found?.Dispose();
+            }
+            else if (found is not null && found.IsUnsupportedProfileFirmware(_minFirmwareVersion, _boardKnown))
             {
                 var version = found.FirmwareVersion;
                 var raw = found.FirmwareVersionRaw;
@@ -309,8 +327,10 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
                 Status = raw == 0 ? Strings.ControllerNotAnswering : Strings.ControllerFirmwareTooOld(version);
                 return null;
             }
-
-            _controller = found;
+            else
+            {
+                _controller = found;
+            }
         }
 
         IsAvailable = _controller is not null;
@@ -320,9 +340,12 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
     }
 
     /// <summary>The controller stopped answering (asleep or gone); the next attempt finds it again.</summary>
-    private void Lost()
+    /// <remarks>Only drops <paramref name="failed"/> if it is still the current one, so a stale failure never discards a newer controller.</remarks>
+    private void Lost(ClawController failed)
     {
-        _controller?.Dispose();
+        if (!ReferenceEquals(_controller, failed)) return;
+
+        failed.Dispose();
         _controller = null;
         Status = Strings.ControllerNotAnswering;
     }
@@ -335,7 +358,7 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
     /// <summary>Queues the current setup for writing. Only the newest is sent; changes made during a write replace each other.</summary>
     private void Changed()
     {
-        if (_absorbing) return;
+        if (_absorbing || _disposed) return;
 
         _changes++;
         _queued = Current;
@@ -349,17 +372,18 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
     {
         try
         {
-            while (_queued is { } setup)
+            while (!_disposed && _queued is { } setup)
             {
                 _queued = null;
 
                 var controller = await ConnectAsync();
-                if (controller is null) return;
+                if (_disposed || controller is null) return;
 
-                if (await controller.WriteLightingAsync(ProfileMap.ActiveAnimation, setup.Encode(), _minFirmwareVersion, _boardKnown))
-                    _unsaved = true;
-                else
-                    Lost();
+                var wrote = await controller.WriteLightingAsync(ProfileMap.ActiveAnimation, setup.Encode(), _minFirmwareVersion, _boardKnown);
+                if (_disposed) return;
+
+                if (wrote) _unsaved = true;
+                else Lost(controller);
             }
         }
         finally
@@ -375,10 +399,13 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
         {
             while (_writing) await _writer;
 
-            if (_disposed || !_unsaved || _controller is null) return;
+            if (_disposed || !_unsaved || _controller is not { } controller) return;
 
-            if (await _controller.SaveAsync()) _unsaved = false;
-            else Lost();
+            var saved = await controller.SaveAsync();
+            if (_disposed) return;
+
+            if (saved) _unsaved = false;
+            else Lost(controller);
         }
         catch (Exception error)
         {

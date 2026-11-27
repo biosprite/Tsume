@@ -71,13 +71,23 @@ public sealed class FanCurveEditor : Control
 
         // The plot draws with the scheme's brushes, which are replaced (not recoloured) when the scheme changes.
         Loaded += (_, _) => { Colours.Changed += OnColoursChanged; Redraw(); };
-        Unloaded += (_, _) => Colours.Changed -= OnColoursChanged;
+        Unloaded += (_, _) =>
+        {
+            Colours.Changed -= OnColoursChanged;
+            ReleasePalette();
+        };
     }
 
     private void OnColoursChanged()
     {
-        _palette = null;
+        ReleasePalette();
         Redraw();
+    }
+
+    private void ReleasePalette()
+    {
+        _palette?.Detach();
+        _palette = null;
     }
 
     public static readonly DependencyProperty LimitsProperty = Register(nameof(Limits), typeof(FanCurveLimits), null);
@@ -680,6 +690,7 @@ public sealed class FanCurveEditor : Control
             return cached;
         }
 
+        _palette?.Detach();
         return _palette = new DrawPalette(text, muted, faint, divider, panel, warm, hot, accent);
     }
 
@@ -732,10 +743,34 @@ public sealed class FanCurveEditor : Control
             RingPen = FrozenPen(new Pen(panel, 2.5));
         }
 
+        public void Detach()
+        {
+            DetachPen(GridPen);
+            DetachPen(FloorEdgePen);
+            DetachPen(StockPen);
+            DetachPen(EditableCurvePen);
+            DetachPen(ReadOnlyCurvePen);
+            DetachPen(AxisPen);
+            DetachPen(WarmPen);
+            DetachPen(HotPen);
+            DetachPen(NowPen);
+            DetachPen(LiveDotPen);
+            DetachPen(RingPen);
+            if (HatchBrush is { IsFrozen: false, Drawing: GeometryDrawing { IsFrozen: false, Pen: { } hatchPen } })
+                DetachPen(hatchPen);
+        }
+
         private static Pen FrozenPen(Pen pen)
         {
-            if (pen.CanFreeze) pen.Freeze();
+            // Never freeze a caller-owned mutable brush as a side effect of freezing the pen.
+            if (pen.Brush is { IsFrozen: true } && pen.CanFreeze) pen.Freeze();
             return pen;
+        }
+
+        private static void DetachPen(Pen pen)
+        {
+            // Unfrozen pens subscribe to mutable brushes' Changed events; detach so evicted palettes are collectible.
+            if (!pen.IsFrozen) pen.Brush = null;
         }
     }
 
@@ -770,11 +805,11 @@ public sealed class FanCurveEditor : Control
     private static DrawingBrush Hatch(Brush colour)
     {
         var pen = new Pen(colour, 1);
-        if (pen.CanFreeze) pen.Freeze();
+        if (colour.IsFrozen && pen.CanFreeze) pen.Freeze();
         var geom = new LineGeometry(new Point(0, 6), new Point(6, 0));
         geom.Freeze();
         var line = new GeometryDrawing(null, pen, geom);
-        if (line.CanFreeze) line.Freeze();
+        if (colour.IsFrozen && line.CanFreeze) line.Freeze();
 
         var brush = new DrawingBrush(line)
         {
@@ -785,7 +820,7 @@ public sealed class FanCurveEditor : Control
             ViewboxUnits = BrushMappingMode.Absolute,
             Opacity = 0.35,
         };
-        if (brush.CanFreeze) brush.Freeze();
+        if (colour.IsFrozen && brush.CanFreeze) brush.Freeze();
         return brush;
     }
 

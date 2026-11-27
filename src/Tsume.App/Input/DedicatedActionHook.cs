@@ -357,16 +357,56 @@ public static class DedicatedActionKeys
         return false;
     }
 
+    internal static GamepadInput MapXInputState(in XInput.XINPUT_STATE state)
+    {
+        var result = (GamepadInput)(state.Buttons & 0xF7FF);
+        if (state.LeftTrigger >= TriggerThreshold) result |= GamepadInput.Lt;
+        if (state.RightTrigger >= TriggerThreshold) result |= GamepadInput.Rt;
+        return result;
+    }
+
+    internal static GamepadInput MapWinMmState(in WinMm.JOYINFOEX info, bool includeBackButtons, bool includeStandardButtons)
+    {
+        var result = GamepadInput.None;
+
+        if (includeBackButtons)
+        {
+            if ((info.Buttons & (1u << 10)) != 0) result |= GamepadInput.BackLeft;
+            if ((info.Buttons & (1u << 11)) != 0) result |= GamepadInput.BackRight;
+        }
+
+        if (includeStandardButtons)
+        {
+            if ((info.Buttons & (1u << 0)) != 0) result |= GamepadInput.A;
+            if ((info.Buttons & (1u << 1)) != 0) result |= GamepadInput.B;
+            if ((info.Buttons & (1u << 2)) != 0) result |= GamepadInput.X;
+            if ((info.Buttons & (1u << 3)) != 0) result |= GamepadInput.Y;
+            if ((info.Buttons & (1u << 4)) != 0) result |= GamepadInput.Lb;
+            if ((info.Buttons & (1u << 5)) != 0) result |= GamepadInput.Rb;
+            if ((info.Buttons & (1u << 6)) != 0) result |= GamepadInput.View;
+            if ((info.Buttons & (1u << 7)) != 0) result |= GamepadInput.Menu;
+            if ((info.Buttons & (1u << 8)) != 0) result |= GamepadInput.LsClick;
+            if ((info.Buttons & (1u << 9)) != 0) result |= GamepadInput.RsClick;
+
+            if (info.Pov < WinMm.JOY_POVCENTERED)
+            {
+                if (info.Pov <= 4500 || info.Pov >= 31500) result |= GamepadInput.DPadUp;
+                if (info.Pov is >= 4500 and <= 13500) result |= GamepadInput.DPadRight;
+                if (info.Pov is >= 13500 and <= 22500) result |= GamepadInput.DPadDown;
+                if (info.Pov is >= 22500 and <= 31500) result |= GamepadInput.DPadLeft;
+            }
+        }
+
+        return result;
+    }
+
     internal static GamepadInput ReadGamepadInputs(bool includeBackButtons = false)
     {
         var result = GamepadInput.None;
         for (uint user = 0; user < XInput.MaxControllers; user++)
         {
             if (!XInput.TryGetState(user, out var state)) continue;
-
-            result |= (GamepadInput)(state.Buttons & 0xF7FF);
-            if (state.LeftTrigger >= TriggerThreshold) result |= GamepadInput.Lt;
-            if (state.RightTrigger >= TriggerThreshold) result |= GamepadInput.Rt;
+            result |= MapXInputState(in state);
         }
 
         // Fall back to WinMM HID buttons/POV when XInput reports nothing under Xbox FSE InputHost,
@@ -379,33 +419,7 @@ public static class DedicatedActionKeys
                 var info = WinMm.JOYINFOEX.Create();
                 if (WinMm.joyGetPosEx(id, ref info) != WinMm.JOYERR_NOERROR) continue;
 
-                if (includeBackButtons)
-                {
-                    if ((info.Buttons & (1u << 10)) != 0) result |= GamepadInput.BackLeft;
-                    if ((info.Buttons & (1u << 11)) != 0) result |= GamepadInput.BackRight;
-                }
-
-                if (needWinMmFallback)
-                {
-                    if ((info.Buttons & (1u << 0)) != 0) result |= GamepadInput.A;
-                    if ((info.Buttons & (1u << 1)) != 0) result |= GamepadInput.B;
-                    if ((info.Buttons & (1u << 2)) != 0) result |= GamepadInput.X;
-                    if ((info.Buttons & (1u << 3)) != 0) result |= GamepadInput.Y;
-                    if ((info.Buttons & (1u << 4)) != 0) result |= GamepadInput.Lb;
-                    if ((info.Buttons & (1u << 5)) != 0) result |= GamepadInput.Rb;
-                    if ((info.Buttons & (1u << 6)) != 0) result |= GamepadInput.View;
-                    if ((info.Buttons & (1u << 7)) != 0) result |= GamepadInput.Menu;
-                    if ((info.Buttons & (1u << 8)) != 0) result |= GamepadInput.LsClick;
-                    if ((info.Buttons & (1u << 9)) != 0) result |= GamepadInput.RsClick;
-
-                    if (info.Pov < WinMm.JOY_POVCENTERED)
-                    {
-                        if (info.Pov <= 4500 || info.Pov >= 31500) result |= GamepadInput.DPadUp;
-                        if (info.Pov is >= 4500 and <= 13500) result |= GamepadInput.DPadRight;
-                        if (info.Pov is >= 13500 and <= 22500) result |= GamepadInput.DPadDown;
-                        if (info.Pov is >= 22500 and <= 31500) result |= GamepadInput.DPadLeft;
-                    }
-                }
+                result |= MapWinMmState(in info, includeBackButtons, needWinMmFallback);
             }
         }
 

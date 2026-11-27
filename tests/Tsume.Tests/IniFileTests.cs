@@ -64,6 +64,26 @@ public sealed class IniFileTests
     }
 
     [Fact]
+    public void Set_InsertsNewKeyIntoTrailingEmptySectionPreservingTrailingNewline()
+    {
+        var iniLf = IniFile.Parse("[Empty]\n");
+        iniLf.Set("Empty", "Added", "yes");
+        Assert.Equal("[Empty]\nAdded=yes\n", iniLf.ToString());
+
+        var iniCrlf = IniFile.Parse("[Empty]\r\n");
+        iniCrlf.Set("Empty", "Added", "yes");
+        Assert.Equal("[Empty]\r\nAdded=yes\r\n", iniCrlf.ToString());
+    }
+
+    [Fact]
+    public void Set_OnEmptyFileCreatesSectionWithoutLeadingBlankLine()
+    {
+        var ini = IniFile.Parse("");
+        ini.Set("Upscalers", "Dx12Upscaler", "xess");
+        Assert.Equal("[Upscalers]\nDx12Upscaler=xess", ini.ToString());
+    }
+
+    [Fact]
     public void Set_CreatesMissingSectionWithLeadingBlankLine()
     {
         const string original = "[Existing]\nKey=Value";

@@ -21,7 +21,7 @@ public sealed class ActionsViewModel : Observable
 
         // These act on whatever is behind the panel, so the panel leaves first.
         Screenshot      = new AsyncCommand(async () => { await dismiss(); QuickActions.Screenshot(); });
-        Keyboard        = new AsyncCommand(async () => { await dismiss(); QuickActions.ToggleTouchKeyboard(); });
+        Keyboard        = new AsyncCommand(async () => { await dismiss(); await QuickActions.ToggleTouchKeyboardAsync(); });
         TaskManager     = new AsyncCommand(async () => { await dismiss(); QuickActions.TaskManager(); });
         Desktop         = new AsyncCommand(async () => { await dismiss(); QuickActions.ShowDesktop(); });
         SteamBigPicture = new AsyncCommand(async () => { await dismiss(); QuickActions.OpenSteamBigPicture(); });

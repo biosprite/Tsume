@@ -74,8 +74,10 @@ public sealed class SettingsViewModel : LayerViewModel
             LogBundle.RevealInExplorer(zip);
             await dismiss();
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        catch (Exception error) when (error is not OperationCanceledException)
         {
+            if (error is not (IOException or UnauthorizedAccessException))
+                AsyncCommand.LogError(error);
             setDetail(Strings.ShareLogsFailed(error.Message));
         }
     });

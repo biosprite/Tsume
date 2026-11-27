@@ -44,17 +44,6 @@ public static class QuickActions
         User32.PostMessage(game, User32.WM_KEYUP, User32.VK_INSERT, down | unchecked((nint)0xC000_0000));
     }
 
-    /// <summary>Shows or hides the Windows touch keyboard.</summary>
-    public static void ToggleTouchKeyboard()
-    {
-        if (TryToggleTouchKeyboard(0)) return;
-
-        // The keyboard's host process starts on demand; wake it and ask again.
-        WakeTouchKeyboardHost();
-        Thread.Sleep(400);
-        TryToggleTouchKeyboard(0);
-    }
-
     /// <summary>Shows or hides the Windows touch keyboard without blocking the UI thread if TabTip needs to start.</summary>
     public static async Task<bool> ToggleTouchKeyboardAsync(nint window = 0, CancellationToken cancellationToken = default)
     {

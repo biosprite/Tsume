@@ -14,30 +14,31 @@ internal static partial class DisplayClock
     /// <summary>Comfortably more often than a 120 Hz display refreshes.</summary>
     private const int NudgeEveryMilliseconds = 4;
 
+    private sealed class StopSignal
+    {
+        public volatile bool Requested;
+    }
+
     private static readonly Lock Gate = new();
-    private static CancellationTokenSource? _stop;
+    private static StopSignal? _stop;
 
     /// <summary>Hold the display at full rate (<c>true</c>), or let it idle again (<c>false</c>).</summary>
     public static void KeepAwake(bool on)
     {
-        CancellationTokenSource? toCancel = null;
         lock (Gate)
         {
             if (on == (_stop is not null)) return;
 
             if (on)
             {
-                var stop = _stop = new CancellationTokenSource();
+                var stop = _stop = new StopSignal();
                 new Thread(() => Nudge(stop)) { IsBackground = true, Name = "Tsume display clock" }.Start();
                 return;
             }
 
-            toCancel = _stop;
+            _stop!.Requested = true;
             _stop = null;
         }
-
-        try { toCancel?.Cancel(); }
-        catch (ObjectDisposedException) { }
     }
 
     /// <summary>Waits for the display's next refresh. For measuring it; see <see cref="OpenTrace"/>.</summary>
@@ -47,15 +48,13 @@ internal static partial class DisplayClock
         catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException) { Thread.Sleep(8); }
     }
 
-    private static void Nudge(CancellationTokenSource stopSource)
+    private static void Nudge(StopSignal stop)
     {
         nint pixel = 0;
         nint timer = 0;
 
         try
         {
-            var stop = stopSource.Token;
-
             // One pixel, top-left, never focused, never clicked, at 1/255 opacity.
             pixel = CreateWindowEx(
                 WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
@@ -71,7 +70,7 @@ internal static partial class DisplayClock
             if (!SetWaitableTimer(timer, in now, NudgeEveryMilliseconds, 0, 0, false)) return;
 
             var faint = false;
-            while (!stop.IsCancellationRequested)
+            while (!stop.Requested)
             {
                 if (MsgWaitForMultipleObjectsEx(1, in timer, 100, QS_ALLINPUT, MWMO_INPUTAVAILABLE) == WAIT_FAILED)
                     break;
@@ -87,7 +86,10 @@ internal static partial class DisplayClock
         {
             if (timer != 0) Kernel32.CloseHandle(timer);
             if (pixel != 0) DestroyWindow(pixel);
-            stopSource.Dispose();
+            lock (Gate)
+            {
+                if (ReferenceEquals(_stop, stop)) _stop = null;
+            }
         }
     }
 

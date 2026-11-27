@@ -51,8 +51,17 @@ public sealed class ProgressRing : FrameworkElement
 
     public ProgressRing()
     {
-        Loaded += (_, _) => UpdateAnimationState();
-        Unloaded += (_, _) => StopAnimations();
+        Loaded += (_, _) =>
+        {
+            UpdateAnimationState();
+            InvalidateVisual();
+        };
+        Unloaded += (_, _) =>
+        {
+            StopAnimations();
+            DetachPen(ref _trackPen, ref _trackPenBrush);
+            DetachPen(ref _arcPen, ref _arcPenBrush);
+        };
         IsVisibleChanged += (_, _) => UpdateAnimationState();
     }
 
@@ -88,16 +97,25 @@ public sealed class ProgressRing : FrameworkElement
         {
             if (_trackPen is null || !ReferenceEquals(_trackPenBrush, track) || _trackPenThickness != thickness)
             {
+                DetachPen(ref _trackPen, ref _trackPenBrush);
                 var pen = new Pen(track, thickness);
-                if (pen.CanFreeze) pen.Freeze();
+                if (track.IsFrozen && pen.CanFreeze) pen.Freeze();
                 _trackPen = pen;
                 _trackPenBrush = track;
                 _trackPenThickness = thickness;
             }
             drawingContext.DrawEllipse(null, _trackPen, center, radius, radius);
         }
+        else if (_trackPen is not null)
+        {
+            DetachPen(ref _trackPen, ref _trackPenBrush);
+        }
 
-        if (Foreground is not { } fg) return;
+        if (Foreground is not { } fg)
+        {
+            if (_arcPen is not null) DetachPen(ref _arcPen, ref _arcPenBrush);
+            return;
+        }
 
         var startDeg = BaseRotation + StartAngle - 90.0;
         var sweepDeg = Math.Clamp(SweepAngle, 5.0, 355.0);
@@ -130,17 +148,25 @@ public sealed class ProgressRing : FrameworkElement
 
         if (_arcPen is null || !ReferenceEquals(_arcPenBrush, fg) || _arcPenThickness != thickness)
         {
+            DetachPen(ref _arcPen, ref _arcPenBrush);
             var pen = new Pen(fg, thickness)
             {
                 StartLineCap = PenLineCap.Round,
                 EndLineCap = PenLineCap.Round,
             };
-            if (pen.CanFreeze) pen.Freeze();
+            if (fg.IsFrozen && pen.CanFreeze) pen.Freeze();
             _arcPen = pen;
             _arcPenBrush = fg;
             _arcPenThickness = thickness;
         }
         drawingContext.DrawGeometry(null, _arcPen, geometry);
+    }
+
+    private static void DetachPen(ref Pen? pen, ref Brush? brush)
+    {
+        if (pen is { IsFrozen: false }) pen.Brush = null;
+        pen = null;
+        brush = null;
     }
 
     private static void OnIsActiveChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

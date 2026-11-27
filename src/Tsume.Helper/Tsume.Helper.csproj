@@ -15,6 +15,7 @@
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.14" />
     <ProjectReference Include="..\Tsume.Core\Tsume.Core.csproj" />
     <ProjectReference Include="..\Tsume.Hardware\Tsume.Hardware.csproj" />
+    <InternalsVisibleTo Include="Tsume.Tests" />
   </ItemGroup>
 
 </Project>

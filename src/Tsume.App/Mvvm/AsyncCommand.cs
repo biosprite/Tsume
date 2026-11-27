@@ -11,9 +11,9 @@ public sealed class AsyncCommand(
 {
     private static readonly Journal Errors = new("errors");
 
-    private bool _running;
+    private int _activeCount;
 
-    public bool IsRunning => _running;
+    public bool IsRunning => Volatile.Read(ref _activeCount) > 0;
 
     public event EventHandler? CanExecuteChanged;
 
@@ -24,13 +24,21 @@ public sealed class AsyncCommand(
     public void Execute(object? parameter)
     {
         if (!CanExecute(parameter)) return;
-        if (!allowReentrancy && _running) return;
+
+        if (allowReentrancy)
+        {
+            Interlocked.Increment(ref _activeCount);
+        }
+        else if (Interlocked.CompareExchange(ref _activeCount, 1, 0) != 0)
+        {
+            return;
+        }
+
         _ = RunAsync();
     }
 
     private async Task RunAsync()
     {
-        _running = true;
         try
         {
             await execute();
@@ -45,7 +53,7 @@ public sealed class AsyncCommand(
         }
         finally
         {
-            _running = false;
+            Interlocked.Decrement(ref _activeCount);
         }
     }
 

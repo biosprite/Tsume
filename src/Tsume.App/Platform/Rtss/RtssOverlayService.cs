@@ -47,7 +47,6 @@ public sealed class RtssOverlayService : IDisposable
     private double? _lastGpuWatts;
     private double? _lastCpuClockMhz;
     private double? _lastGpuVramMb;
-    private (int X, int Y)? _dragOverridePos;
     private (int Width, int Height)? _frame;
     private uint _framePid;
     private nint _frameHwnd;
@@ -228,12 +227,6 @@ public sealed class RtssOverlayService : IDisposable
     }
 
     /// <summary>
-    /// Publishes the overlay position again when the foreground game's frame is no longer the size it was last
-    /// worked out for (another game took focus, this one changed resolution, or the last game exited).
-    /// </summary>
-    public void SyncFrameSize() => SyncFrameState(checkOverlayEditorSlot: false);
-
-    /// <summary>
     /// Single-pass shared-memory sync for <see cref="Shell.RtssOverlayDragController"/>: updates the cached
     /// frame size, triggers any idle deferred restart, and reports whether the foreground window is hooked
     /// and OverlayEditor owns an active OSD slot — all from one <c>RTSSSharedMemoryV2</c> open.
@@ -244,6 +237,9 @@ public sealed class RtssOverlayService : IDisposable
 
         bool restartPending;
         lock (_gate) restartPending = _rtssRestartPending;
+
+        if (!checkOverlayEditorSlot && !restartPending && !IsOverlayVisibleWanted)
+            return (false, false);
 
         var (frame, query) = QueryFramePixels(checkOverlayEditorSlot, checkAnyHookedApps: restartPending);
         if (restartPending && !query.HasAnyHookedApps)
@@ -297,33 +293,13 @@ public sealed class RtssOverlayService : IDisposable
     /// <summary>Saves the final dragged placement for <paramref name="level"/> and publishes it immediately.</summary>
     public void CommitDragPlacement(RtssOverlayLevel level, RtssOverlayPlacement placement)
     {
-        lock (_gate) _dragOverridePos = null;
         if (level == RtssOverlayLevel.Off) return;
 
         ApplySettings(_settings.WithPlacement(level, placement));
     }
 
-    /// <summary>Clears any in-flight live drag override and restores the saved placement.</summary>
-    public void CancelDrag()
-    {
-        bool hadOverride;
-        lock (_gate)
-        {
-            hadOverride = _dragOverridePos is not null;
-            _dragOverridePos = null;
-        }
-
-        if (hadOverride) ApplyLiveLevelState();
-    }
-
     private (int X, int Y) ResolveActivePosition(RtssOverlayLevel level, int screenWidth, int screenHeight)
     {
-        lock (_gate)
-        {
-            if (_dragOverridePos is { } live)
-                return live;
-        }
-
         var placement = _settings.GetPlacement(level);
         return RtssOverlayMetrics.ResolvePosition(level, placement, screenWidth, screenHeight);
     }

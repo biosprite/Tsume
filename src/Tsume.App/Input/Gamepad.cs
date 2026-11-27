@@ -29,7 +29,6 @@ public enum PadButton : ushort
 public sealed class Gamepad : IDisposable
 {
     private const short StickThreshold = 16_000;
-    private const byte TriggerThreshold = 128;
 
     private static readonly TimeSpan IdlePoll = TimeSpan.FromMilliseconds(60);
     private static readonly TimeSpan ActivePoll = TimeSpan.FromMilliseconds(16);
@@ -324,11 +323,7 @@ public sealed class Gamepad : IDisposable
             }
 
             if (needDedicatedActions)
-            {
-                actionInputs |= (DedicatedActionKeys.GamepadInput)(state.Buttons & 0xF7FF);
-                if (state.LeftTrigger >= TriggerThreshold) actionInputs |= DedicatedActionKeys.GamepadInput.Lt;
-                if (state.RightTrigger >= TriggerThreshold) actionInputs |= DedicatedActionKeys.GamepadInput.Rt;
-            }
+                actionInputs |= DedicatedActionKeys.MapXInputState(in state);
         }
 
         // Fall back to WinMM HID polling when XInput reports nothing under Xbox FSE InputHost,
@@ -373,33 +368,8 @@ public sealed class Gamepad : IDisposable
                     if (info.X > center + threshold) navButtons |= PadButton.Right;
                 }
 
-                if (needActionWinMmBack)
-                {
-                    if ((info.Buttons & (1u << 10)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.BackLeft;
-                    if ((info.Buttons & (1u << 11)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.BackRight;
-                }
-
-                if (needActionWinMmFallback)
-                {
-                    if ((info.Buttons & (1u << 0)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.A;
-                    if ((info.Buttons & (1u << 1)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.B;
-                    if ((info.Buttons & (1u << 2)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.X;
-                    if ((info.Buttons & (1u << 3)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.Y;
-                    if ((info.Buttons & (1u << 4)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.Lb;
-                    if ((info.Buttons & (1u << 5)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.Rb;
-                    if ((info.Buttons & (1u << 6)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.View;
-                    if ((info.Buttons & (1u << 7)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.Menu;
-                    if ((info.Buttons & (1u << 8)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.LsClick;
-                    if ((info.Buttons & (1u << 9)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.RsClick;
-
-                    if (info.Pov < WinMm.JOY_POVCENTERED)
-                    {
-                        if (info.Pov <= 4500 || info.Pov >= 31500) actionInputs |= DedicatedActionKeys.GamepadInput.DPadUp;
-                        if (info.Pov is >= 4500 and <= 13500) actionInputs |= DedicatedActionKeys.GamepadInput.DPadRight;
-                        if (info.Pov is >= 13500 and <= 22500) actionInputs |= DedicatedActionKeys.GamepadInput.DPadDown;
-                        if (info.Pov is >= 22500 and <= 31500) actionInputs |= DedicatedActionKeys.GamepadInput.DPadLeft;
-                    }
-                }
+                if (needActionWinMmBack || needActionWinMmFallback)
+                    actionInputs |= DedicatedActionKeys.MapWinMmState(in info, needActionWinMmBack, needActionWinMmFallback);
             }
         }
 

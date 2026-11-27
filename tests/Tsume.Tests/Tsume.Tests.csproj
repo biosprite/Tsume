@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Tsume.Core\Tsume.Core.csproj" />
     <ProjectReference Include="..\..\src\Tsume.Hardware\Tsume.Hardware.csproj" />
+    <ProjectReference Include="..\..\src\Tsume.Helper\Tsume.Helper.csproj" />
     <ProjectReference Include="..\..\src\Tsume.Upscaling\Tsume.Upscaling.csproj" />
     <ProjectReference Include="..\..\src\Tsume.App\Tsume.App.csproj" />
   </ItemGroup>
