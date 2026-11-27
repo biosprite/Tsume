@@ -8,6 +8,10 @@
     <Project Path="src/Tsume.Upscaling/Tsume.Upscaling.csproj" />
   </Folder>
 
+  <Folder Name="/tests/">
+    <Project Path="tests/Tsume.Tests/Tsume.Tests.csproj" />
+  </Folder>
+
   <Folder Name="/docs/">
     <File Path="README.md" />
     <File Path="docs/hardware/firmware.md" />

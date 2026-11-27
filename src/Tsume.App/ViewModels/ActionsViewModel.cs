@@ -20,12 +20,12 @@ public sealed class ActionsViewModel : Observable
         CycleRefreshRate = new Command(NextRefreshRate);
 
         // These act on whatever is behind the panel, so the panel leaves first.
-        Screenshot      = new Command(async () => { await dismiss(); QuickActions.Screenshot(); });
-        Keyboard        = new Command(async () => { await dismiss(); QuickActions.ToggleTouchKeyboard(); });
-        TaskManager     = new Command(async () => { await dismiss(); QuickActions.TaskManager(); });
-        Desktop         = new Command(async () => { await dismiss(); QuickActions.ShowDesktop(); });
-        SteamBigPicture = new Command(async () => { await dismiss(); QuickActions.OpenSteamBigPicture(); });
-        XboxGameBar     = new Command(async () => { await dismiss(); QuickActions.OpenGameBar(); });
+        Screenshot      = new AsyncCommand(async () => { await dismiss(); QuickActions.Screenshot(); });
+        Keyboard        = new AsyncCommand(async () => { await dismiss(); QuickActions.ToggleTouchKeyboard(); });
+        TaskManager     = new AsyncCommand(async () => { await dismiss(); QuickActions.TaskManager(); });
+        Desktop         = new AsyncCommand(async () => { await dismiss(); QuickActions.ShowDesktop(); });
+        SteamBigPicture = new AsyncCommand(async () => { await dismiss(); QuickActions.OpenSteamBigPicture(); });
+        XboxGameBar     = new AsyncCommand(async () => { await dismiss(); QuickActions.OpenGameBar(); });
     }
 
     public ICommand CycleRefreshRate { get; }

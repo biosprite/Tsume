@@ -18,8 +18,8 @@ public sealed class PipeServer(RequestHandler handler)
     /// <summary>How long a caller may take to send its request, and again to read the answer.</summary>
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(3);
 
-    /// <summary>In characters. Real requests are a few hundred.</summary>
-    private const int LongestRequest = 4096;
+    /// <summary>In characters. Large enough for <c>SetRtssExclusions</c> (up to 512 executable names).</summary>
+    private const int LongestRequest = 131_072;
 
     public async Task RunAsync(CancellationToken stop)
     {
@@ -29,6 +29,9 @@ public sealed class PipeServer(RequestHandler handler)
         {
             try
             {
+                // One pipe instance per request: closing the handle lets the client finish reading buffered
+                // reply bytes, whereas DisconnectNamedPipe() would discard unread bytes unless we blocked in
+                // an uncancelable WaitForPipeDrain().
                 await using var pipe = CreatePipe();
                 await pipe.WaitForConnectionAsync(stop);
                 await AnswerAsync(pipe, stop);
@@ -65,13 +68,23 @@ public sealed class PipeServer(RequestHandler handler)
             using var asking = CancellationTokenSource.CreateLinkedTokenSource(stop);
             asking.CancelAfter(Patience);
 
-            var line = await ReadLineAsync(reader, asking.Token);
-            if (line is null) return;
+            var (line, tooLong) = await ReadLineAsync(reader, asking.Token);
+            if (line is null && !tooLong) return;
 
-            var parsed = Parse(line);
-            var reply = parsed is not null
-                ? Answer(pipe, parsed)
-                : HelperReply.Failure("The request could not be understood.");
+            HelperRequest? parsed = null;
+            HelperReply reply;
+            if (tooLong)
+            {
+                Log.Write($"Rejected oversized request (>{LongestRequest} characters).");
+                reply = HelperReply.Failure($"The request exceeded the maximum size of {LongestRequest} characters.");
+            }
+            else
+            {
+                parsed = Parse(line!);
+                reply = parsed is not null
+                    ? Answer(pipe, parsed)
+                    : HelperReply.Failure("The request could not be understood.");
+            }
 
             using var answering = CancellationTokenSource.CreateLinkedTokenSource(stop);
             answering.CancelAfter(parsed is GetHardwareInventory or GetHardwareState or RunFirmwareCheck ? TimeSpan.FromSeconds(15) : Patience);
@@ -90,6 +103,19 @@ public sealed class PipeServer(RequestHandler handler)
     /// and starting the panel must run in the caller's own session, read from the pipe — never named by the caller.
     /// </summary>
     private HelperReply Answer(NamedPipeServerStream pipe, HelperRequest request)
+    {
+        try
+        {
+            return Dispatch(pipe, request);
+        }
+        catch (Exception error)
+        {
+            Log.Write($"{request.GetType().Name} failed unexpectedly: {error}");
+            return HelperReply.Failure(error.Message);
+        }
+    }
+
+    private HelperReply Dispatch(NamedPipeServerStream pipe, HelperRequest request)
     {
         if (request is StartPanel start)
         {
@@ -188,7 +214,11 @@ public sealed class PipeServer(RequestHandler handler)
         string? sid = null;
         try
         {
-            pipe.RunAsClient(() => sid = WindowsIdentity.GetCurrent().User?.Value);
+            pipe.RunAsClient(() =>
+            {
+                using var identity = WindowsIdentity.GetCurrent();
+                sid = identity.User?.Value;
+            });
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception) { }
 
@@ -204,24 +234,34 @@ public sealed class PipeServer(RequestHandler handler)
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool ProcessIdToSessionId(uint processId, out uint sessionId);
 
-    /// <summary>One line of at most <see cref="LongestRequest"/> characters; null if the caller sent nothing or too much.</summary>
-    private static async Task<string?> ReadLineAsync(StreamReader reader, CancellationToken cancel)
+    /// <summary>One line of at most <see cref="LongestRequest"/> characters; flags <c>TooLong</c> if exceeded.</summary>
+    private static async Task<(string? Line, bool TooLong)> ReadLineAsync(StreamReader reader, CancellationToken cancel)
     {
         var line = new StringBuilder();
-        var buffer = new char[256];
+        var buffer = new char[1024];
 
         while (line.Length <= LongestRequest)
         {
             var read = await reader.ReadAsync(buffer.AsMemory(), cancel);
-            if (read == 0) return line.Length > 0 ? line.ToString() : null;
+            if (read == 0)
+            {
+                if (line.Length == 0) return (null, false);
+                return line.Length > LongestRequest ? (null, true) : (line.ToString(), false);
+            }
 
             var end = Array.IndexOf(buffer, '\n', 0, read);
-            if (end >= 0) return line.Append(buffer, 0, end).ToString().TrimEnd('\r');
+            if (end >= 0)
+            {
+                var trimmedEnd = end > 0 && buffer[end - 1] == '\r' ? end - 1 : end;
+                if (line.Length + trimmedEnd > LongestRequest) return (null, true);
+                return (line.Append(buffer, 0, trimmedEnd).ToString().TrimEnd('\r'), false);
+            }
 
+            if (line.Length + read > LongestRequest) return (null, true);
             line.Append(buffer, 0, read);
         }
 
-        return null;
+        return (null, true);
     }
 
     private static HelperRequest? Parse(string line)
@@ -238,7 +278,7 @@ public sealed class PipeServer(RequestHandler handler)
     private static NamedPipeServerStream CreatePipe()
     {
         var security = new PipeSecurity();
-        var me = WindowsIdentity.GetCurrent();
+        using var me = WindowsIdentity.GetCurrent();
 
         var system = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
         var network = new SecurityIdentifier(WellKnownSidType.NetworkSid, null);
@@ -246,7 +286,8 @@ public sealed class PipeServer(RequestHandler handler)
         var caller = me.IsSystem ? atTheScreen : me.User!;
 
         security.AddAccessRule(new PipeAccessRule(network, PipeAccessRights.FullControl, AccessControlType.Deny));
-        security.AddAccessRule(new PipeAccessRule(caller, PipeAccessRights.ReadWrite, AccessControlType.Allow));
+        // PipeAccessRights.ReadWrite includes CreateNewInstance via Write; strip it so interactive callers can only connect as clients.
+        security.AddAccessRule(new PipeAccessRule(caller, PipeAccessRights.ReadWrite & ~PipeAccessRights.CreateNewInstance, AccessControlType.Allow));
         security.AddAccessRule(new PipeAccessRule(system, PipeAccessRights.FullControl, AccessControlType.Allow));
         if (!me.IsSystem)
             security.AddAccessRule(new PipeAccessRule(me.User!, PipeAccessRights.FullControl, AccessControlType.Allow));

@@ -1,5 +1,6 @@
 using System.Windows.Threading;
 using Tsume.App.Input;
+using Tsume.App.Mvvm;
 using Tsume.App.Platform.Rtss;
 using Tsume.Core.Ipc;
 
@@ -15,6 +16,7 @@ public sealed class PanelViewModel : IDisposable
     private readonly RtssOverlayService _rtssService;
     private readonly PadIsolation? _padIsolation;
     private bool _hasCpuBoostTile;
+    private bool _ticking;
 
     /// <param name="dismiss">Closes the panel and completes once it is fully off screen.</param>
     /// <param name="quit">Exits Tsume.</param>
@@ -61,10 +63,23 @@ public sealed class PanelViewModel : IDisposable
 
         _tick.Tick += async (_, _) =>
         {
-            Status.Refresh();
-            if (Settings.IsOpen) Settings.ChargeLimit.RefreshStatus();
-            if (Rtss.IsOpen) Rtss.RefreshRunningState();
-            await Performance.RefreshTelemetryAsync();
+            if (_ticking) return;
+            _ticking = true;
+            try
+            {
+                Status.Refresh();
+                if (Settings.IsOpen) Settings.ChargeLimit.RefreshStatus();
+                if (Rtss.IsOpen) Rtss.RefreshRunningState();
+                await Performance.RefreshTelemetryAsync();
+            }
+            catch (Exception error)
+            {
+                AsyncCommand.LogError(error);
+            }
+            finally
+            {
+                _ticking = false;
+            }
         };
     }
 
@@ -117,24 +132,31 @@ public sealed class PanelViewModel : IDisposable
     /// <summary>Called as the panel is about to slide in: refreshes every reading and starts polling.</summary>
     public async void OnOpening(bool keepPages = false)
     {
-        if (!keepPages) CloseLayers();
-        Status.Refresh();
-        Actions.Refresh();
-        Upscaling.RefreshTile();
-        _ = Upscaling.PrepareAsync();
-        Rtss.RefreshTile();
-        if (Settings.IsOpen)
+        try
         {
-            Settings.Refresh();
-            _ = Settings.ChargeLimit.RefreshAsync();
+            if (!keepPages) CloseLayers();
+            Status.Refresh();
+            Actions.Refresh();
+            Upscaling.RefreshTile();
+            _ = Upscaling.PrepareAsync();
+            Rtss.RefreshTile();
+            if (Settings.IsOpen)
+            {
+                Settings.Refresh();
+                _ = Settings.ChargeLimit.RefreshAsync();
+            }
+            if (Rtss.IsOpen) Rtss.RefreshRunningState();
+            _tick.Start();
+
+            await Task.WhenAll(Levels.RefreshAsync(), RefreshHelperTilesAsync(), RefreshControllerTilesAsync());
+
+            // Reopened on the fan page: after the snapshot, so the helper is known to be there and the requests do not overlap.
+            if (Fan.IsOpen) Fan.Refresh();
         }
-        if (Rtss.IsOpen) Rtss.RefreshRunningState();
-        _tick.Start();
-
-        await Task.WhenAll(Levels.RefreshAsync(), RefreshHelperTilesAsync(), RefreshControllerTilesAsync());
-
-        // Reopened on the fan page: after the snapshot, so the helper is known to be there and the requests do not overlap.
-        if (Fan.IsOpen) Fan.Refresh();
+        catch (Exception error)
+        {
+            AsyncCommand.LogError(error);
+        }
     }
 
     private void OnMainTilesLayoutChanged(IReadOnlyList<MainTileId> activeIds, int columns)
@@ -183,6 +205,8 @@ public sealed class PanelViewModel : IDisposable
     public void Dispose()
     {
         _tick.Stop();
+        Status.Dispose();
+        Lighting.Dispose();
         CpuBoost.Dispose();
         _rtssService.Dispose();
         Settings.Controls.Dispose();

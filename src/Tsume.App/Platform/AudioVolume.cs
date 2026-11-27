@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Tsume.App.Platform.Interop;
 
 namespace Tsume.App.Platform;
@@ -11,36 +12,52 @@ public static class AudioVolume
 
     public readonly record struct Reading(int Percent, bool Muted);
 
-    public static Reading? Read()
+    public static Reading? Read() => WithEndpoint<Reading?>(endpoint =>
     {
-        if (Endpoint() is not { } endpoint) return null;
-
         endpoint.GetMasterVolumeLevelScalar(out var level);
         endpoint.GetMute(out var muted);
         return new Reading((int)Math.Round(level * 100), muted);
-    }
+    });
 
-    public static void Set(int percent) =>
-        Endpoint()?.SetMasterVolumeLevelScalar(Math.Clamp(percent, 0, 100) / 100f, Guid.Empty);
+    public static void Set(int percent) => WithEndpoint<bool>(endpoint =>
+    {
+        endpoint.SetMasterVolumeLevelScalar(Math.Clamp(percent, 0, 100) / 100f, Guid.Empty);
+        return true;
+    });
 
-    public static void SetMuted(bool muted) =>
-        Endpoint()?.SetMute(muted, Guid.Empty);
+    public static void SetMuted(bool muted) => WithEndpoint<bool>(endpoint =>
+    {
+        endpoint.SetMute(muted, Guid.Empty);
+        return true;
+    });
 
     /// <summary>Not cached: the default device changes when headphones or a dock are plugged in.</summary>
-    private static IAudioEndpointVolume? Endpoint()
+    private static T? WithEndpoint<T>(Func<IAudioEndpointVolume, T> action)
     {
+        IMMDeviceEnumerator? enumerator = null;
+        IMMDevice? device = null;
+        IAudioEndpointVolume? endpoint = null;
         try
         {
-            var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
-            if (enumerator.GetDefaultAudioEndpoint(Render, Multimedia, out var device) != 0) return null;
+            enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+            if (enumerator.GetDefaultAudioEndpoint(Render, Multimedia, out device) != 0 || device is null)
+                return default;
 
-            return device.Activate(typeof(IAudioEndpointVolume).GUID, AllContexts, 0, out var volume) == 0
-                ? (IAudioEndpointVolume)volume
-                : null;
+            if (device.Activate(typeof(IAudioEndpointVolume).GUID, AllContexts, 0, out var volume) != 0 || volume is null)
+                return default;
+
+            endpoint = (IAudioEndpointVolume)volume;
+            return action(endpoint);
         }
-        catch (Exception error) when (error is System.Runtime.InteropServices.COMException or InvalidCastException)
+        catch (Exception error) when (error is COMException or InvalidCastException)
         {
-            return null;
+            return default;
+        }
+        finally
+        {
+            if (endpoint is not null) Marshal.ReleaseComObject(endpoint);
+            if (device is not null) Marshal.ReleaseComObject(device);
+            if (enumerator is not null) Marshal.ReleaseComObject(enumerator);
         }
     }
 }

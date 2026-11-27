@@ -140,8 +140,18 @@ public static class RtssWingetInstaller
             if (process is null) return null;
 
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-            var output = await process.StandardOutput.ReadToEndAsync(timeout.Token);
-            await process.WaitForExitAsync(timeout.Token);
+            string output;
+            try
+            {
+                output = await process.StandardOutput.ReadToEndAsync(timeout.Token);
+                await process.WaitForExitAsync(timeout.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch (Exception error) when (error is Win32Exception or InvalidOperationException or AggregateException or NotSupportedException) { }
+                throw;
+            }
 
             // Headers are translated, so find the row by id and read what follows it:
             // "… Guru3D.RTSS 7.3.6 7.3.7" is installed, then available (a Source column may follow,

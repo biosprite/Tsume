@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -14,6 +15,8 @@ namespace Tsume.App.Shell;
 /// Standalone desktop window for read-only Hardware Discovery (Quick Scan, Guided Capture,
 /// Live Watch Mode, and Report Preview). Stays open while you switch to OEM software beside it.
 /// </summary>
+[SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
+    Justification = "WPF Window does not implement IDisposable; _vm is disposed in the Closed event handler.")]
 public partial class DeviceDiscoveryWindow
 {
     private const double DefaultWidth = 980;

@@ -820,6 +820,10 @@ public sealed class PerformanceViewModel : Observable
                 await next();
             }
         }
+        catch (Exception error)
+        {
+            AsyncCommand.LogError(error);
+        }
         finally
         {
             _fanWanted = null;
@@ -951,6 +955,10 @@ public sealed class PerformanceViewModel : Observable
                 Absorb(reply);
             }
             while (_applyAgain);
+        }
+        catch (Exception error)
+        {
+            AsyncCommand.LogError(error);
         }
         finally
         {

@@ -70,7 +70,10 @@ public sealed class PackagePower : IDisposable
     /// <summary>Average watts between two looks at the meter.</summary>
     public static double? Watts(Reading? from, Reading? to)
     {
-        if (from is not { } a || to is not { } b || b.Milliseconds <= a.Milliseconds) return null;
+        if (from is not { } a || to is not { } b
+            || b.Milliseconds <= a.Milliseconds
+            || b.PicowattHours < a.PicowattHours)
+            return null;
 
         var joules = (b.PicowattHours - a.PicowattHours) * JoulesPerPicowattHour;
         var seconds = (b.Milliseconds - a.Milliseconds) / 1000.0;

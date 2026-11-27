@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Tsume.App.Platform.Interop;
 
 namespace Tsume.App.Shell;
 
@@ -13,61 +14,84 @@ internal static partial class DisplayClock
     /// <summary>Comfortably more often than a 120 Hz display refreshes.</summary>
     private const int NudgeEveryMilliseconds = 4;
 
+    private static readonly Lock Gate = new();
     private static CancellationTokenSource? _stop;
 
     /// <summary>Hold the display at full rate (<c>true</c>), or let it idle again (<c>false</c>).</summary>
     public static void KeepAwake(bool on)
     {
-        if (on == _stop is not null) return;
+        CancellationTokenSource? toCancel = null;
+        lock (Gate)
+        {
+            if (on == (_stop is not null)) return;
 
-        if (on)
-        {
-            var stop = _stop = new CancellationTokenSource();
-            new Thread(() => Nudge(stop.Token)) { IsBackground = true, Name = "Tsume display clock" }.Start();
-        }
-        else
-        {
-            _stop!.Cancel();
+            if (on)
+            {
+                var stop = _stop = new CancellationTokenSource();
+                new Thread(() => Nudge(stop)) { IsBackground = true, Name = "Tsume display clock" }.Start();
+                return;
+            }
+
+            toCancel = _stop;
             _stop = null;
         }
+
+        try { toCancel?.Cancel(); }
+        catch (ObjectDisposedException) { }
     }
 
     /// <summary>Waits for the display's next refresh. For measuring it; see <see cref="OpenTrace"/>.</summary>
     public static void WaitForTick()
     {
-        try { DCompositionWaitForCompositorClock(0, 0, 250); }
+        try { _ = DCompositionWaitForCompositorClock(0, 0, 250); }
         catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException) { Thread.Sleep(8); }
     }
 
-    private static void Nudge(CancellationToken stop)
+    private static void Nudge(CancellationTokenSource stopSource)
     {
-        // One pixel, top-left, never focused, never clicked, at 1/255 opacity.
-        var pixel = CreateWindowEx(
-            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
-            "Static", "", WS_POPUP | WS_VISIBLE, 0, 0, 1, 1, 0, 0, 0, 0);
+        nint pixel = 0;
+        nint timer = 0;
 
-        // A high-resolution timer keeps time without changing the whole system's timer rate.
-        var timer = CreateWaitableTimerEx(0, 0, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
-        if (timer == 0) timer = CreateWaitableTimerEx(0, 0, 0, TIMER_ALL_ACCESS);
-
-        long now = -1;
-        SetWaitableTimer(timer, in now, NudgeEveryMilliseconds, 0, 0, false);
-
-        var faint = false;
-        while (!stop.IsCancellationRequested)
+        try
         {
-            MsgWaitForMultipleObjectsEx(1, in timer, 100, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            var stop = stopSource.Token;
 
-            // The window must answer Windows' messages, or anything broadcasting to all windows waits on it.
-            while (PeekMessage(out var message, 0, 0, 0, PM_REMOVE)) DispatchMessage(in message);
+            // One pixel, top-left, never focused, never clicked, at 1/255 opacity.
+            pixel = CreateWindowEx(
+                WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
+                "Static", "", WS_POPUP | WS_VISIBLE, 0, 0, 1, 1, 0, 0, 0, 0);
+            if (pixel == 0) return;
 
-            faint = !faint;
-            SetLayeredWindowAttributes(pixel, 0, (byte)(faint ? 1 : 2), LWA_ALPHA);
+            // A high-resolution timer keeps time without changing the whole system's timer rate.
+            timer = CreateWaitableTimerEx(0, 0, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+            if (timer == 0) timer = CreateWaitableTimerEx(0, 0, 0, TIMER_ALL_ACCESS);
+            if (timer == 0) return;
+
+            long now = -1;
+            if (!SetWaitableTimer(timer, in now, NudgeEveryMilliseconds, 0, 0, false)) return;
+
+            var faint = false;
+            while (!stop.IsCancellationRequested)
+            {
+                if (MsgWaitForMultipleObjectsEx(1, in timer, 100, QS_ALLINPUT, MWMO_INPUTAVAILABLE) == WAIT_FAILED)
+                    break;
+
+                // The window must answer Windows' messages, or anything broadcasting to all windows waits on it.
+                while (PeekMessage(out var message, 0, 0, 0, PM_REMOVE)) DispatchMessage(in message);
+
+                faint = !faint;
+                SetLayeredWindowAttributes(pixel, 0, (byte)(faint ? 1 : 2), LWA_ALPHA);
+            }
         }
-
-        CloseHandle(timer);
-        DestroyWindow(pixel);
+        finally
+        {
+            if (timer != 0) Kernel32.CloseHandle(timer);
+            if (pixel != 0) DestroyWindow(pixel);
+            stopSource.Dispose();
+        }
     }
+
+    private const uint WAIT_FAILED = 0xFFFF_FFFF;
 
     private const uint WS_POPUP = 0x8000_0000;
     private const uint WS_VISIBLE = 0x1000_0000;
@@ -126,10 +150,6 @@ internal static partial class DisplayClock
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SetWaitableTimer(
         nint timer, in long dueTime, int periodMilliseconds, nint routine, nint argument, [MarshalAs(UnmanagedType.Bool)] bool resume);
-
-    [LibraryImport("kernel32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool CloseHandle(nint handle);
 
     [LibraryImport("dcomp.dll")]
     private static partial uint DCompositionWaitForCompositorClock(uint count, nint handles, uint timeoutMilliseconds);

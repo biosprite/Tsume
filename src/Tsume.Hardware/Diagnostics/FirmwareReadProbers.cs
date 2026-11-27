@@ -3,6 +3,7 @@ using System.Management;
 using System.Text;
 using Tsume.Core.Diagnostics;
 using Tsume.Hardware.Msi;
+using Tsume.Hardware.Msi.Diagnostics;
 
 namespace Tsume.Hardware.Diagnostics;
 
@@ -63,18 +64,6 @@ public static class FirmwareReadProbers
 internal sealed class MsiReadProber : IFirmwareReadProber
 {
     private const string Scope = @"root\WMI";
-    private const string PackageClass = "Package_32";
-    private const int PackageSize = 32;
-
-    private static readonly (string Method, byte[] Selectors)[] Tables =
-    [
-        ("Get_Fan",         [0, 1, 2, 3]),
-        ("Get_Temperature", [0, 1, 2]),
-        ("Get_Thermal",     [0, 1, 2, 3]),
-        ("Get_AP",          [0, 1, 2, 3]),
-        ("Get_Device",      [0, 1]),
-        ("Get_Power",       [0, 1, 2, 3]),
-    ];
 
     private static readonly (string Method, byte[] Selectors)[] FastStateTables =
     [
@@ -135,7 +124,7 @@ internal sealed class MsiReadProber : IFirmwareReadProber
             tables["Get_EC_raw"] = Hex(ec.Data, 31);
         }
 
-        foreach (var (method, selectors) in Tables)
+        foreach (var (method, selectors) in FirmwareProbe.Tables)
         {
             foreach (var selector in selectors)
             {
@@ -215,13 +204,16 @@ internal sealed class MsiReadProber : IFirmwareReadProber
             {
                 using var output = selector is null
                     ? _acpi.InvokeMethod(method, null, null)
-                    : InvokeWithPackage(method, selector.Value);
+                    : InvokeWithSelector(method, selector.Value);
 
-                if (WmiProps.TryGet(output, "Data", out var dataObj)
-                    && dataObj is ManagementBaseObject data
-                    && WmiProps.TryGet(data, "Bytes", out var bytesObj)
-                    && bytesObj is byte[] { Length: > 1 } bytes)
-                    return (bytes[0] != 0, bytes[1..]);
+                if (WmiProps.TryGet(output, "Data", out var dataObj))
+                {
+                    using var data = dataObj as ManagementBaseObject;
+                    if (data is not null
+                        && WmiProps.TryGet(data, "Bytes", out var bytesObj)
+                        && bytesObj is byte[] { Length: > 1 } bytes)
+                        return (bytes[0] != 0, bytes[1..]);
+                }
             }
         }
         catch (Exception error) when (error is ManagementException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException)
@@ -231,18 +223,11 @@ internal sealed class MsiReadProber : IFirmwareReadProber
         return (false, []);
     }
 
-    private ManagementBaseObject InvokeWithPackage(string method, byte selector)
+    private ManagementBaseObject InvokeWithSelector(string method, byte selector)
     {
-        using var input = _acpi.GetMethodParameters(method);
-        using var packageClass = new ManagementClass(Scope, PackageClass, null);
-        using var instance = packageClass.CreateInstance();
-
-        var package = new byte[PackageSize];
+        var package = new byte[MsiAcpiBridge.PackageSize];
         package[0] = selector;
-        instance["Bytes"] = package;
-        input["Data"] = instance;
-
-        return _acpi.InvokeMethod(method, input, null);
+        return MsiAcpiBridge.InvokeWithPackage(_acpi, method, package);
     }
 
     private static string Hex(byte[] data, int maxLen)
@@ -481,7 +466,11 @@ internal sealed class LenovoReadProber : IFirmwareReadProber
                         }
                     }
                 }
-                if (val is not null) values[$"GameZone.{method}"] = $"{val}";
+                if (val is not null)
+                {
+                    using (val as IDisposable)
+                        values[$"GameZone.{method}"] = $"{val}";
+                }
             }
             catch (Exception error) when (error is ManagementException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException)
             {

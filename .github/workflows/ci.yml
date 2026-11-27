@@ -50,6 +50,9 @@ jobs:
       - name: Build
         run: dotnet build Tsume.slnx --configuration Release --no-restore
 
+      - name: Test
+        run: dotnet test Tsume.slnx --configuration Release --no-build --verbosity normal
+
       # The run number becomes the version's fourth part (1.0.100 -> 1.0.100.57). A version part
       # tops out at 65534, so it wraps; Windows Installer ignores that part, so wrapping is harmless.
       - name: Build the installer

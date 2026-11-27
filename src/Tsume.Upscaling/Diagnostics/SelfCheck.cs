@@ -429,7 +429,7 @@ public static class SelfCheck
             Check(Installer.Check(installer.Find(b.Id)) == InstallState.Replaced, "the install reads as replaced");
 
             removal = installer.Remove(b.Id);
-            Check(File.ReadAllText(Path.Combine(b.Folder, "dxgi.dll")).StartsWith("the game's new"), "removal left the new file alone");
+            Check(File.ReadAllText(Path.Combine(b.Folder, "dxgi.dll")).StartsWith("the game's new", StringComparison.Ordinal), "removal left the new file alone");
             Check(removal.LeftAlone.SequenceEqual(["dxgi.dll"]), "and said so");
             Check(removal.KeptOriginals is { } kept && Files.Hash(Path.Combine(kept, "dxgi.dll")) == before["dxgi.dll"],
                 "the older original was kept rather than forced back or thrown away");

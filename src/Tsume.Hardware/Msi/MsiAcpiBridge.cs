@@ -16,7 +16,7 @@ public sealed class MsiAcpiBridge(Board machine, MsiBoard? verified) : IMsiFirmw
     private const string Scope = @"root\WMI";
     private const string FallbackInstance = @"MSI_ACPI.InstanceName='ACPI\PNP0C14\0_0'";
     private const string PackageClass = "Package_32";
-    private const int PackageSize = 32;
+    internal const int PackageSize = 32;
 
     /// <summary>Serialises all <c>MSI_ACPI</c> WMI calls process-wide so device control and read-only discovery never overlap.</summary>
     internal static readonly Lock AcpiCallGate = new();
@@ -129,7 +129,8 @@ public sealed class MsiAcpiBridge(Board machine, MsiBoard? verified) : IMsiFirmw
             ? acpi.InvokeMethod(method, null, null)
             : InvokeWithPackage(acpi, method, package);
 
-        return output?["Data"] is ManagementBaseObject { } data && data["Bytes"] is byte[] { Length: > 1 } bytes
+        using var data = output?["Data"] as ManagementBaseObject;
+        return data?["Bytes"] is byte[] { Length: > 1 } bytes
             ? new FirmwareReply(Accepted: bytes[0] != 0, Data: bytes[1..])
             : FirmwareReply.Empty;
     }
@@ -173,7 +174,7 @@ public sealed class MsiAcpiBridge(Board machine, MsiBoard? verified) : IMsiFirmw
         return new ManagementObject(Scope, FallbackInstance, null);
     }
 
-    private static ManagementBaseObject InvokeWithPackage(ManagementObject acpi, string method, byte[] package)
+    internal static ManagementBaseObject InvokeWithPackage(ManagementObject acpi, string method, byte[] package)
     {
         using var input = acpi.GetMethodParameters(method);
         using var packageClass = new ManagementClass(Scope, PackageClass, null);

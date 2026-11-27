@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Text;
 using Tsume.Core.Ipc;
 
 namespace Tsume.Helper;
@@ -67,7 +66,7 @@ internal static class RtssOverlayWriter
                         var backup = new List<string>();
                         RtssProfileWriter.SetKey(backup, BackupSection, "PluginEnabled", GetKey(configLines, "Plugins", PluginDll) ?? "0");
                         RtssProfileWriter.SetKey(backup, BackupSection, "Layout", GetKey(editorLines, "Settings", "Layout") ?? "");
-                        File.WriteAllLines(backupFile, backup, Encoding.Latin1);
+                        File.WriteAllLines(backupFile, backup, RtssProfileWriter.IniEncoding);
                     }
 
                     changed |= Set(editorLines, "Settings", "Layout", layoutPath);
@@ -123,9 +122,10 @@ internal static class RtssOverlayWriter
             var layoutWriteUtc = File.GetLastWriteTimeUtc(layoutPath);
             if (layoutWriteUtc > DateTime.UtcNow.AddMinutes(5)) return false;
 
-            foreach (var process in Process.GetProcessesByName("RTSS"))
+            var processes = Process.GetProcessesByName("RTSS");
+            try
             {
-                using (process)
+                foreach (var process in processes)
                 {
                     try
                     {
@@ -134,6 +134,10 @@ internal static class RtssOverlayWriter
                     catch (Exception error) when (error is Win32Exception or InvalidOperationException) { }
                 }
             }
+            finally
+            {
+                foreach (var process in processes) process.Dispose();
+            }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
 
@@ -141,12 +145,12 @@ internal static class RtssOverlayWriter
     }
 
     private static List<string> ReadLines(string path) =>
-        File.Exists(path) ? File.ReadAllLines(path, Encoding.Latin1).ToList() : [];
+        File.Exists(path) ? File.ReadAllLines(path, RtssProfileWriter.IniEncoding).ToList() : [];
 
     private static void WriteLines(string path, List<string> lines)
     {
         var temp = path + ".tsume-tmp";
-        File.WriteAllLines(temp, lines, Encoding.Latin1);
+        File.WriteAllLines(temp, lines, RtssProfileWriter.IniEncoding);
         File.Move(temp, path, overwrite: true);
     }
 

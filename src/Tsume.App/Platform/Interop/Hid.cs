@@ -35,7 +35,7 @@ internal static unsafe partial class Hid
     /// <summary>The path of every Windows LampArray (Dynamic Lighting) device present right now.</summary>
     public static IReadOnlyList<string> LampArrayDevicePaths() => InterfacePaths(LampArrayGuid);
 
-    private static IReadOnlyList<string> InterfacePaths(Guid interfaceGuid)
+    private static string[] InterfacePaths(Guid interfaceGuid)
     {
         // The list can grow between asking its size and reading it; try again if so.
         for (var attempt = 0; attempt < 3; attempt++)

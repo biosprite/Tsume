@@ -161,6 +161,10 @@ public sealed class ChargeLimitViewModel : Observable
 
             RefreshStatus();
         }
+        catch (Exception error)
+        {
+            AsyncCommand.LogError(error);
+        }
         finally
         {
             _pendingApplies--;

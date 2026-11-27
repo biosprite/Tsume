@@ -209,44 +209,55 @@ public sealed class Installer(UpscalingPaths paths, bool? hasIntelXmxGpu = null)
 
             MakeSureOfRoom(target, plan.Where(step => !(linking && step.Shared) && step.SameAs is null).Sum(step => step.Length));
 
-            manifest.Files =
-            [
-                .. plan.Select(step => new PlacedFile
-                {
-                    Path = step.Path,
-                    Sha256 = step.Sha256,
-                    Length = step.Length,
-                    IsSettings = step.Path.Equals(SettingsFile, StringComparison.OrdinalIgnoreCase),
-                }),
-                .. retired.Select(name => new PlacedFile { Path = name }),
-            ];
+            manifest.Files = [];
             manifest.NewFolders = FoldersToMake(target, plan.Select(step => step.Path));
             manifest.Leavings = [.. LeftBehindByOptiScaler.Where(name => !File.Exists(Path.Combine(target, name)))];
 
             Save(manifest);   // must happen before anything in the game's folder changes
 
-            foreach (var (step, placed) in plan.Zip(manifest.Files))
+            foreach (var step in plan)
             {
-                var destination = Files.Inside(target, step.Path);
-
-                if (File.Exists(destination))
+                var verified = false;
+                if (step.SameAs is null)
                 {
-                    MoveAside(destination, Files.Inside(Path.Combine(home, "Originals"), step.Path), placed);
-                    Save(manifest);
+                    VerifyStoreFile(step, build, patcher);
+                    verified = true;
                 }
 
+                var destination = Files.Inside(target, step.Path);
+                var placed = new PlacedFile
+                {
+                    Path = step.Path,
+                    Sha256 = step.Sha256,
+                    Length = step.Length,
+                    IsSettings = step.Path.Equals(SettingsFile, StringComparison.OrdinalIgnoreCase),
+                };
+
+                if (File.Exists(destination))
+                    MoveAside(destination, Files.Inside(Path.Combine(home, "Originals"), step.Path), placed);
+
+                // Record each file only once we are about to place/modify it, so an early failure never
+                // lets Undo delete an untouched pre-existing file that happens to match a later planned hash.
+                manifest.Files.Add(placed);
+                Save(manifest);
+
                 if (step.SameAs is { } twin && Files.TryLink(Files.Inside(target, twin), destination)) continue;
-                if (linking && step.Shared && LinkFromStore(step, build, patcher, destination)) continue;
+
+                if (!verified) VerifyStoreFile(step, build, patcher);
+
+                if (linking && step.Shared && Files.LetEveryoneRead(step.Source) && Files.TryLink(step.Source, destination)) continue;
 
                 Files.Place(step.Source, destination);
             }
 
-            foreach (var placed in manifest.Files.Skip(plan.Count))
+            foreach (var name in retired)
             {
-                var conflicting = Files.Inside(target, placed.Path);
+                var conflicting = Files.Inside(target, name);
                 if (!File.Exists(conflicting)) continue;
 
-                MoveAside(conflicting, Files.Inside(Path.Combine(home, "Originals"), placed.Path), placed);
+                var placed = new PlacedFile { Path = name };
+                MoveAside(conflicting, Files.Inside(Path.Combine(home, "Originals"), name), placed);
+                manifest.Files.Add(placed);
                 Save(manifest);
                 Files.Delete(conflicting);
             }
@@ -278,6 +289,8 @@ public sealed class Installer(UpscalingPaths paths, bool? hasIntelXmxGpu = null)
         }
     }
 
+    private enum StoreKind { None, Build, Xmx, OptiPatcher }
+
     /// <summary>One file to copy into the game's folder.</summary>
     private sealed record Step(string Source, string Path, long Length, string Sha256)
     {
@@ -286,6 +299,9 @@ public sealed class Installer(UpscalingPaths paths, bool? hasIntelXmxGpu = null)
         /// store rather than copied. Never the proxy (a game update may overwrite it) or the settings file.
         /// </summary>
         public bool Shared { get; init; }
+
+        /// <summary>Which store the source file comes from, if any, so its cached hash is verified before placement.</summary>
+        public StoreKind Store { get; init; }
 
         /// <summary>An earlier step with the same bytes; this file is hard-linked to it where the disk allows.</summary>
         public string? SameAs { get; init; }
@@ -308,18 +324,22 @@ public sealed class Installer(UpscalingPaths paths, bool? hasIntelXmxGpu = null)
             var source = Files.Inside(build.Folder, file.Path);
 
             if (file.Path.Equals(Program, StringComparison.OrdinalIgnoreCase))
-                plan[proxy] = new Step(source, proxy, file.Length, file.Sha256);
+                plan[proxy] = new Step(source, proxy, file.Length, file.Sha256) { Store = StoreKind.Build };
 
             else if (file.Path.Equals(SettingsFile, StringComparison.OrdinalIgnoreCase))
                 plan[SettingsFile] = new Step(settingsFile, SettingsFile, new FileInfo(settingsFile).Length, Files.Hash(settingsFile));
 
             else
-                plan[file.Path] = new Step(source, file.Path, file.Length, file.Sha256) { Shared = true };
+                plan[file.Path] = new Step(source, file.Path, file.Length, file.Sha256) { Shared = true, Store = StoreKind.Build };
         }
 
         if (xmxHeld is not null && xmxFile is not null)
         {
-            plan[XmxLayout.Upscaler] = new Step(xmxFile, XmxLayout.Upscaler, xmxHeld.Length, xmxHeld.Sha256) { Shared = true };
+            plan[XmxLayout.Upscaler] = new Step(xmxFile, XmxLayout.Upscaler, xmxHeld.Length, xmxHeld.Sha256)
+            {
+                Shared = true,
+                Store = StoreKind.Xmx,
+            };
 
             // The XMX upscaler reads FSR 4.1.2's weights out of AMD's own upscaler (in the nightly), under this other name.
             if (plan.TryGetValue(XmxLayout.WeightsInBuild, out var amd))
@@ -332,7 +352,7 @@ public sealed class Installer(UpscalingPaths paths, bool? hasIntelXmxGpu = null)
                 optiPatcher.File,
                 OptiPatcherLayout.Plugin,
                 new FileInfo(optiPatcher.File).Length,
-                optiPatcher.Release.Sha256) { Shared = true };
+                optiPatcher.Release.Sha256) { Shared = true, Store = StoreKind.OptiPatcher };
         }
 
         if (Directory.Exists(paths.Extras))
@@ -351,29 +371,27 @@ public sealed class Installer(UpscalingPaths paths, bool? hasIntelXmxGpu = null)
     }
 
     /// <summary>
-    /// Gives the game a second name for the store's file instead of a copy.
-    /// The store's file is checked first: one changed through some game's link must not spread to another.
+    /// Verifies that a cached store file still matches its recorded hash before placing it into a game
+    /// (whether linked or copied, shared or not).
     /// </summary>
-    /// <returns>False if it could not be linked; the caller copies instead.</returns>
-    private static bool LinkFromStore(Step step, StoredBuild build, StoredOptiPatcher? patcher, string destination)
+    private static void VerifyStoreFile(Step step, StoredBuild build, StoredOptiPatcher? patcher)
     {
-        if (Files.Hash(step.Source) != step.Sha256)
+        if (step.Store == StoreKind.None) return;
+
+        if (File.Exists(step.Source) && Files.Hash(step.Source) == step.Sha256) return;
+
+        Log.Write($"{step.Source} is no longer the file that was downloaded");
+        switch (step.Store)
         {
-            Log.Write($"{step.Source} is no longer the file that was downloaded");
-            if (patcher is not null && step.Path.Equals(OptiPatcherLayout.Plugin, StringComparison.OrdinalIgnoreCase))
-            {
+            case StoreKind.OptiPatcher when patcher is not null:
                 OptiPatcherStore.Distrust(patcher);
                 throw new UpscalingException(Trouble.OptiPatcherDamaged, step.Path);
-            }
-
-            if (step.Path.Equals(XmxLayout.Upscaler, StringComparison.OrdinalIgnoreCase))
+            case StoreKind.Xmx:
                 throw new UpscalingException(Trouble.NotXmx, step.Path);
-
-            BuildStore.Distrust(build);
-            throw new UpscalingException(Trouble.BuildDamaged, step.Path);
+            default:
+                BuildStore.Distrust(build);
+                throw new UpscalingException(Trouble.BuildDamaged, step.Path);
         }
-
-        return Files.LetEveryoneRead(step.Source) && Files.TryLink(step.Source, destination);
     }
 
     /// <summary>
@@ -384,7 +402,24 @@ public sealed class Installer(UpscalingPaths paths, bool? hasIntelXmxGpu = null)
         bool ueIntelAtomics, bool hasOptiPatcher, bool keepOtherAsiPlugins)
     {
         var saved = Path.Combine(home, "Saved", SettingsFile);
-        var ini = IniFile.Load(File.Exists(saved) ? saved : Path.Combine(build.Folder, SettingsFile));
+        string source;
+        if (File.Exists(saved))
+        {
+            source = saved;
+        }
+        else
+        {
+            source = Files.Inside(build.Folder, SettingsFile);
+            var recorded = build.Files.FirstOrDefault(file => file.Path.Equals(SettingsFile, StringComparison.OrdinalIgnoreCase));
+            if (recorded is not null && (!File.Exists(source) || Files.Hash(source) != recorded.Sha256))
+            {
+                Log.Write($"{source} is no longer the file that was downloaded");
+                BuildStore.Distrust(build);
+                throw new UpscalingException(Trouble.BuildDamaged, SettingsFile);
+            }
+        }
+
+        var ini = IniFile.Load(source);
 
         settings.WriteTo(ini, ueIntelAtomics, hasOptiPatcher, keepOtherAsiPlugins);
 
@@ -783,9 +818,10 @@ public sealed class Installer(UpscalingPaths paths, bool? hasIntelXmxGpu = null)
     /// <summary>True if the program is running, or might be (Windows would not show the process's path).</summary>
     public static bool IsRunning(string executable)
     {
-        foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(executable)))
+        var processes = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(executable));
+        try
         {
-            using (process)
+            foreach (var process in processes)
             {
                 try
                 {
@@ -796,9 +832,13 @@ public sealed class Installer(UpscalingPaths paths, bool? hasIntelXmxGpu = null)
                     return true;   // same name, and Windows will not show its path: assume it is the game
                 }
             }
-        }
 
-        return false;
+            return false;
+        }
+        finally
+        {
+            foreach (var process in processes) process.Dispose();
+        }
     }
 
     /// <summary>Throws NotWritable for folders that need administrator rights (Program Files).</summary>
@@ -825,12 +865,12 @@ public sealed class Installer(UpscalingPaths paths, bool? hasIntelXmxGpu = null)
     /// <summary>Maps a system error to an <see cref="UpscalingException"/> where one fits.</summary>
     private static Exception Explain(Exception error, string folder) => error switch
     {
-        UpscalingException                              => error,
-        UnauthorizedAccessException                     => new UpscalingException(Trouble.NotWritable, folder, error),
-        IOException io when BuildStore.IsDiskFull(io)   => new UpscalingException(Trouble.DiskFull, folder, error),
+        UpscalingException                               => error,
+        UnauthorizedAccessException                      => new UpscalingException(Trouble.NotWritable, folder, error),
+        IOException io when RemoteStore.IsDiskFull(io)   => new UpscalingException(Trouble.DiskFull, folder, error),
         IOException io when (io.HResult & 0xFFFF) is 0x20 or 0x21   // sharing or lock violation
-                                                        => new UpscalingException(Trouble.FileInUse, io.Message, error),
-        _                                               => error,
+                                                         => new UpscalingException(Trouble.FileInUse, io.Message, error),
+        _                                                => error,
     };
 
     private string ManifestFile(string gameId) => Path.Combine(paths.InstallFolder(gameId), "manifest.json");

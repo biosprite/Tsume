@@ -129,8 +129,14 @@ public sealed class RequestHandler
                     if (!profile.ChargeLimits.Contains(percent))
                         return HelperReply.Failure($"This device has no {percent} % charge limit.");
 
-                    device.SetChargeLimit(percent);
-                    charge?.Remember(chosen);
+                    lock (DiscoveryWorker.KeeperGate)
+                    {
+                        if (DiscoveryWorker.IsMutatingFirmwareCheckRunning)
+                            return HelperReply.Failure("A firmware check is running. Wait for it to finish before changing settings.");
+
+                        device.SetChargeLimit(percent);
+                        charge?.Remember(chosen);
+                    }
                     break;
 
                 default:

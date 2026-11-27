@@ -42,6 +42,12 @@ public sealed class ProgressRing : FrameworkElement
         new FrameworkPropertyMetadata(90.0, FrameworkPropertyMetadataOptions.AffectsRender));
 
     private bool _animating;
+    private Pen? _trackPen;
+    private Brush? _trackPenBrush;
+    private double _trackPenThickness;
+    private Pen? _arcPen;
+    private Brush? _arcPenBrush;
+    private double _arcPenThickness;
 
     public ProgressRing()
     {
@@ -67,7 +73,7 @@ public sealed class ProgressRing : FrameworkElement
         return new Size(side, side);
     }
 
-    protected override void OnRender(DrawingContext dc)
+    protected override void OnRender(DrawingContext drawingContext)
     {
         var size = Math.Min(ActualWidth, ActualHeight);
         if (size <= 2.0) return;
@@ -80,8 +86,15 @@ public sealed class ProgressRing : FrameworkElement
 
         if (TrackBrush is { } track)
         {
-            var trackPen = new Pen(track, thickness);
-            dc.DrawEllipse(null, trackPen, center, radius, radius);
+            if (_trackPen is null || !ReferenceEquals(_trackPenBrush, track) || _trackPenThickness != thickness)
+            {
+                var pen = new Pen(track, thickness);
+                if (pen.CanFreeze) pen.Freeze();
+                _trackPen = pen;
+                _trackPenBrush = track;
+                _trackPenThickness = thickness;
+            }
+            drawingContext.DrawEllipse(null, _trackPen, center, radius, radius);
         }
 
         if (Foreground is not { } fg) return;
@@ -115,12 +128,19 @@ public sealed class ProgressRing : FrameworkElement
         }
         geometry.Freeze();
 
-        var arcPen = new Pen(fg, thickness)
+        if (_arcPen is null || !ReferenceEquals(_arcPenBrush, fg) || _arcPenThickness != thickness)
         {
-            StartLineCap = PenLineCap.Round,
-            EndLineCap = PenLineCap.Round,
-        };
-        dc.DrawGeometry(null, arcPen, geometry);
+            var pen = new Pen(fg, thickness)
+            {
+                StartLineCap = PenLineCap.Round,
+                EndLineCap = PenLineCap.Round,
+            };
+            if (pen.CanFreeze) pen.Freeze();
+            _arcPen = pen;
+            _arcPenBrush = fg;
+            _arcPenThickness = thickness;
+        }
+        drawingContext.DrawGeometry(null, _arcPen, geometry);
     }
 
     private static void OnIsActiveChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

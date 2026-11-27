@@ -34,4 +34,8 @@ internal static partial class PowrProf
     [LibraryImport("powrprof.dll")]
     public static partial uint CallNtPowerInformation(
         int level, nint input, uint inputSize, out SYSTEM_BATTERY_STATE output, uint outputSize);
+
+    [LibraryImport("powrprof.dll")]
+    public static partial int CallNtPowerInformation(
+        int informationLevel, nint inputBuffer, uint inputBufferLength, nint outputBuffer, uint outputBufferLength);
 }

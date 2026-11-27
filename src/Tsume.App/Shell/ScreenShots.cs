@@ -267,12 +267,12 @@ public static class ScreenShots
 
             var custom = Path.Combine(game, "OptiScaler", "custom");
             notes.Add($"                custom folder: {(Directory.Exists(custom) ? string.Join(", ", Directory.EnumerateFiles(custom, "*", SearchOption.AllDirectories).Select(file => Path.GetRelativePath(custom, file))) : "none")}");
-            notes.Add($"                settings file: {string.Join("  ", File.ReadAllLines(Path.Combine(game, "OptiScaler.ini")).Where(line => line.StartsWith("Dx12Upscaler") || line.StartsWith("[xmxsr]") || line.StartsWith("[Plugin.") || line.StartsWith("Model=") || line.StartsWith("UpscalerIndex=")))}");
+            notes.Add($"                settings file: {string.Join("  ", File.ReadAllLines(Path.Combine(game, "OptiScaler.ini")).Where(line => line.StartsWith("Dx12Upscaler", StringComparison.Ordinal) || line.StartsWith("[xmxsr]", StringComparison.Ordinal) || line.StartsWith("[Plugin.", StringComparison.Ordinal) || line.StartsWith("Model=", StringComparison.Ordinal) || line.StartsWith("UpscalerIndex=", StringComparison.Ordinal)))}");
             await shot("10-made-up-game-installed");
 
             upscaling.Game.Tuning.FrameGenIndex = 1;   // XeFG
             var ini = File.ReadAllLines(Path.Combine(game, "OptiScaler.ini"));
-            notes.Add($"after XeFG:     {string.Join("  ", ini.Where(line => line.StartsWith("FGOutput") || line.StartsWith("FGInput") || line.StartsWith("Dx12Upscaler")))}");
+            notes.Add($"after XeFG:     {string.Join("  ", ini.Where(line => line.StartsWith("FGOutput", StringComparison.Ordinal) || line.StartsWith("FGInput", StringComparison.Ordinal) || line.StartsWith("Dx12Upscaler", StringComparison.Ordinal)))}");
             await shot("11-made-up-game-frame-generation");
 
             upscaling.Game.IsOpen = false;

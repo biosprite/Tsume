@@ -8,8 +8,11 @@ using Tsume.App.Platform;
 namespace Tsume.App.ViewModels;
 
 /// <summary>The header: what time it is and how the battery is doing.</summary>
-public sealed class StatusViewModel : Observable
+public sealed partial class StatusViewModel : Observable, IDisposable
 {
+    [GeneratedRegex(@"\s*t+\s*")]
+    private static partial Regex MeridiemPattern();
+
     /// <summary>Hours and minutes, in Windows' 12- or 24-hour style, e.g. "3:45" or "15:45".</summary>
     public string Time { get; private set => Set(ref field, value); } = "";
 
@@ -23,11 +26,15 @@ public sealed class StatusViewModel : Observable
 
     public StatusViewModel()
     {
-        SystemEvents.UserPreferenceChanged += (_, e) =>
-        {
-            if (e.Category == UserPreferenceCategory.Locale) _culture = null;
-        };
+        SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
     }
+
+    private void OnUserPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e)
+    {
+        if (e.Category == UserPreferenceCategory.Locale) _culture = null;
+    }
+
+    public void Dispose() => SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
 
     private CultureInfo Culture()
     {
@@ -49,7 +56,7 @@ public sealed class StatusViewModel : Observable
         // The designator is pulled out so the header can draw it smaller beside the digits.
         var pattern = culture.DateTimeFormat.ShortTimePattern;
         var twelveHour = pattern.Contains('t');
-        var digits = Regex.Replace(pattern, @"\s*t+\s*", "").Trim();
+        var digits = MeridiemPattern().Replace(pattern, "").Trim();
         if (digits.Length == 0) digits = twelveHour ? "h:mm" : "HH:mm";
 
         Time = now.ToString(digits, culture);

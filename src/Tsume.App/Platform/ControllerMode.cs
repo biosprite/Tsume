@@ -102,7 +102,7 @@ public static class ControllerMode
 
             // Always wait the initial settle + read-back without cancelling so we never lose track of a
             // switch command that was already written to the USB endpoint.
-            await Task.Delay(Settle);
+            await Task.Delay(Settle, CancellationToken.None);
 
             while (DateTime.UtcNow - started < GiveUp)
             {
@@ -124,7 +124,7 @@ public static class ControllerMode
                         note?.Invoke($"{At()}  re-sent switch to {(byte)wanted} ({wanted}): {(resent ? "sent" : "NOT sent")}");
                         if (resent)
                         {
-                            await Task.Delay(Settle);
+                            await Task.Delay(Settle, CancellationToken.None);
                             continue;
                         }
                     }
@@ -149,7 +149,7 @@ public static class ControllerMode
                         currentMKeys = Math.Min(current.MKeys, (byte)2);
                         var resent = await active.SwitchModeAsync(wanted, currentMKeys);
                         note?.Invoke($"{At()}  re-sent switch to {(byte)wanted} ({wanted}): {(resent ? "sent" : "NOT sent")}");
-                        if (resent) await Task.Delay(Settle);
+                        if (resent) await Task.Delay(Settle, CancellationToken.None);
                     }
                 }
             }

@@ -1,6 +1,4 @@
-using System.Net.Http;
 using System.Text.Json;
-using Tsume.Upscaling.Nightly;
 
 namespace Tsume.Upscaling.OptiPatcher;
 
@@ -16,18 +14,7 @@ public static class OptiPatcherFeed
 
     public static async Task<OptiPatcherRelease> NewestAsync(CancellationToken cancel = default)
     {
-        string list;
-        try
-        {
-            using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-            limit.CancelAfter(TimeSpan.FromSeconds(20));
-
-            list = await NightlyFeed.Web.GetStringAsync(Releases, limit.Token).ConfigureAwait(false);
-        }
-        catch (Exception error) when (error is HttpRequestException or OperationCanceledException && !cancel.IsCancellationRequested)
-        {
-            throw new UpscalingException(Trouble.Offline, error.Message, error);
-        }
+        var list = await RemoteStore.GetStringAsync(Releases, cancel).ConfigureAwait(false);
 
         try
         {
@@ -65,21 +52,17 @@ public static class OptiPatcherFeed
 
             foreach (var asset in release.GetProperty("assets").EnumerateArray())
             {
-                var name = asset.GetProperty("name").GetString() ?? "";
-                var url = asset.GetProperty("browser_download_url").GetString() ?? "";
-                var digest = asset.TryGetProperty("digest", out var given) ? given.GetString() : null;
+                if (!RemoteStore.TryReadVerifiedAsset(
+                        asset,
+                        Downloads,
+                        name => name.StartsWith("OptiPatcher", StringComparison.OrdinalIgnoreCase)
+                             && name.EndsWith(".asi", StringComparison.OrdinalIgnoreCase),
+                        out var name, out var url, out var size, out var sha256))
+                {
+                    continue;
+                }
 
-                var isPlugin = name.StartsWith("OptiPatcher", StringComparison.OrdinalIgnoreCase)
-                            && name.EndsWith(".asi", StringComparison.OrdinalIgnoreCase)
-                            && url.StartsWith(Downloads, StringComparison.Ordinal);
-
-                // No published hash, no download: there would be nothing to check it against.
-                if (!isPlugin || digest is null || !digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase)) continue;
-
-                return new OptiPatcherRelease(
-                    tag, name, url,
-                    asset.GetProperty("size").GetInt64(),
-                    digest["sha256:".Length..].ToLowerInvariant());
+                return new OptiPatcherRelease(tag, name, url, size, sha256);
             }
         }
 

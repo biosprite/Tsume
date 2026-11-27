@@ -84,7 +84,7 @@ internal static class PanelStarter
     /// <summary>Waits briefly after wake from sleep/hibernate and starts the panel if it is not running.</summary>
     public static void EnsureRunningAfterWake(int session, CancellationToken stop = default)
     {
-        if (session < 0 || stop.WaitHandle.WaitOne(WakePause)) return;
+        if (session < 0 || WaitForStop(WakePause, stop)) return;
         StartFor(session, "wake", stop);
     }
 
@@ -123,7 +123,7 @@ internal static class PanelStarter
                     if (exitedCode == 0 && IsRunningIn(session)) return;
 
                     Log.Write($"Panel exited early (code 0x{exitedCode.Value:X8}) on {occasion}, attempt {attempt}/{LaunchAttempts}.");
-                    if (attempt < LaunchAttempts && stop.WaitHandle.WaitOne(RetryPause)) return;
+                    if (attempt < LaunchAttempts && WaitForStop(RetryPause, stop)) return;
                 }
             }
         }
@@ -201,7 +201,7 @@ internal static class PanelStarter
             using var settings = Registry.Users.OpenSubKey(account);
             if (settings is null)
             {
-                if (stop.WaitHandle.WaitOne(SettingsPause)) return false;
+                if (WaitForStop(SettingsPause, stop)) return false;
                 continue;
             }
 
@@ -286,7 +286,7 @@ internal static class PanelStarter
                 return;
             }
 
-            if (stop.WaitHandle.WaitOne(DesktopPause)) return;
+            if (WaitForStop(DesktopPause, stop)) return;
         }
     }
 
@@ -309,6 +309,20 @@ internal static class PanelStarter
         return found;
     }
 
+    /// <summary>Wraps an existing OS process handle as a <see cref="WaitHandle"/> without allocating a dummy event handle.</summary>
+    private sealed class ProcessWaitHandle : WaitHandle
+    {
+        public ProcessWaitHandle(nint processHandle) =>
+            SafeWaitHandle = new SafeWaitHandle(processHandle, ownsHandle: true);
+    }
+
+    private static bool WaitForStop(TimeSpan timeout, CancellationToken stop)
+    {
+        if (stop.IsCancellationRequested) return true;
+        try { return stop.WaitHandle.WaitOne(timeout); }
+        catch (ObjectDisposedException) { return true; }
+    }
+
     /// <summary>
     /// Watches a helper-started panel process with zero dedicated threads. If it exits abnormally (non-zero
     /// crash code, not a normal Quit or session logoff), restarts it quietly with UIAccess (rate-limited).
@@ -318,10 +332,7 @@ internal static class PanelStarter
     {
         if (processHandle == 0) return;
 
-        var waitEvent = new ManualResetEvent(false)
-        {
-            SafeWaitHandle = new SafeWaitHandle(processHandle, ownsHandle: true),
-        };
+        var waitEvent = new ProcessWaitHandle(processHandle);
 
         var waitGate = new Lock();
         RegisteredWaitHandle? registration = null;
@@ -391,7 +402,7 @@ internal static class PanelStarter
     private static void RestartAfterCrash(int session, CancellationToken stop)
     {
         // Give WER / Windows a moment to finish tearing down the crashed process and release its mutex.
-        if (stop.WaitHandle.WaitOne(CrashRestartDelay)) return;
+        if (WaitForStop(CrashRestartDelay, stop)) return;
         if (session < 0 || !WTSQueryUserToken((uint)session, out var person)) return;
 
         try
@@ -446,7 +457,8 @@ internal static class PanelStarter
             {
                 var start = new StartupInfo { Size = Marshal.SizeOf<StartupInfo>(), Desktop = @"winsta0\default" };
 
-                if (!CreateProcessAsUser(token, path, new StringBuilder(command), 0, 0, false, UnicodeEnvironment,
+                var commandBuffer = (command + '\0').ToCharArray();
+                if (!CreateProcessAsUser(token, path, commandBuffer, 0, 0, false, UnicodeEnvironment,
                         environment, AppContext.BaseDirectory, ref start, out var started))
                 {
                     throw new Win32Exception();
@@ -535,8 +547,8 @@ internal static class PanelStarter
                         ShowWindow = SwShowMinNoActive,
                     };
                     var command = string.IsNullOrWhiteSpace(arguments)
-                        ? new StringBuilder($"\"{path}\"")
-                        : new StringBuilder($"\"{path}\" {arguments}");
+                        ? $"\"{path}\"\0".ToCharArray()
+                        : $"\"{path}\" {arguments}\0".ToCharArray();
 
                     if (!CreateProcessAsUser(token, path, command, 0, 0, false, UnicodeEnvironment,
                             environment, Path.GetDirectoryName(path)!, ref start, out var started))
@@ -678,7 +690,7 @@ internal static class PanelStarter
     private static extern bool DestroyEnvironmentBlock(nint environment);
 
     [DllImport("advapi32.dll", EntryPoint = "CreateProcessAsUserW", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool CreateProcessAsUser(nint token, string application, StringBuilder command,
+    private static extern bool CreateProcessAsUser(nint token, string application, [In, Out] char[] command,
         nint processSecurity, nint threadSecurity, bool inheritHandles, uint flags, nint environment,
         string folder, ref StartupInfo start, out Started started);
 

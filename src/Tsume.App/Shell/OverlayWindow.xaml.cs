@@ -271,7 +271,7 @@ public partial class OverlayWindow
             kbRect.Bottom - winRect.Top);
         var diffRegion = DwmApi.CreateRectRgn(0, 0, 0, 0);
 
-        DwmApi.CombineRgn(diffRegion, fullRegion, kbRegion, DwmApi.RGN_DIFF);
+        _ = DwmApi.CombineRgn(diffRegion, fullRegion, kbRegion, DwmApi.RGN_DIFF);
         DwmApi.DeleteObject(fullRegion);
         DwmApi.DeleteObject(kbRegion);
 

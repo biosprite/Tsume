@@ -104,29 +104,29 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board, string? fan
 
         lock (_oneIntentionAtATime)
         {
-            if (_at.PowerLimitFastBoost is { } fastBoostReg)
+            // The sequence writes ShiftMode and drops limits to their floors first, so a write refused
+            // part-way would leave the chip shifted or capped there. Read the original state before writing
+            // anything so ShiftMode side effects cannot overwrite the snapshot we roll back to.
+            byte? beforeShift = null;
+            PowerLimits? beforeLimits = null;
+            try
             {
-                var fppt = limits.FastBoost ?? limits.Boost;
+                beforeShift = Read(_at.ShiftMode, nameof(_at.ShiftMode));
+                beforeLimits = ReadLimits();
+            }
+            catch (Exception error) when (error is FirmwareException or ManagementException or COMException)
+            {
+                // Cannot read: go ahead without whatever part could not be read.
+            }
 
-                // The sequence writes ShiftMode and drops SPL and SPPT to their floors first, so a write refused
-                // part-way would leave the APU shifted or capped there. Read the original state before writing
-                // anything so ShiftMode side effects cannot overwrite the snapshot we roll back to.
-                byte? beforeShift = null;
-                PowerLimits? beforeLimits = null;
-                try
-                {
-                    beforeShift = Read(_at.ShiftMode, nameof(_at.ShiftMode));
-                    beforeLimits = ReadLimits();
-                }
-                catch (Exception error) when (error is FirmwareException or ManagementException or COMException)
-                {
-                    // Cannot read: go ahead without whatever part could not be read.
-                }
+            Write(_at.ShiftMode, nameof(_at.ShiftMode), board.Shift.Encode(shiftMode));
 
-                Write(_at.ShiftMode, nameof(_at.ShiftMode), board.Shift.Encode(shiftMode));
-
-                try
+            try
+            {
+                if (_at.PowerLimitFastBoost is { } fastBoostReg)
                 {
+                    var fppt = limits.FastBoost ?? limits.Boost;
+
                     // MSI's AMD order:
                     // SPL -> floor (7 W), SPPT -> floor (9 W), then FPPT -> SPPT -> SPL.
                     Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), board.PowerFloor);
@@ -135,32 +135,33 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board, string? fan
                     Write(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost), (byte)limits.Boost);
                     Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), (byte)limits.Sustained);
                 }
-                catch (Exception) when (beforeShift is not null || beforeLimits is not null)
+                else
                 {
-                    // Best effort, in the same safe order as the change itself (shift mode, then floors, then
-                    // highest limit first) so no limit is ever written below the one under it; then the original error.
-                    if (beforeShift is { } originalShift)
-                        TryWrite(_at.ShiftMode, originalShift);
-
-                    if (beforeLimits is { } original)
-                    {
-                        TryWrite(_at.PowerLimitSustained, board.PowerFloor);
-                        TryWrite(_at.PowerLimitBoost, board.BoostFloor ?? board.PowerFloor);
-                        TryWrite(fastBoostReg, (byte)(original.FastBoost ?? original.Boost));
-                        TryWrite(_at.PowerLimitBoost, (byte)original.Boost);
-                        TryWrite(_at.PowerLimitSustained, (byte)original.Sustained);
-                    }
-                    throw;
+                    // MSI's Intel order: sustained to the floor first, so boost is never below sustained mid-change.
+                    Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), board.PowerFloor);
+                    Write(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost), (byte)limits.Boost);
+                    Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), (byte)limits.Sustained);
                 }
             }
-            else
+            catch (Exception) when (beforeShift is not null || beforeLimits is not null)
             {
-                Write(_at.ShiftMode, nameof(_at.ShiftMode), board.Shift.Encode(shiftMode));
+                // Best effort, in the same safe order as the change itself (shift mode, then floors, then
+                // highest limit first) so no limit is ever written below the one under it; then the original error.
+                if (beforeShift is { } originalShift)
+                    TryWrite(_at.ShiftMode, originalShift);
 
-                // MSI's Intel order: sustained to the floor first, so boost is never below sustained mid-change.
-                Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), board.PowerFloor);
-                Write(_at.PowerLimitBoost, nameof(_at.PowerLimitBoost), (byte)limits.Boost);
-                Write(_at.PowerLimitSustained, nameof(_at.PowerLimitSustained), (byte)limits.Sustained);
+                if (beforeLimits is { } original)
+                {
+                    TryWrite(_at.PowerLimitSustained, board.PowerFloor);
+                    if (_at.PowerLimitFastBoost is { } fastBoostReg)
+                    {
+                        TryWrite(_at.PowerLimitBoost, board.BoostFloor ?? board.PowerFloor);
+                        TryWrite(fastBoostReg, (byte)(original.FastBoost ?? original.Boost));
+                    }
+                    TryWrite(_at.PowerLimitBoost, (byte)original.Boost);
+                    TryWrite(_at.PowerLimitSustained, (byte)original.Sustained);
+                }
+                throw;
             }
 
             // Turn AMD STAMP boost off after writing limits, as MSI Center M does:
@@ -664,7 +665,12 @@ public sealed class MsiDevice(IMsiFirmware firmware, MsiBoard board, string? fan
         Profile.FanCurve is { } limits
         && IsSaneSpeeds(saved.Fan1, limits)
         && (saved.Fan2 is null || IsSaneSpeeds(saved.Fan2, limits))
-        && (saved.Temperatures is null || IsSaneTemperatures(saved.Temperatures));
+        && (saved.Temperatures is null || IsSaneTemperatures(saved.Temperatures))
+        && (saved.Falling1 is null || IsSaneFalling(saved.Falling1))
+        && (saved.Falling2 is null || IsSaneFalling(saved.Falling2));
+
+    private static bool IsSaneFalling(int[]? falling) =>
+        falling is { Length: CurvePoints } && falling.All(temp => temp is >= 0 and <= byte.MaxValue);
 
     private static bool IsSaneSpeeds(int[]? speeds, FanCurveLimits limits) =>
         speeds is { Length: CurvePoints } && speeds.All(speed => speed >= 0 && speed <= limits.MaxSpeed);

@@ -106,7 +106,8 @@ public sealed class RtssOverlayService : IDisposable
     /// size seen while that game is still hooked (for example while Tsume's panel has focus), clears it once the
     /// game exits or another hooked game takes focus, and falls back to the screen size otherwise.
     /// </summary>
-    private (int Width, int Height) GetFramePixels()
+    private ((int Width, int Height) Frame, RtssFrameQueryResult Query) QueryFramePixels(
+        bool checkOverlayEditorSlot = false, bool checkAnyHookedApps = false)
     {
         uint cachedPid;
         lock (_gate) cachedPid = _framePid;
@@ -120,13 +121,23 @@ public sealed class RtssOverlayService : IDisposable
                 fgPid = pid;
         }
 
-        var query = RtssSharedMemory.QueryFrameState(fgPid != 0 ? [fgPid] : [], cachedPid);
-        if (!query.ForegroundIsHooked && fgPid != 0 && IsApplicationFrameWindow(fg))
+        Span<uint> candidates = stackalloc uint[9];
+        var candidateCount = 0;
+        if (fgPid != 0)
         {
-            var childPids = CollectUwpChildPids(fg, fgPid);
-            if (childPids.Count > 0)
-                query = RtssSharedMemory.QueryFrameState(CollectionsMarshal.AsSpan(childPids), cachedPid);
+            candidates[candidateCount++] = fgPid;
+            if (IsApplicationFrameWindow(fg))
+            {
+                foreach (var childPid in CollectUwpChildPids(fg, fgPid))
+                {
+                    if (candidateCount < candidates.Length)
+                        candidates[candidateCount++] = childPid;
+                }
+            }
         }
+
+        var query = RtssSharedMemory.QueryFrameState(
+            candidates[..candidateCount], cachedPid, checkOverlayEditorSlot, checkAnyHookedApps);
 
         lock (_gate)
         {
@@ -148,9 +159,11 @@ public sealed class RtssOverlayService : IDisposable
                 ClearCachedFrameLocked();
             }
 
-            return _frame ?? GetScreenPixels();
+            return (_frame ?? GetScreenPixels(), query);
         }
     }
+
+    private (int Width, int Height) GetFramePixels() => QueryFramePixels().Frame;
 
     private void ClearCachedFrameLocked()
     {
@@ -218,34 +231,49 @@ public sealed class RtssOverlayService : IDisposable
     /// Publishes the overlay position again when the foreground game's frame is no longer the size it was last
     /// worked out for (another game took focus, this one changed resolution, or the last game exited).
     /// </summary>
-    public void SyncFrameSize()
+    public void SyncFrameSize() => SyncFrameState(checkOverlayEditorSlot: false);
+
+    /// <summary>
+    /// Single-pass shared-memory sync for <see cref="Shell.RtssOverlayDragController"/>: updates the cached
+    /// frame size, triggers any idle deferred restart, and reports whether the foreground window is hooked
+    /// and OverlayEditor owns an active OSD slot — all from one <c>RTSSSharedMemoryV2</c> open.
+    /// </summary>
+    internal (bool ForegroundHooked, bool HasOverlayEditorSlot) SyncFrameState(bool checkOverlayEditorSlot)
     {
-        if (_disposed) return;
-        TryApplyDeferredRestartIfIdle();
-        if (!IsOverlayVisibleWanted) return;
+        if (_disposed) return (false, false);
 
-        var frame = GetFramePixels();
-        bool changed;
-        lock (_gate) changed = frame != _publishedFrame;
+        bool restartPending;
+        lock (_gate) restartPending = _rtssRestartPending;
 
-        if (changed) ApplyLiveLevelState(shiftOverlayNow: true);
+        var (frame, query) = QueryFramePixels(checkOverlayEditorSlot, checkAnyHookedApps: restartPending);
+        if (restartPending && !query.HasAnyHookedApps)
+            TryApplyDeferredRestartIfIdle(hasHookedApps: false);
+
+        if (IsOverlayVisibleWanted)
+        {
+            bool changed;
+            lock (_gate) changed = frame != _publishedFrame;
+            if (changed) ApplyLiveLevelState(frameOverride: frame);
+        }
+
+        return (query.ForegroundIsHooked, query.HasOverlayEditorSlot);
     }
 
     /// <summary>Publishes the overlay position again, worked out afresh for the current frame or screen size.</summary>
-    public void RepublishPosition() => ApplyLiveLevelState(shiftOverlayNow: true);
+    public void RepublishPosition() => ApplyLiveLevelState();
 
     /// <summary>
     /// Bounding box of the active Tsume overlay in the game's frame pixels, together with that frame's size and
     /// the physical screen rectangle the frame is presented into, or null when no Tsume overlay is shown.
     /// </summary>
-    public (RtssOverlayLevel Level, int X, int Y, int Width, int Height, int FrameWidth, int FrameHeight, int ViewportX, int ViewportY, int ViewportWidth, int ViewportHeight)? GetActiveOverlayRect()
+    public (RtssOverlayLevel Level, int X, int Y, int Width, int Height, int FrameWidth, int FrameHeight, int ViewportX, int ViewportY, int ViewportWidth, int ViewportHeight)? GetActiveOverlayRect(bool refreshFrame = true)
     {
         if (!IsOverlayVisibleWanted) return null;
         var level = _settings.Level;
         var (w, h) = RtssOverlayMetrics.GetSize(level);
         if (w <= 0 || h <= 0) return null;
 
-        var (fw, fh) = GetFramePixels();
+        (int fw, int fh) = refreshFrame ? GetFramePixels() : GetCachedFramePixels();
         var (x, y) = ResolveActivePosition(level, fw, fh);
 
         nint frameHwnd;
@@ -261,18 +289,9 @@ public sealed class RtssOverlayService : IDisposable
         return (level, x, y, w, h, fw, fh, vx, vy, vw, vh);
     }
 
-    /// <summary>Streams a live pixel position to RTSS while the user is actively dragging the overlay.</summary>
-    public void SetLiveDragPosition(int x, int y)
+    private (int Width, int Height) GetCachedFramePixels()
     {
-        if (_disposed || !IsOverlayVisibleWanted) return;
-
-        var (w, h) = RtssOverlayMetrics.GetSize(_settings.Level);
-        var (sw, sh) = GetFramePixels();
-        var cx = Math.Clamp(x, 0, Math.Max(0, sw - w));
-        var cy = Math.Clamp(y, 0, Math.Max(0, sh - h));
-
-        lock (_gate) _dragOverridePos = (cx, cy);
-        ApplyLiveLevelState(shiftOverlayNow: true);
+        lock (_gate) return _frame ?? GetScreenPixels();
     }
 
     /// <summary>Saves the final dragged placement for <paramref name="level"/> and publishes it immediately.</summary>
@@ -294,7 +313,7 @@ public sealed class RtssOverlayService : IDisposable
             _dragOverridePos = null;
         }
 
-        if (hadOverride) ApplyLiveLevelState(shiftOverlayNow: true);
+        if (hadOverride) ApplyLiveLevelState();
     }
 
     private (int X, int Y) ResolveActivePosition(RtssOverlayLevel level, int screenWidth, int screenHeight)
@@ -593,9 +612,7 @@ public sealed class RtssOverlayService : IDisposable
         // Publish to AIDA64_SensorValues before writing state.json so RTSS sees new level and position immediately.
         if (pluginChanged || levelChanged || placementChanged)
         {
-            ApplyLiveLevelState(
-                ensureOsdVisible: levelChanged && next.Level != RtssOverlayLevel.Off,
-                shiftOverlayNow: placementChanged && !levelChanged && !pluginChanged);
+            ApplyLiveLevelState(ensureOsdVisible: levelChanged && next.Level != RtssOverlayLevel.Off);
         }
 
         SaveSettings();
@@ -609,7 +626,7 @@ public sealed class RtssOverlayService : IDisposable
             OverlayStateChanged?.Invoke();
     }
 
-    private void ApplyLiveLevelState(bool ensureOsdVisible = false, bool shiftOverlayNow = false)
+    private void ApplyLiveLevelState(bool ensureOsdVisible = false, (int Width, int Height)? frameOverride = null)
     {
         if (_disposed) return;
 
@@ -637,7 +654,7 @@ public sealed class RtssOverlayService : IDisposable
         }
 
         var (tempWarnC, tempHotC) = CurrentTempThresholds();
-        var (sw, sh) = GetFramePixels();
+        var (sw, sh) = frameOverride ?? GetFramePixels();
 
         RtssOverlayLevel level;
         bool published;
@@ -891,13 +908,13 @@ public sealed class RtssOverlayService : IDisposable
         });
     }
 
-    private void TryApplyDeferredRestartIfIdle()
+    private void TryApplyDeferredRestartIfIdle(bool? hasHookedApps = null)
     {
         if (_disposed) return;
 
         bool pending;
         lock (_gate) pending = _rtssRestartPending;
-        if (!pending || RtssSharedMemory.HasHookedApps()) return;
+        if (!pending || (hasHookedApps ?? RtssSharedMemory.HasHookedApps())) return;
 
         _ = Task.Run(() => FlushDeferredRestartAsync());
     }

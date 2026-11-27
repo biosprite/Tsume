@@ -55,6 +55,11 @@ public sealed class FanCurveEditor : Control
     private Key _lastKey;
     private long _lastKeyAt;
     private int _streak;
+    private DrawPalette? _palette;
+
+    private static readonly DashStyle FloorDash = FrozenDash(3, 3);
+    private static readonly DashStyle StockDash = FrozenDash(4, 3);
+    private static readonly DashStyle NowDash = FrozenDash(2, 3);
 
     public FanCurveEditor()
     {
@@ -65,8 +70,14 @@ public sealed class FanCurveEditor : Control
         IsManipulationEnabled = true;
 
         // The plot draws with the scheme's brushes, which are replaced (not recoloured) when the scheme changes.
-        Loaded += (_, _) => { Colours.Changed += Redraw; Redraw(); };
-        Unloaded += (_, _) => Colours.Changed -= Redraw;
+        Loaded += (_, _) => { Colours.Changed += OnColoursChanged; Redraw(); };
+        Unloaded += (_, _) => Colours.Changed -= OnColoursChanged;
+    }
+
+    private void OnColoursChanged()
+    {
+        _palette = null;
+        Redraw();
     }
 
     public static readonly DependencyProperty LimitsProperty = Register(nameof(Limits), typeof(FanCurveLimits), null);
@@ -555,6 +566,10 @@ public sealed class FanCurveEditor : Control
         var divider = Find("Surface.Divider");
         var surface = Find("Surface.Hover");
         var panel = Find("Panel.Fill");
+        var warm = Find("Signal.Warn");
+        var hot = Find("Signal.Danger");
+        var accent = Accent.Brush;
+        var palette = GetPalette(text, muted, faint, divider, panel, warm, hot, accent);
 
         // The chosen column, while the curve has the focus or a finger.
         if ((IsKeyboardFocused || _dragging) && Chosen >= 0 && layout.Column > 4)
@@ -565,11 +580,10 @@ public sealed class FanCurveEditor : Control
         }
 
         // Speed: grid lines at 25 %, 50 %, 75 % and 100 % of the board's real fan curve scale.
-        var gridPen = new Pen(divider, 1);
         for (var percent = 25; percent <= 100; percent += 25)
         {
             var y = layout.Bottom - percent / 100.0 * layout.Height;
-            dc.DrawLine(gridPen, new Point(layout.Left, y), new Point(layout.Right, y));
+            dc.DrawLine(palette.GridPen, new Point(layout.Left, y), new Point(layout.Right, y));
 
             var label = Words(Strings.FanPercent(percent), 11, muted, dip);
             dc.DrawText(label, new Point(layout.Left - 6 - label.Width, y - label.Height / 2));
@@ -578,8 +592,6 @@ public sealed class FanCurveEditor : Control
         // The floors: speeds the helper will not go below, shaded under each point.
         if (editable)
         {
-            var hatch = Hatch(muted);
-            var edge = new Pen(faint, 1) { DashStyle = new DashStyle([3, 3], 0) };
             for (var point = 0; point < count; point++)
             {
                 var floor = limits.MinSpeedAt(point, temperatures, Stock);
@@ -587,34 +599,29 @@ public sealed class FanCurveEditor : Control
 
                 var x = layout.X(point) - layout.Column / 2;
                 var y = layout.Y(floor);
-                dc.DrawRectangle(hatch, null, new Rect(x, y, layout.Column, layout.Bottom - y));
-                dc.DrawLine(edge, new Point(x, y), new Point(x + layout.Column, y));
+                dc.DrawRectangle(palette.HatchBrush, null, new Rect(x, y, layout.Column, layout.Bottom - y));
+                dc.DrawLine(palette.FloorEdgePen, new Point(x, y), new Point(x + layout.Column, y));
             }
         }
 
         // The firmware's own curve, faintly, for reference.
         if (editable && Stock is { } stock && stock.Count == count && !stock.SequenceEqual(speeds))
         {
-            var stockPen = new Pen(faint, 1.5) { DashStyle = new DashStyle([4, 3], 0) };
-            dc.DrawGeometry(null, stockPen, Line(layout, stock, closed: false));
+            dc.DrawGeometry(null, palette.StockPen, Line(layout, stock, closed: false));
         }
 
         // The curve: shaded beneath, then the line itself.
-        var accent = Accent.Brush;
         dc.DrawGeometry(editable ? Accent.Tint : Find("Surface"), null, Line(layout, speeds, closed: true));
-        dc.DrawGeometry(null, new Pen(editable ? accent : muted, editable ? 2.5 : 2) { LineJoin = PenLineJoin.Round }, Line(layout, speeds, closed: false));
+        dc.DrawGeometry(null, editable ? palette.EditableCurvePen : palette.ReadOnlyCurvePen, Line(layout, speeds, closed: false));
 
         // The L: speed up the left, temperature along the bottom, tinted where the chip runs warm and hot.
-        var axisPen = new Pen(faint, 1.5) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
-        dc.DrawLine(axisPen, new Point(layout.Left, layout.Top - Headroom / 2), new Point(layout.Left, layout.Bottom));
-        dc.DrawLine(axisPen, new Point(layout.Left, layout.Bottom), new Point(layout.Right, layout.Bottom));
+        dc.DrawLine(palette.AxisPen, new Point(layout.Left, layout.Top - Headroom / 2), new Point(layout.Left, layout.Bottom));
+        dc.DrawLine(palette.AxisPen, new Point(layout.Left, layout.Bottom), new Point(layout.Right, layout.Bottom));
 
-        var warm = Find("Signal.Warn");
-        var hot = Find("Signal.Danger");
         var warmFrom = Math.Max(layout.Left, layout.XAt(WarnCelsius));
         var hotFrom = Math.Max(layout.Left, layout.XAt(HotCelsius));
-        if (hotFrom > warmFrom) dc.DrawLine(new Pen(warm, 2.5), new Point(warmFrom, layout.Bottom), new Point(hotFrom, layout.Bottom));
-        if (layout.Right > hotFrom) dc.DrawLine(new Pen(hot, 2.5), new Point(hotFrom, layout.Bottom), new Point(layout.Right, layout.Bottom));
+        if (hotFrom > warmFrom) dc.DrawLine(palette.WarmPen, new Point(warmFrom, layout.Bottom), new Point(hotFrom, layout.Bottom));
+        if (layout.Right > hotFrom) dc.DrawLine(palette.HotPen, new Point(hotFrom, layout.Bottom), new Point(layout.Right, layout.Bottom));
 
         for (var point = 0; point < count; point++)
         {
@@ -628,20 +635,18 @@ public sealed class FanCurveEditor : Control
         if (CurrentCelsius is { } now)
         {
             var x = layout.XAt(now);
-            var nowPen = new Pen(text, 1) { DashStyle = new DashStyle([2, 3], 0) };
             dc.PushOpacity(0.55);
-            dc.DrawLine(nowPen, new Point(x, layout.Top), new Point(x, layout.Bottom));
+            dc.DrawLine(palette.NowPen, new Point(x, layout.Top), new Point(x, layout.Bottom));
             dc.Pop();
 
             if (CurrentSpeed is { } liveSpeed)
             {
                 var y = layout.Y(liveSpeed);
-                dc.DrawEllipse(text, new Pen(panel, 2), new Point(x, y), 4.5, 4.5);
+                dc.DrawEllipse(text, palette.LiveDotPen, new Point(x, y), 4.5, 4.5);
             }
         }
 
         // The handles: solid on a curve that can be changed, small dots on one that cannot.
-        var ring = new Pen(panel, 2.5);
         for (var point = 0; point < count; point++)
         {
             var centre = new Point(layout.X(point), layout.Y(speeds[point]));
@@ -655,9 +660,90 @@ public sealed class FanCurveEditor : Control
 
             if (chosen && (IsEditing || _dragging)) dc.DrawEllipse(Accent.Wash, null, centre, 17, 17);
             var radius = chosen ? ChosenRadius : HandleRadius;
-            dc.DrawEllipse(accent, ring, centre, radius, radius);
+            dc.DrawEllipse(accent, palette.RingPen, centre, radius, radius);
             if (chosen) dc.DrawEllipse(Colours.TextBrush, null, centre, 3, 3);
         }
+    }
+
+    private DrawPalette GetPalette(Brush text, Brush muted, Brush faint, Brush divider, Brush panel, Brush warm, Brush hot, Brush accent)
+    {
+        if (_palette is { } cached
+            && ReferenceEquals(cached.Text, text)
+            && ReferenceEquals(cached.Muted, muted)
+            && ReferenceEquals(cached.Faint, faint)
+            && ReferenceEquals(cached.Divider, divider)
+            && ReferenceEquals(cached.Panel, panel)
+            && ReferenceEquals(cached.Warm, warm)
+            && ReferenceEquals(cached.Hot, hot)
+            && ReferenceEquals(cached.Accent, accent))
+        {
+            return cached;
+        }
+
+        return _palette = new DrawPalette(text, muted, faint, divider, panel, warm, hot, accent);
+    }
+
+    private sealed class DrawPalette
+    {
+        public Brush Text { get; }
+        public Brush Muted { get; }
+        public Brush Faint { get; }
+        public Brush Divider { get; }
+        public Brush Panel { get; }
+        public Brush Warm { get; }
+        public Brush Hot { get; }
+        public Brush Accent { get; }
+
+        public Pen GridPen { get; }
+        public DrawingBrush HatchBrush { get; }
+        public Pen FloorEdgePen { get; }
+        public Pen StockPen { get; }
+        public Pen EditableCurvePen { get; }
+        public Pen ReadOnlyCurvePen { get; }
+        public Pen AxisPen { get; }
+        public Pen WarmPen { get; }
+        public Pen HotPen { get; }
+        public Pen NowPen { get; }
+        public Pen LiveDotPen { get; }
+        public Pen RingPen { get; }
+
+        public DrawPalette(Brush text, Brush muted, Brush faint, Brush divider, Brush panel, Brush warm, Brush hot, Brush accent)
+        {
+            Text = text;
+            Muted = muted;
+            Faint = faint;
+            Divider = divider;
+            Panel = panel;
+            Warm = warm;
+            Hot = hot;
+            Accent = accent;
+
+            GridPen = FrozenPen(new Pen(divider, 1));
+            HatchBrush = Hatch(muted);
+            FloorEdgePen = FrozenPen(new Pen(faint, 1) { DashStyle = FloorDash });
+            StockPen = FrozenPen(new Pen(faint, 1.5) { DashStyle = StockDash });
+            EditableCurvePen = FrozenPen(new Pen(accent, 2.5) { LineJoin = PenLineJoin.Round });
+            ReadOnlyCurvePen = FrozenPen(new Pen(muted, 2) { LineJoin = PenLineJoin.Round });
+            AxisPen = FrozenPen(new Pen(faint, 1.5) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round });
+            WarmPen = FrozenPen(new Pen(warm, 2.5));
+            HotPen = FrozenPen(new Pen(hot, 2.5));
+            NowPen = FrozenPen(new Pen(text, 1) { DashStyle = NowDash });
+            LiveDotPen = FrozenPen(new Pen(panel, 2));
+            RingPen = FrozenPen(new Pen(panel, 2.5));
+        }
+
+        private static Pen FrozenPen(Pen pen)
+        {
+            if (pen.CanFreeze) pen.Freeze();
+            return pen;
+        }
+    }
+
+    private static DashStyle FrozenDash(params double[] dashes)
+    {
+        var style = new DashStyle(dashes, 0);
+        style.Freeze();
+        return style;
     }
 
     /// <summary>The curve through every point, run flat out to both edges; closed down to the axis for shading.</summary>
@@ -683,10 +769,14 @@ public sealed class FanCurveEditor : Control
     /// <summary>Thin diagonal lines: the floors read as out of bounds without hiding the grid beneath.</summary>
     private static DrawingBrush Hatch(Brush colour)
     {
-        var line = new GeometryDrawing(null, new Pen(colour, 1),
-            new LineGeometry(new Point(0, 6), new Point(6, 0)));
+        var pen = new Pen(colour, 1);
+        if (pen.CanFreeze) pen.Freeze();
+        var geom = new LineGeometry(new Point(0, 6), new Point(6, 0));
+        geom.Freeze();
+        var line = new GeometryDrawing(null, pen, geom);
+        if (line.CanFreeze) line.Freeze();
 
-        return new DrawingBrush(line)
+        var brush = new DrawingBrush(line)
         {
             TileMode = TileMode.Tile,
             Viewport = new Rect(0, 0, 6, 6),
@@ -695,6 +785,8 @@ public sealed class FanCurveEditor : Control
             ViewboxUnits = BrushMappingMode.Absolute,
             Opacity = 0.35,
         };
+        if (brush.CanFreeze) brush.Freeze();
+        return brush;
     }
 
     private FormattedText Words(string words, double size, Brush colour, double dip, bool bold = false) => new(

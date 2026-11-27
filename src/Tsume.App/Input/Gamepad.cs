@@ -29,11 +29,14 @@ public enum PadButton : ushort
 public sealed class Gamepad : IDisposable
 {
     private const short StickThreshold = 16_000;
+    private const byte TriggerThreshold = 128;
 
     private static readonly TimeSpan IdlePoll = TimeSpan.FromMilliseconds(60);
     private static readonly TimeSpan ActivePoll = TimeSpan.FromMilliseconds(16);
     private static readonly TimeSpan ErrorBackoff = TimeSpan.FromSeconds(1);
     private const long ResumeSettleMs = 2500;
+
+    private static readonly PadButton[] AllButtons = Array.FindAll(Enum.GetValues<PadButton>(), static b => b != PadButton.None);
 
     private static readonly Journal Errors = new("errors");
 
@@ -60,21 +63,37 @@ public sealed class Gamepad : IDisposable
     /// <summary>Raised on a background thread when a Dedicated Action gamepad chord is pressed.</summary>
     public event Action<DedicatedAction>? ActionTriggered;
 
+    private volatile bool _isNavigating;
+    private volatile bool _suppressNavigation;
+    private volatile bool _suppressBuiltInSlot;
+
     /// <summary>True while the panel is open and wants button presses.</summary>
-    public volatile bool IsNavigating;
+    public bool IsNavigating
+    {
+        get => _isNavigating;
+        set => _isNavigating = value;
+    }
 
     /// <summary>
     /// True during the brief Claw Gamepad -> Desktop capture transition so pre-switch gamepad motion
     /// is not double-fed into the panel alongside the incoming Desktop-mode hooks.
     /// </summary>
-    public volatile bool SuppressNavigation;
+    public bool SuppressNavigation
+    {
+        get => _suppressNavigation;
+        set => _suppressNavigation = value;
+    }
 
     /// <summary>
     /// True while <see cref="PadIsolation"/> holds the built-in Claw pad in Desktop mode: skips slot 0
     /// (the built-in pad) so any latched XInput/HID state cannot phantom-scroll Tsume, while leaving
     /// external controllers on slots 1–3 active.
     /// </summary>
-    public volatile bool SuppressBuiltInSlot;
+    public bool SuppressBuiltInSlot
+    {
+        get => _suppressBuiltInSlot;
+        set => _suppressBuiltInSlot = value;
+    }
 
     public void SetActionBindings(IReadOnlyList<DedicatedActionBinding> bindings)
     {
@@ -174,12 +193,20 @@ public sealed class Gamepad : IDisposable
                 {
                     var navigating = IsNavigating && !SuppressNavigation;
                     var skipSlotZero = navigating && SuppressBuiltInSlot;
-                    var (summoned, pressed) = presses.Step(ReadButtons(skipSlotZero), navigating, DateTime.UtcNow);
+                    var bindings = _actionBindings;
+                    var wantsBack = HasBackButtonBinding(bindings);
+
+                    var (navButtons, actionPad) = PollControllers(skipSlotZero, bindings.Length > 0, wantsBack);
+                    var (summoned, pressed) = presses.Step(navButtons, navigating, DateTime.UtcNow);
 
                     if (summoned) Summoned?.Invoke();
-                    foreach (var button in Each(pressed)) Pressed?.Invoke(button);
+                    if (pressed != PadButton.None)
+                    {
+                        foreach (var button in AllButtons)
+                            if ((pressed & button) != 0) Pressed?.Invoke(button);
+                    }
 
-                    PollDedicatedActions();
+                    ProcessDedicatedActions(bindings, actionPad);
                 }
                 catch (Exception error)
                 {
@@ -201,26 +228,24 @@ public sealed class Gamepad : IDisposable
         }
     }
 
-    private void PollDedicatedActions()
+    private static bool HasBackButtonBinding(PadActionBinding[] bindings)
     {
-        var bindings = _actionBindings;
+        foreach (var binding in bindings)
+        {
+            if ((binding.GamepadMask & (DedicatedActionKeys.GamepadInput.BackLeft | DedicatedActionKeys.GamepadInput.BackRight)) != 0)
+                return true;
+        }
+        return false;
+    }
+
+    private void ProcessDedicatedActions(PadActionBinding[] bindings, DedicatedActionKeys.GamepadInput pad)
+    {
         if (bindings.Length == 0)
         {
             _latchedActions.Clear();
             return;
         }
 
-        var wantsBack = false;
-        foreach (var binding in bindings)
-        {
-            if ((binding.GamepadMask & (DedicatedActionKeys.GamepadInput.BackLeft | DedicatedActionKeys.GamepadInput.BackRight)) != 0)
-            {
-                wantsBack = true;
-                break;
-            }
-        }
-
-        var pad = DedicatedActionKeys.ReadGamepadInputs(includeBackButtons: wantsBack);
         List<PadActionBinding>? activeChords = null;
 
         foreach (var binding in bindings)
@@ -270,78 +295,115 @@ public sealed class Gamepad : IDisposable
         }
     }
 
-    /// <summary>Buttons held on any connected controller, with the left stick folded into the d-pad.</summary>
-    private static PadButton ReadButtons(bool skipSlotZero)
-    {
-        var buttons = ReadXInput(skipSlotZero);
-        return buttons != PadButton.None || !FullScreenExperience.IsActive
-            ? buttons
-            : ReadWinMm(skipSlotZero);
-    }
-
-    private static PadButton ReadXInput(bool skipSlotZero)
-    {
-        var buttons = PadButton.None;
-
-        for (uint user = skipSlotZero ? 1u : 0u; user < XInput.MaxControllers; user++)
-        {
-            if (XInput.XInputGetState(user, out var state) != XInput.ERROR_SUCCESS) continue;
-
-            buttons |= (PadButton)state.Buttons;
-
-            if (state.ThumbLY > StickThreshold) buttons |= PadButton.Up;
-            if (state.ThumbLY < -StickThreshold) buttons |= PadButton.Down;
-            if (state.ThumbLX < -StickThreshold) buttons |= PadButton.Left;
-            if (state.ThumbLX > StickThreshold) buttons |= PadButton.Right;
-        }
-
-        return buttons;
-    }
-
     /// <summary>
-    /// Fallback when <c>xinput1_4.dll</c> returns empty state (for example under Xbox FSE's <c>InputHost</c>
-    /// gamepad interception). Reads the controller's standard HID gamepad interface via <c>winmm.dll</c>.
+    /// Reads XInput (and WinMM fallback/back-buttons when needed) once per tick, producing both navigation
+    /// buttons (with left stick folded into the d-pad) and Dedicated Action gamepad inputs without double-polling.
     /// </summary>
-    private static PadButton ReadWinMm(bool skipSlotZero)
+    private static (PadButton NavButtons, DedicatedActionKeys.GamepadInput ActionInputs) PollControllers(
+        bool skipSlotZero, bool needDedicatedActions, bool wantsBack)
     {
-        const uint center = 32_767;
-        const uint threshold = 16_000;
+        var navButtons = PadButton.None;
+        var actionInputs = DedicatedActionKeys.GamepadInput.None;
+        var navStartSlot = skipSlotZero ? 1u : 0u;
 
-        var buttons = PadButton.None;
-
-        for (uint id = skipSlotZero ? 1u : 0u; id < WinMm.MaxControllers; id++)
+        for (uint user = 0; user < XInput.MaxControllers; user++)
         {
-            var info = WinMm.JOYINFOEX.Create();
-            if (WinMm.joyGetPosEx(id, ref info) != WinMm.JOYERR_NOERROR) continue;
+            var wantNav = user >= navStartSlot;
+            if (!wantNav && !needDedicatedActions) continue;
 
-            if ((info.Buttons & WinMm.ButtonA) != 0) buttons |= PadButton.A;
-            if ((info.Buttons & WinMm.ButtonB) != 0) buttons |= PadButton.B;
-            if ((info.Buttons & WinMm.ButtonView) != 0) buttons |= PadButton.View;
-            if ((info.Buttons & WinMm.ButtonMenu) != 0) buttons |= PadButton.Menu;
+            if (!XInput.TryGetState(user, out var state)) continue;
 
-            if (info.Pov < WinMm.JOY_POVCENTERED)
+            if (wantNav)
             {
-                if (info.Pov <= 4500 || info.Pov >= 31500) buttons |= PadButton.Up;
-                if (info.Pov is >= 4500 and <= 13500) buttons |= PadButton.Right;
-                if (info.Pov is >= 13500 and <= 22500) buttons |= PadButton.Down;
-                if (info.Pov is >= 22500 and <= 31500) buttons |= PadButton.Left;
+                navButtons |= (PadButton)(state.Buttons & ~XInput.GuideButton);
+
+                if (state.ThumbLY > StickThreshold) navButtons |= PadButton.Up;
+                if (state.ThumbLY < -StickThreshold) navButtons |= PadButton.Down;
+                if (state.ThumbLX < -StickThreshold) navButtons |= PadButton.Left;
+                if (state.ThumbLX > StickThreshold) navButtons |= PadButton.Right;
             }
 
-            // HID Y axis has 0 at top and 65535 at bottom.
-            if (info.Y < center - threshold) buttons |= PadButton.Up;
-            if (info.Y > center + threshold) buttons |= PadButton.Down;
-            if (info.X < center - threshold) buttons |= PadButton.Left;
-            if (info.X > center + threshold) buttons |= PadButton.Right;
+            if (needDedicatedActions)
+            {
+                actionInputs |= (DedicatedActionKeys.GamepadInput)(state.Buttons & 0xF7FF);
+                if (state.LeftTrigger >= TriggerThreshold) actionInputs |= DedicatedActionKeys.GamepadInput.Lt;
+                if (state.RightTrigger >= TriggerThreshold) actionInputs |= DedicatedActionKeys.GamepadInput.Rt;
+            }
         }
 
-        return buttons;
-    }
+        // Fall back to WinMM HID polling when XInput reports nothing under Xbox FSE InputHost,
+        // and read WinMM when Dedicated Action back buttons (bits 10/11) are needed.
+        var fseActive = FullScreenExperience.IsActive;
+        var needNavWinMm = navButtons == PadButton.None && fseActive;
+        var needActionWinMmFallback = needDedicatedActions && actionInputs == DedicatedActionKeys.GamepadInput.None && fseActive;
+        var needActionWinMmBack = needDedicatedActions && wantsBack;
 
-    private static IEnumerable<PadButton> Each(PadButton buttons)
-    {
-        foreach (var button in Enum.GetValues<PadButton>())
-            if (button != PadButton.None && buttons.HasFlag(button))
-                yield return button;
+        if (needNavWinMm || needActionWinMmFallback || needActionWinMmBack)
+        {
+            const uint center = 32_767;
+            const uint threshold = 16_000;
+
+            for (uint id = 0; id < WinMm.MaxControllers; id++)
+            {
+                var wantNav = needNavWinMm && id >= navStartSlot;
+                if (!wantNav && !needActionWinMmFallback && !needActionWinMmBack) continue;
+
+                var info = WinMm.JOYINFOEX.Create();
+                if (WinMm.joyGetPosEx(id, ref info) != WinMm.JOYERR_NOERROR) continue;
+
+                if (wantNav)
+                {
+                    if ((info.Buttons & WinMm.ButtonA) != 0) navButtons |= PadButton.A;
+                    if ((info.Buttons & WinMm.ButtonB) != 0) navButtons |= PadButton.B;
+                    if ((info.Buttons & WinMm.ButtonView) != 0) navButtons |= PadButton.View;
+                    if ((info.Buttons & WinMm.ButtonMenu) != 0) navButtons |= PadButton.Menu;
+
+                    if (info.Pov < WinMm.JOY_POVCENTERED)
+                    {
+                        if (info.Pov <= 4500 || info.Pov >= 31500) navButtons |= PadButton.Up;
+                        if (info.Pov is >= 4500 and <= 13500) navButtons |= PadButton.Right;
+                        if (info.Pov is >= 13500 and <= 22500) navButtons |= PadButton.Down;
+                        if (info.Pov is >= 22500 and <= 31500) navButtons |= PadButton.Left;
+                    }
+
+                    // HID Y axis has 0 at top and 65535 at bottom.
+                    if (info.Y < center - threshold) navButtons |= PadButton.Up;
+                    if (info.Y > center + threshold) navButtons |= PadButton.Down;
+                    if (info.X < center - threshold) navButtons |= PadButton.Left;
+                    if (info.X > center + threshold) navButtons |= PadButton.Right;
+                }
+
+                if (needActionWinMmBack)
+                {
+                    if ((info.Buttons & (1u << 10)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.BackLeft;
+                    if ((info.Buttons & (1u << 11)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.BackRight;
+                }
+
+                if (needActionWinMmFallback)
+                {
+                    if ((info.Buttons & (1u << 0)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.A;
+                    if ((info.Buttons & (1u << 1)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.B;
+                    if ((info.Buttons & (1u << 2)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.X;
+                    if ((info.Buttons & (1u << 3)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.Y;
+                    if ((info.Buttons & (1u << 4)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.Lb;
+                    if ((info.Buttons & (1u << 5)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.Rb;
+                    if ((info.Buttons & (1u << 6)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.View;
+                    if ((info.Buttons & (1u << 7)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.Menu;
+                    if ((info.Buttons & (1u << 8)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.LsClick;
+                    if ((info.Buttons & (1u << 9)) != 0) actionInputs |= DedicatedActionKeys.GamepadInput.RsClick;
+
+                    if (info.Pov < WinMm.JOY_POVCENTERED)
+                    {
+                        if (info.Pov <= 4500 || info.Pov >= 31500) actionInputs |= DedicatedActionKeys.GamepadInput.DPadUp;
+                        if (info.Pov is >= 4500 and <= 13500) actionInputs |= DedicatedActionKeys.GamepadInput.DPadRight;
+                        if (info.Pov is >= 13500 and <= 22500) actionInputs |= DedicatedActionKeys.GamepadInput.DPadDown;
+                        if (info.Pov is >= 22500 and <= 31500) actionInputs |= DedicatedActionKeys.GamepadInput.DPadLeft;
+                    }
+                }
+            }
+        }
+
+        return (navButtons, actionInputs);
     }
 
     public void Dispose()

@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Net.Http;
-using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace Tsume.Upscaling.Nightly;
@@ -23,7 +21,9 @@ public sealed class BuildStore(UpscalingPaths paths)
     {
         if (!Directory.Exists(paths.Builds)) return null;
 
-        foreach (var folder in Directory.GetDirectories(paths.Builds, "nightly-*").OrderDescending(StringComparer.Ordinal))
+        foreach (var folder in Directory.GetDirectories(paths.Builds, "nightly-*")
+                     .Where(dir => !Path.GetFileName(dir).EndsWith(".new", StringComparison.OrdinalIgnoreCase))
+                     .OrderDescending(StringComparer.Ordinal))
         {
             try
             {
@@ -52,8 +52,7 @@ public sealed class BuildStore(UpscalingPaths paths)
     {
         if (Current() is { } here && here.Build.Tag == build.Tag) return here;
 
-        var tag = Path.GetFileName(build.Tag);   // strips any path from the tag: it is used as a folder name
-        var home = Path.Combine(paths.Builds, tag);
+        var home = Files.SafeChildFolder(paths.Builds, build.Tag);
         var making = home + ".new";
         var archive = home + ".7z";
 
@@ -62,7 +61,8 @@ public sealed class BuildStore(UpscalingPaths paths)
 
         try
         {
-            await DownloadAsync(build, archive, progress, cancel).ConfigureAwait(false);
+            await RemoteStore.DownloadFileAsync(build.Url, archive, build.Size, build.Sha256, progress, cancel)
+                .ConfigureAwait(false);
 
             var contents = Path.Combine(making, Contents);
             Directory.CreateDirectory(contents);
@@ -72,68 +72,17 @@ public sealed class BuildStore(UpscalingPaths paths)
             cancel.ThrowIfCancellationRequested();
             Files.WriteWhole(Path.Combine(making, Record), JsonSerializer.Serialize(stored, Format));
 
-            Files.Discard(home);
-            Directory.Move(making, home);
+            // If a running game holds the previous same-tag folder open via a hard link,
+            // retire its record first and fall back to a hash-qualified folder so the download still succeeds.
+            var finalHome = RemoteStore.PromoteFolder(making, home, Record, build.Sha256);
 
-            ForgetOtherBuilds(home);
-            return stored with { Folder = Path.Combine(home, Contents) };
+            ForgetOtherBuilds(finalHome);
+            return stored with { Folder = Path.Combine(finalHome, Contents) };
         }
         finally
         {
             Files.Discard(making);
             try { File.Delete(archive); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
-        }
-    }
-
-    private static async Task DownloadAsync(NightlyBuild build, string archive, IProgress<double>? progress,
-        CancellationToken cancel)
-    {
-        try
-        {
-            using var headersLimit = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-            headersLimit.CancelAfter(TimeSpan.FromSeconds(20));
-
-            using var response = await NightlyFeed.Web
-                .GetAsync(build.Url, HttpCompletionOption.ResponseHeadersRead, headersLimit.Token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-
-            var total = response.Content.Headers.ContentLength ?? build.Size;
-            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-
-            await using (var from = await response.Content.ReadAsStreamAsync(cancel).ConfigureAwait(false))
-            await using (var to = new FileStream(archive, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 17))
-            {
-                var buffer = new byte[1 << 17];
-                long done = 0;
-
-                while (true)
-                {
-                    // Give up on a connection that stalls for 30 s.
-                    using var stall = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-                    stall.CancelAfter(TimeSpan.FromSeconds(30));
-
-                    var read = await from.ReadAsync(buffer, stall.Token).ConfigureAwait(false);
-                    if (read == 0) break;
-
-                    hash.AppendData(buffer, 0, read);
-                    await to.WriteAsync(buffer.AsMemory(0, read), cancel).ConfigureAwait(false);
-
-                    done += read;
-                    if (total > 0) progress?.Report(Math.Min(1, done / (double)total));
-                }
-            }
-
-            var actual = Convert.ToHexStringLower(hash.GetHashAndReset());
-            if (actual != build.Sha256)
-                throw new UpscalingException(Trouble.DownloadDamaged, $"expected {build.Sha256}, got {actual}");
-        }
-        catch (Exception error) when (error is HttpRequestException or OperationCanceledException && !cancel.IsCancellationRequested)
-        {
-            throw new UpscalingException(Trouble.Offline, error.Message, error);
-        }
-        catch (IOException error) when (IsDiskFull(error))
-        {
-            throw new UpscalingException(Trouble.DiskFull, archive, error);
         }
     }
 
@@ -194,16 +143,15 @@ public sealed class BuildStore(UpscalingPaths paths)
     /// <summary>Lists and hashes what was unpacked, and makes sure it is OptiScaler.</summary>
     private static List<BuildFile> TakeStock(string contents)
     {
+        // Reject file and directory reparse points (symlinks/junctions) before enumerating files.
+        if (Files.FindReparsePoint(contents) is { } link)
+            throw new UpscalingException(Trouble.BuildIncomplete, $"{link} is a link");
+
         var files = new List<BuildFile>();
 
         foreach (var file in Directory.EnumerateFiles(contents, "*", SearchOption.AllDirectories))
         {
             var info = new FileInfo(file);
-
-            // Reject links: one could point anywhere on the disk.
-            if (info.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                throw new UpscalingException(Trouble.BuildIncomplete, $"{info.Name} is a link");
-
             files.Add(new BuildFile(Path.GetRelativePath(contents, file), info.Length, Files.Hash(file)));
         }
 
@@ -221,11 +169,8 @@ public sealed class BuildStore(UpscalingPaths paths)
     /// Stops <paramref name="build"/> counting as downloaded, because a file in it has changed. Its folder stays
     /// until the next download replaces it.
     /// </summary>
-    public static void Distrust(StoredBuild build)
-    {
-        try { Files.Delete(Path.Combine(Path.GetDirectoryName(build.Folder)!, Record)); }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
-    }
+    public static void Distrust(StoredBuild build) =>
+        RemoteStore.Distrust(Path.GetDirectoryName(build.Folder)!, Record);
 
     /// <summary>
     /// Everything in Builds that is not the current build and that no game in <paramref name="inUse"/> was installed from:
@@ -250,7 +195,7 @@ public sealed class BuildStore(UpscalingPaths paths)
 
         foreach (var old in Old(inUse))
         {
-            if (Directory.Exists(old.Path)) Files.Discard(old.Path);
+            if (Directory.Exists(old.Path)) RemoteStore.DiscardFolder(old.Path, Record);
             else try { File.Delete(old.Path); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
 
             if (!Path.Exists(old.Path)) freed += old.Size;
@@ -275,13 +220,9 @@ public sealed class BuildStore(UpscalingPaths paths)
 
     private void ForgetOtherBuilds(string keep)
     {
-        foreach (var folder in Directory.GetDirectories(paths.Builds))
-            if (!folder.Equals(keep, StringComparison.OrdinalIgnoreCase)) Files.Discard(folder);
+        RemoteStore.ForgetOtherFolders(paths.Builds, keep, Record);
 
         foreach (var archive in Directory.GetFiles(paths.Builds, "*.7z"))
             try { File.Delete(archive); } catch (IOException) { }
     }
-
-    internal static bool IsDiskFull(IOException error) =>
-        (error.HResult & 0xFFFF) is 0x70 or 0x27;   // ERROR_DISK_FULL, ERROR_HANDLE_DISK_FULL
 }

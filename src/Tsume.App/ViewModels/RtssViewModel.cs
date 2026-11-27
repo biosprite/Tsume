@@ -48,7 +48,7 @@ public sealed class RtssViewModel : LayerViewModel
 
         _capSettle.Tick += (_, _) => { _capSettle.Stop(); ApplyFrameRateLimit(CustomCap); };
 
-        OpenDownloadPage = new Command(async () =>
+        OpenDownloadPage = new AsyncCommand(async () =>
         {
             // Started while the panel is still in front so Windows brings the browser forward over a game.
             if (RtssInstallation.OpenDownloadPage())
@@ -58,9 +58,9 @@ public sealed class RtssViewModel : LayerViewModel
             }
         });
 
-        InstallAutomatically = new Command(async () => await InstallAutomaticallyAsync());
-        Uninstall = new Command(async () => await UninstallAsync());
-        UpdateRtss = new Command(async () => await UpdateAsync());
+        InstallAutomatically = new AsyncCommand(InstallAutomaticallyAsync, allowReentrancy: true);
+        Uninstall = new AsyncCommand(UninstallAsync, allowReentrancy: true);
+        UpdateRtss = new AsyncCommand(UpdateAsync, allowReentrancy: true);
 
         Download = new RtssDownloadViewModel(
             opened: () =>
@@ -73,7 +73,7 @@ public sealed class RtssViewModel : LayerViewModel
             },
             closed: () => ConfirmingUninstall = false);
 
-        RunDownloadedInstaller = new Command(async () =>
+        RunDownloadedInstaller = new AsyncCommand(async () =>
         {
             // Two installers running at once fight over the same files.
             if (IsBusy || RtssWingetInstaller.IsSetupRunning())
@@ -86,7 +86,7 @@ public sealed class RtssViewModel : LayerViewModel
             await _dismiss();
             if (!await RtssInstallation.RunDownloadedInstallerAsync(package))
                 Status = Strings.RtssInstallerFailed;
-        });
+        }, allowReentrancy: true);
 
         CheckAgain = new Command(() =>
         {
@@ -117,11 +117,11 @@ public sealed class RtssViewModel : LayerViewModel
             }
         });
 
-        StartRtss = new Command(async () => await StartRtssAsync());
-        OpenRtssMenu = new Command(async () => await OpenRtssMenuAsync());
-        CloseRtss = new Command(async () => await CloseRtssAsync());
-        ToggleStartWithWindows = new Command(async () => await ToggleStartWithWindowsAsync());
-        ToggleSkipAntiCheat = new Command(async () => await ToggleSkipAntiCheatAsync());
+        StartRtss = new AsyncCommand(StartRtssAsync);
+        OpenRtssMenu = new AsyncCommand(OpenRtssMenuAsync);
+        CloseRtss = new AsyncCommand(CloseRtssAsync);
+        ToggleStartWithWindows = new AsyncCommand(ToggleStartWithWindowsAsync);
+        ToggleSkipAntiCheat = new AsyncCommand(ToggleSkipAntiCheatAsync);
 
         ToggleTouchDrag = new Command(() =>
         {
@@ -823,17 +823,24 @@ public sealed class RtssViewModel : LayerViewModel
 
     private async void ApplyFrameRateLimit(double fps)
     {
-        var target = (int)Math.Clamp(Math.Round(fps), 0, MaxCustomFps);
-        if (!IsRunning)
+        try
         {
-            Status = Strings.RtssNotRunningNote;
-            return;
-        }
+            var target = (int)Math.Clamp(Math.Round(fps), 0, MaxCustomFps);
+            if (!IsRunning)
+            {
+                Status = Strings.RtssNotRunningNote;
+                return;
+            }
 
-        if (await _service.SetFrameRateLimitAsync(target))
+            if (await _service.SetFrameRateLimitAsync(target))
+            {
+                ActiveFrameRateLimit = target;
+                Status = DefaultStatus();
+            }
+        }
+        catch (Exception error)
         {
-            ActiveFrameRateLimit = target;
-            Status = DefaultStatus();
+            AsyncCommand.LogError(error);
         }
     }
 

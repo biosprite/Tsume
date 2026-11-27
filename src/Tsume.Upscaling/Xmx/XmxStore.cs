@@ -162,11 +162,12 @@ public sealed class XmxStore(UpscalingPaths paths)
         Directory.CreateDirectory(folder);
         BuildStore.UnpackAsync(archive, folder, CancellationToken.None).GetAwaiter().GetResult();
 
+        // Reject file and directory reparse points (symlinks/junctions) before enumerating files.
+        if (Files.FindReparsePoint(folder) is { } link)
+            throw new UpscalingException(Trouble.NotXmx, $"{link} is a link");
+
         var found = Directory.EnumerateFiles(folder, XmxLayout.FileName, SearchOption.AllDirectories).FirstOrDefault()
             ?? throw new UpscalingException(Trouble.NotXmx, Path.GetFileName(archive));
-
-        // Reject links: one could point anywhere on the disk.
-        if (File.GetAttributes(found).HasFlag(FileAttributes.ReparsePoint)) throw new UpscalingException(Trouble.NotXmx, "a link");
 
         return found;
     }

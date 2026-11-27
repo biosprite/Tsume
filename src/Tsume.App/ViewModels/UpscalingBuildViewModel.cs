@@ -55,7 +55,7 @@ public sealed class UpscalingBuildViewModel : LayerViewModel
         AddXmx = new Command(() => _ = RunAsync(AddXmxAsync));
         RemoveOld = new Command(() => _ = RunAsync(RemoveOldAsync));
 
-        OpenExtras = new Command(async () =>
+        OpenExtras = new AsyncCommand(async () =>
         {
             Directory.CreateDirectory(_hub.Paths.Extras);
 

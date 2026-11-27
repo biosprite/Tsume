@@ -26,8 +26,8 @@
     tools\publish.ps1 -Certificate 0123456789ABCDEF0123456789ABCDEF01234567
 #>
 param(
-    [ValidateRange(0, 65534)]
-    [int] $Build = -1,
+    [ValidateScript({ $null -eq $_ -or ($_ -ge 0 -and $_ -le 65534) })]
+    [Nullable[int]] $Build = $null,
     [string] $Certificate,
     [string] $TimestampServer = 'http://timestamp.digicert.com'
 )
@@ -54,7 +54,7 @@ if ([int] $parts[0] -gt 255 -or [int] $parts[1] -gt 255 -or ($parts.Count -eq 3 
     throw "Version '$version' is out of range for Windows Installer (255.255.65535)."
 }
 
-if ($Build -ge 0) {
+if ($null -ne $Build) {
     # 1.0 -> 1.0.0.57: pad to three parts first, or the build number would land in the patch slot.
     while ($parts.Count -lt 3) { $parts += '0' }
     $version = ($parts + $Build) -join '.'
@@ -84,6 +84,7 @@ function Sign([string[]] $paths) {
 }
 
 if (Test-Path $files) { Remove-Item $files -Recurse -Force }
+if (Test-Path $installer) { Remove-Item (Join-Path $installer '*.msi') -Force }
 
 foreach ($project in 'Tsume.Helper', 'Tsume.App') {
     Invoke-Step "Publishing $project" {

@@ -16,18 +16,73 @@ internal static class Files
     }
 
     /// <summary>
-    /// Resolves <paramref name="relative"/> under <paramref name="root"/> and throws if it would land outside.
+    /// Resolves <paramref name="relative"/> strictly under <paramref name="root"/> and throws if it would land at or outside it.
     /// Every path read from a manifest or an archive must pass through here.
     /// </summary>
     public static string Inside(string root, string relative)
     {
-        var fence = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var path = Path.GetFullPath(Path.Combine(fence, relative));
-
-        if (!path.StartsWith(fence, StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(relative))
             throw new InvalidDataException($"'{relative}' leads outside '{root}'.");
 
+        var baseFull = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fence = baseFull + Path.DirectorySeparatorChar;
+        var path = Path.GetFullPath(Path.Combine(fence, relative));
+        var trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        if (!path.StartsWith(fence, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trimmed, baseFull, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException($"'{relative}' leads outside '{root}'.");
+        }
+
         return path;
+    }
+
+    /// <summary>
+    /// Validates <paramref name="name"/> as a single safe child folder name under <paramref name="root"/>
+    /// (rejecting empty/whitespace, ".", "..", path separators, invalid filename chars, or trailing dots)
+    /// and returns the resolved path verified with <see cref="Inside"/>.
+    /// </summary>
+    public static string SafeChildFolder(string root, string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)
+            || name is "." or ".."
+            || name.Contains(Path.DirectorySeparatorChar)
+            || name.Contains(Path.AltDirectorySeparatorChar)
+            || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+            || name.Trim() != name
+            || name.EndsWith('.'))
+        {
+            throw new InvalidDataException($"Invalid folder name '{name}'.");
+        }
+
+        return Inside(root, name);
+    }
+
+    /// <summary>
+    /// Walks <paramref name="root"/> without following directory links and returns the relative path of the first
+    /// file or directory that is a reparse point (symlink or junction), or null if none exist.
+    /// </summary>
+    public static string? FindReparsePoint(string root)
+    {
+        var pending = new Stack<string>();
+        pending.Push(root);
+
+        while (pending.Count > 0)
+        {
+            var dir = pending.Pop();
+            foreach (var entry in Directory.EnumerateFileSystemEntries(dir))
+            {
+                var attrs = File.GetAttributes(entry);
+                if (attrs.HasFlag(FileAttributes.ReparsePoint))
+                    return Path.GetRelativePath(root, entry);
+
+                if (attrs.HasFlag(FileAttributes.Directory))
+                    pending.Push(entry);
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

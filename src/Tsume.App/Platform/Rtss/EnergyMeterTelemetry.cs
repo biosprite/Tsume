@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Tsume.App.Platform.Interop;
 using Tsume.Upscaling;
 
 namespace Tsume.App.Platform.Rtss;
@@ -94,7 +95,7 @@ public sealed class EnergyMeterTelemetry : IDisposable
 
         if (_powerCounter == 0 && _cpuPerfCounter == 0 && _gpuDedicatedMemCounter == 0 && _gpuSharedMemCounter == 0)
         {
-            PdhCloseQuery(_query);
+            _ = PdhCloseQuery(_query);
             _query = 0;
         }
     }
@@ -105,7 +106,7 @@ public sealed class EnergyMeterTelemetry : IDisposable
 
         if (_query != 0)
         {
-            PdhCloseQuery(_query);
+            _ = PdhCloseQuery(_query);
             _query = 0;
         }
 
@@ -149,7 +150,7 @@ public sealed class EnergyMeterTelemetry : IDisposable
         var buffer = Marshal.AllocHGlobal(bytes);
         try
         {
-            if (CallNtPowerInformation(ProcessorInformationLevel, 0, 0, buffer, (uint)bytes) != 0)
+            if (PowrProf.CallNtPowerInformation(ProcessorInformationLevel, 0, 0, buffer, (uint)bytes) != 0)
                 return 0;
 
             var items = (ProcessorPowerInformation*)buffer;
@@ -317,10 +318,6 @@ public sealed class EnergyMeterTelemetry : IDisposable
         [FieldOffset(8)] public uint CStatus;
         [FieldOffset(16)] public double Value;
     }
-
-    [DllImport("powrprof.dll")]
-    private static extern int CallNtPowerInformation(
-        int informationLevel, nint inputBuffer, uint inputBufferLength, nint outputBuffer, uint outputBufferLength);
 
     [DllImport("pdh.dll", CharSet = CharSet.Unicode)]
     private static extern uint PdhOpenQueryW(string? dataSource, nuint userData, out nint query);

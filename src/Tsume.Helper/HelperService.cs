@@ -20,7 +20,10 @@ public sealed class HelperService : ServiceBase
     private const int BoardAttempts = 30;
     private static readonly TimeSpan BoardPause = TimeSpan.FromSeconds(2);
 
+    private readonly Lock _taskGate = new();
+    private readonly HashSet<Task> _backgroundTasks = [];
     private CancellationTokenSource? _stop;
+    private CancellationToken _stopToken = CancellationToken.None;
     private Task? _serving;
     private volatile ModeKeeper? _keeper;
     private volatile ChargeKeeper? _charge;
@@ -39,8 +42,14 @@ public sealed class HelperService : ServiceBase
 
     protected override void OnStart(string[] args)
     {
-        _stop = new CancellationTokenSource();
-        var stop = _stop.Token;
+        var cts = new CancellationTokenSource();
+        var stop = cts.Token;
+        lock (_taskGate)
+        {
+            _stop = cts;
+            _stopToken = stop;
+        }
+
         PanelStarter.SetServiceStop(stop);
         _serving = Task.Run(() => ServeAsync(stop));
 
@@ -50,13 +59,13 @@ public sealed class HelperService : ServiceBase
         _screenWatch = RegisterPowerSettingNotification(ServiceHandle, ref screenState, ToAService);
 
         // Someone may have signed in before the service was listening (a fast boot, or an update of Tsume).
-        Task.Run(() => PanelStarter.StartFor(PanelStarter.ScreenSession, "start-up", stop));
+        RunBackground(s => PanelStarter.StartFor(PanelStarter.ScreenSession, "start-up", s));
     }
 
     /// <summary>Starts the panel as someone signs in or unlocks, ahead of Windows' own start-up apps.</summary>
-    protected override void OnSessionChange(SessionChangeDescription change)
+    protected override void OnSessionChange(SessionChangeDescription changeDescription)
     {
-        var occasion = change.Reason switch
+        var occasion = changeDescription.Reason switch
         {
             SessionChangeReason.SessionLogon => "sign-in",
             SessionChangeReason.SessionUnlock => "unlock",
@@ -65,9 +74,8 @@ public sealed class HelperService : ServiceBase
         };
         if (occasion is null) return;
 
-        var session = change.SessionId;
-        var stop = _stop?.Token ?? CancellationToken.None;
-        Task.Run(() => PanelStarter.StartFor(session, occasion, stop));
+        var session = changeDescription.SessionId;
+        RunBackground(s => PanelStarter.StartFor(session, occasion, s));
     }
 
     protected override void OnStop() => StopServing();
@@ -79,15 +87,15 @@ public sealed class HelperService : ServiceBase
     /// what was chosen. On wake, also makes sure the panel is still running (handles wake without sign-in). On a
     /// board whose limits differ on battery, also on a switch between wall power and battery.
     /// </summary>
-    protected override bool OnPowerEvent(PowerBroadcastStatus status)
+    protected override bool OnPowerEvent(PowerBroadcastStatus powerStatus)
     {
-        var isWake = status is PowerBroadcastStatus.ResumeAutomatic
+        var isWake = powerStatus is PowerBroadcastStatus.ResumeAutomatic
             or PowerBroadcastStatus.ResumeSuspend
             or PowerBroadcastStatus.ResumeCritical;
 
         var occasion = isWake
             ? "wake"
-            : status == (PowerBroadcastStatus)PowerSettingChanged
+            : powerStatus == (PowerBroadcastStatus)PowerSettingChanged
                 ? "screen on or off"
                 : null;
 
@@ -102,16 +110,36 @@ public sealed class HelperService : ServiceBase
 
         // A switch between wall power and battery (Windows sends this for battery level changes too). Only boards
         // whose limits differ on battery act on it; on any other board nothing is done here.
-        if (status == PowerBroadcastStatus.PowerStatusChange && _keeper is { FollowsPowerSource: true } sourceKeeper)
+        if (powerStatus == PowerBroadcastStatus.PowerStatusChange && _keeper is { FollowsPowerSource: true } sourceKeeper)
             Task.Run(sourceKeeper.OnPowerStatusChange);
 
         if (isWake)
-        {
-            var stop = _stop?.Token ?? CancellationToken.None;
-            Task.Run(() => PanelStarter.EnsureRunningAfterWake(PanelStarter.ScreenSession, stop));
-        }
+            RunBackground(s => PanelStarter.EnsureRunningAfterWake(PanelStarter.ScreenSession, s));
 
         return true;
+    }
+
+    private void RunBackground(Action<CancellationToken> work)
+    {
+        lock (_taskGate)
+        {
+            if (_stop is null) return;
+
+            var stop = _stopToken;
+            Task? task = null;
+            task = Task.Run(() =>
+            {
+                try
+                {
+                    work(stop);
+                }
+                finally
+                {
+                    lock (_taskGate) _backgroundTasks.Remove(task!);
+                }
+            });
+            _backgroundTasks.Add(task);
+        }
     }
 
     /// <summary>Serves until stopped. A failure is logged and serving starts over, so the service is never running yet deaf.</summary>
@@ -219,13 +247,34 @@ public sealed class HelperService : ServiceBase
         if (_screenWatch != 0) UnregisterPowerSettingNotification(_screenWatch);
         _screenWatch = 0;
 
-        _stop?.Cancel();
+        CancellationTokenSource? cts;
+        List<Task> tasks;
+        lock (_taskGate)
+        {
+            cts = _stop;
+            _stop = null;
+            tasks = [.. _backgroundTasks];
+        }
 
-        try { _serving?.Wait(StopPatience); }
-        catch (AggregateException) { /* already logged where it happened */ }
+        cts?.Cancel();
 
-        _stop?.Dispose();
-        _stop = null;
+        if (_serving is { } serving) tasks.Add(serving);
+
+        var allFinished = true;
+        if (tasks.Count > 0)
+        {
+            try
+            {
+                allFinished = Task.WhenAll(tasks).Wait(StopPatience);
+            }
+            catch (AggregateException)
+            {
+                // Already logged where it happened.
+            }
+        }
+
+        // Only dispose the CancellationTokenSource once every task that could wait on its WaitHandle has exited.
+        if (allFinished) cts?.Dispose();
     }
 
     /// <summary>GUID_CONSOLE_DISPLAY_STATE: the screen turned on, off, or dimmed.</summary>

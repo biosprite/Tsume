@@ -120,20 +120,19 @@ public sealed class RtssOverlayDragController : IDisposable
 
             if (_window is { IsActivelyPositioning: true }) return;
 
-            // The overlay is placed in the focused game's frame, which need not be the size of the screen.
-            _service.SyncFrameSize();
-
             var featureEnabled = _service.Settings.TouchDragEnabled && _service.IsTsumeOverlayActive;
+            var checkStandby = featureEnabled && !_panelOpen;
 
-            // Check RTSS shared memory directly (hooked foreground 3D app + active OverlayEditor OSD slot)
-            // instead of taking an OS process snapshot via Process.GetProcessesByName on the UI thread.
-            var wantStandby = featureEnabled
-                && !_panelOpen
-                && IsForegroundWindowHookedByRtss()
-                && RtssSharedMemory.HasOverlayEditorSlot()
+            // Single RTSSSharedMemoryV2 open per tick: syncs the game's frame size and checks both
+            // foreground hooking (including UWP ApplicationFrameHost child windows) and OverlayEditor's OSD slot.
+            var (foregroundHooked, hasOverlayEditorSlot) = _service.SyncFrameState(checkOverlayEditorSlot: checkStandby);
+
+            var wantStandby = checkStandby
+                && foregroundHooked
+                && hasOverlayEditorSlot
                 && _service.IsOsdVisible() != false;
 
-            if (!wantStandby || _service.GetActiveOverlayRect() is not { } rect)
+            if (!wantStandby || _service.GetActiveOverlayRect(refreshFrame: false) is not { } rect)
             {
                 _window?.HideQuietly();
                 return;
@@ -149,45 +148,6 @@ public sealed class RtssOverlayDragController : IDisposable
         {
             _refreshing = false;
         }
-    }
-
-    private static bool IsForegroundWindowHookedByRtss()
-    {
-        var fg = User32.GetForegroundWindow();
-        if (fg == 0 || User32.IsIconic(fg) || !User32.IsWindowVisible(fg))
-            return false;
-
-        User32.GetWindowThreadProcessId(fg, out var fgPid);
-        if (fgPid == 0 || fgPid == (uint)Environment.ProcessId)
-            return false;
-
-        if (RtssSharedMemory.IsProcessHooked(fgPid))
-            return true;
-
-        // UWP games run inside ApplicationFrameHost; check child CoreWindow processes.
-        var className = new char[64];
-        var len = User32.GetClassName(fg, className, className.Length);
-        if (len > 0 && new ReadOnlySpan<char>(className, 0, len).SequenceEqual("ApplicationFrameWindow"))
-        {
-            var hookedPids = RtssSharedMemory.GetHookedProcessIds();
-            if (hookedPids is null || hookedPids.Count == 0)
-                return false;
-
-            var matched = false;
-            User32.EnumChildWindows(fg, (child, _) =>
-            {
-                User32.GetWindowThreadProcessId(child, out var childPid);
-                if (childPid != 0 && childPid != fgPid && hookedPids.Contains(childPid))
-                {
-                    matched = true;
-                    return false;
-                }
-                return true;
-            }, 0);
-            return matched;
-        }
-
-        return false;
     }
 
     private RtssOverlayDragWindow EnsureWindow()

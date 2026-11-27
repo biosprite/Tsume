@@ -22,10 +22,7 @@ public partial class MainTilesScreen
     public MainTilesScreen()
     {
         InitializeComponent();
-
-        List.ManipulationBoundaryFeedback += (_, e) => e.Handled = true;
-        StepOut.LetFocusLeave((UIElement)List.Content);
-        SmoothScroll.Follow(List);
+        ScreenList.Configure(List);
 
         Loaded += (_, _) => HookViewModel();
         Unloaded += (_, _) =>

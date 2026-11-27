@@ -1,5 +1,6 @@
 using System.IO.Pipes;
 using System.Text;
+using System.Text.Json;
 
 namespace Tsume.Core.Ipc;
 
@@ -65,6 +66,10 @@ public sealed class HelperClient
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             return new HelperReply { Ok = false, Unreachable = !connected || error is IOException, Error = error.Message };
+        }
+        catch (Exception error) when (error is JsonException or NotSupportedException)
+        {
+            return HelperReply.Failure($"The helper sent an invalid reply: {error.Message}");
         }
     }
 }

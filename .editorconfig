@@ -38,3 +38,21 @@ dotnet_naming_style.underscore_camel.required_prefix = _
 [**/Interop/**.cs]
 dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.IDE1006.severity = none
+
+# Code-analysis rules that conflict with WPF XAML bindings, UI localization, or C#-only domain naming.
+# Safety, disposal, cancellation, and P/Invoke marshaling rules (CA1001, CA2000, CA2016, CA2101, CA2213, etc.) remain enforced.
+[*.cs]
+# UI display strings and diagnostic reports intentionally use default/current culture formatting.
+dotnet_diagnostic.CA1305.severity = none
+# User-facing game list sorting and localized label comparisons intentionally use CurrentCultureIgnoreCase.
+dotnet_diagnostic.CA1309.severity = none
+# C#-only codebase; VB.NET reserved keyword collision checks (e.g. IMsiFirmware.Get/Set) are not applicable.
+dotnet_diagnostic.CA1716.severity = none
+# Hardware/upscaler domain identifiers (e.g. FSR4 Int8) intentionally mirror technical terminology.
+dotnet_diagnostic.CA1720.severity = none
+# WPF XAML bindings and injected service/ViewModel facades require instance members.
+dotnet_diagnostic.CA1822.severity = none
+
+# xUnit test method names follow the Method_Scenario underscore convention.
+[tests/**/*.cs]
+dotnet_diagnostic.CA1707.severity = none

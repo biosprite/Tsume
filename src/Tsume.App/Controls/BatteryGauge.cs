@@ -21,21 +21,21 @@ public sealed class BatteryGauge : FrameworkElement
     public bool IsCharging { get => (bool)GetValue(IsChargingProperty); set => SetValue(IsChargingProperty, value); }
     public bool IsLow { get => (bool)GetValue(IsLowProperty); set => SetValue(IsLowProperty, value); }
 
-    protected override Size MeasureOverride(Size available) => new(31, 15);
+    protected override Size MeasureOverride(Size availableSize) => new(31, 15);
 
-    protected override void OnRender(DrawingContext canvas)
+    protected override void OnRender(DrawingContext drawingContext)
     {
         const double bodyWidth = 27, height = 15, inset = 2.5;
 
         // Body, then the little terminal nub on the right.
-        canvas.DrawRoundedRectangle(null, new Pen(Outline, 1.5), new Rect(0.75, 0.75, bodyWidth - 1.5, height - 1.5), 4, 4);
-        canvas.DrawRoundedRectangle(Outline, null, new Rect(bodyWidth + 1, 4.5, 2.5, 6), 1.2, 1.2);
+        drawingContext.DrawRoundedRectangle(null, new Pen(Outline, 1.5), new Rect(0.75, 0.75, bodyWidth - 1.5, height - 1.5), 4, 4);
+        drawingContext.DrawRoundedRectangle(Outline, null, new Rect(bodyWidth + 1, 4.5, 2.5, 6), 1.2, 1.2);
 
         var level = Math.Clamp(Percent, 0, 100) / 100.0;
         var fill = IsCharging ? Charging : IsLow ? Low : Normal;
         var width = Math.Max(2, (bodyWidth - inset * 2) * level);
 
-        canvas.DrawRoundedRectangle(fill, null, new Rect(inset, inset, width, height - inset * 2), 2, 2);
+        drawingContext.DrawRoundedRectangle(fill, null, new Rect(inset, inset, width, height - inset * 2), 2, 2);
     }
 
     private static DependencyProperty Register<T>(string name) => DependencyProperty.Register(

@@ -107,7 +107,8 @@ public static class DeviceSupportExporter
                 return inv;
         }
 
-        if (allowUacFallback && TryRunHelperCli(includeTimedLoad ? "--hardware-inventory" : "--hardware-inventory-fast") is { } cliJson)
+        if (allowUacFallback
+            && await Task.Run(() => TryRunHelperCli(includeTimedLoad ? "--hardware-inventory" : "--hardware-inventory-fast"), cancel) is { } cliJson)
         {
             if (JsonSerializer.Deserialize<ElevatedInventory>(cliJson, DiscoveryJson.Compact) is { } cliInv)
                 return cliInv;

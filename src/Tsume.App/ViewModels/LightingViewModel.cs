@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows.Input;
 using System.Windows.Media;
 using Tsume.App.Language;
@@ -12,17 +13,21 @@ namespace Tsume.App.ViewModels;
 /// The lighting screen for the stick rings and face buttons. Changes are written live to the controller's RAM
 /// and saved to its flash once, on leaving the screen. Runs on the UI thread; controller I/O is overlapped.
 /// </summary>
-public sealed class LightingViewModel : LayerViewModel
+public sealed class LightingViewModel : LayerViewModel, IDisposable
 {
     private static readonly LightingEffect[] EffectOrder =
         [LightingEffect.Off, LightingEffect.Steady, LightingEffect.Breathe, LightingEffect.Rainbow, LightingEffect.Spin];
 
+    private readonly PerformanceViewModel _performance;
     private ClawController? _controller;
     private ushort? _minFirmwareVersion;
     private bool _boardKnown;
+    private bool _disposed;
 
     public LightingViewModel(PerformanceViewModel performance)
     {
+        _performance = performance;
+
         ToggleSameOnBoth = new Command(() => SameOnBoth = !SameOnBoth);
         ToggleSticksLit = new Command(() => SticksLit = !SticksLit);
         ToggleButtonsLit = new Command(() => ButtonsLit = !ButtonsLit);
@@ -33,11 +38,13 @@ public sealed class LightingViewModel : LayerViewModel
         Show(current);
         _absorbing = false;
 
-        performance.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(PerformanceViewModel.Device)) AdoptDevice(performance.Device);
-        };
-        AdoptDevice(performance.Device);
+        _performance.PropertyChanged += OnPerformancePropertyChanged;
+        AdoptDevice(_performance.Device);
+    }
+
+    private void OnPerformancePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PerformanceViewModel.Device)) AdoptDevice(_performance.Device);
     }
 
     public IReadOnlyList<string> Effects { get; } =
@@ -364,13 +371,29 @@ public sealed class LightingViewModel : LayerViewModel
     /// <summary>After the last write lands, saves the lighting to the controller's flash so it survives a restart.</summary>
     protected override async void OnClosed()
     {
-        while (_writing) await _writer;
+        try
+        {
+            while (_writing) await _writer;
 
-        if (!_unsaved || _controller is null) return;
+            if (_disposed || !_unsaved || _controller is null) return;
 
-        if (await _controller.SaveAsync()) _unsaved = false;
-        else Lost();
+            if (await _controller.SaveAsync()) _unsaved = false;
+            else Lost();
+        }
+        catch (Exception error)
+        {
+            AsyncCommand.LogError(error);
+        }
     }
 
     public override void FlushPending() => OnClosed();
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _performance.PropertyChanged -= OnPerformancePropertyChanged;
+        _controller?.Dispose();
+        _controller = null;
+    }
 }

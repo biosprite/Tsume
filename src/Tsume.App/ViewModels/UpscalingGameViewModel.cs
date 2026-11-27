@@ -73,7 +73,7 @@ public sealed class UpscalingGameViewModel : LayerViewModel
             IsOpen = false;
         });
 
-        OpenFolder = new Command(async () =>
+        OpenFolder = new AsyncCommand(async () =>
         {
             if (ExistingFolder() is not { } folder)
             {
@@ -128,6 +128,11 @@ public sealed class UpscalingGameViewModel : LayerViewModel
         catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException)
         {
             return;   // what was last known stays on the page
+        }
+        catch (Exception error)
+        {
+            AsyncCommand.LogError(error);
+            return;
         }
 
         if (_listed != listed || _hub.IsBusy) return;

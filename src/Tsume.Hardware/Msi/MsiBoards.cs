@@ -144,16 +144,7 @@ public static class MsiBoards
         // Battery scenario, whose shift code is 0x02 / 0xC2.
         SustainedShift = new(SustainedWatts: 8, PerformanceMode.Endurance),
 
-        Registers = new()
-        {
-            PowerLimitSustained = 0x50,
-            PowerLimitBoost = 0x51,
-            CpuTemperature = 0x68,
-            CoolerBoost = 0x98,
-            ShiftMode = 0xD2,
-            FanControl = 0xD4,
-            ChargeLimit = 0xD7,
-        },
+        Registers = Claw8.Registers,
 
         Shift = new()
         {
@@ -230,90 +221,12 @@ public static class MsiBoards
     /// uses the same PL1/PL2 limits (8–30 W / 8–37 W, PL2 &gt;= PL1 + 1) and 2.xx controller firmware.
     /// Its BIOS (E1T42IMS.114) describes the same firmware interface as MS-1T52's; not tested on a real unit.
     /// </summary>
-    public static readonly MsiBoard Claw7AiPlus = new()
+    public static readonly MsiBoard Claw7AiPlus = Claw8AiPlus with
     {
         Model = "MS-1T42",
-
-        // As on MS-1T52: MSI Center M uses its Super Battery shift code 0x02 / 0xC2 whenever PL1 == 8.
-        SustainedShift = new(SustainedWatts: 8, PerformanceMode.Endurance),
-
-        Registers = new()
-        {
-            PowerLimitSustained = 0x50,
-            PowerLimitBoost = 0x51,
-            CpuTemperature = 0x68,
-            CoolerBoost = 0x98,
-            ShiftMode = 0xD2,
-            FanControl = 0xD4,
-            ChargeLimit = 0xD7,
-        },
-
-        Shift = new()
-        {
-            Codes = new Dictionary<PerformanceMode, byte>
-            {
-                [PerformanceMode.Endurance] = 0x02,
-                [PerformanceMode.Balanced] = 0x01,
-                [PerformanceMode.Performance] = 0x04,
-                [PerformanceMode.Manual] = 0x04,
-            },
-            Otherwise = PerformanceMode.Balanced,   // including MSI's "Comfort", 0x00
-        },
-
-        PowerFloor = 8,
-
-        Profile = new()
+        Profile = Claw8AiPlus.Profile with
         {
             Name = "MSI Claw 7 AI+ (MS-1T42)",
-            Modes =
-            [
-                new(PerformanceMode.Endurance,   new PowerLimits(Sustained: 8,  Boost: 12)),
-                new(PerformanceMode.Balanced,    new PowerLimits(Sustained: 17, Boost: 20)),
-                new(PerformanceMode.Performance, new PowerLimits(Sustained: 30, Boost: 37)),
-                new(PerformanceMode.Manual),
-            ],
-            ManualRange = new PowerRange(Min: 8, MaxSustained: 30, MaxBoost: 37, MinBoostHeadroom: 1),
-            ManualDefault = new PowerLimits(Sustained: 17, Boost: 20),
-            FanModes = [FanMode.Auto, FanMode.Custom, FanMode.Max],
-            FanCurve = FanCurveFor(
-                maxSpeed: 150,
-                customTemperatures: [45, 55, 65, 75, 85, 95],
-                floors: [(75, 20), (85, 35), (95, 50)]),
-            ChargeLimits = [80, 90, 100],
-            ChargeResumeGap = 10,
-            TempWarnC = 85,
-            TempHotC = 95,
-            Controls = new()
-            {
-                HasGameBarButton = true,
-                GameBarNativeWinG = true,
-                GameBarTriggers =
-                [
-                    new KeyTrigger(VirtualKey: 0x47, Win: true),   // Win+G (BIOS 10F+)
-                    new KeyTrigger(VirtualKey: 0x7F),              // F16 (older A2VM BIOSes)
-                ],
-                HasOemButton = true,
-                HasMsiCenterConflict = true,
-                OemButtonWmiCode = 0x29,
-                GameBarWmiCode = 0x58,
-                BackButtons = new()
-                {
-                    Protocol = BackButtonsProfile.MsiHidV1,
-                    VendorId = 0x0DB0,
-                    ProductIds = [0x1901, 0x1902],
-                    ProfileLength = 1478,
-                    BlockLength = 8,
-                    MaxSimultaneousKeys = 3,
-                    // 2.xx branch. The legacy layout is not in MSI Center M (it has one layout); it exists per
-                    // the Linux kernel hid-msi driver. This cutoff is unconfirmed.
-                    MinFirmwareVersion = 0x0217,
-                    Buttons =
-                    [
-                        new("M1", "M1", "Left back button", Offset: 186),
-                        new("M2", "M2", "Right back button", Offset: 355),
-                    ],
-                },
-            },
         },
     };
 
@@ -332,28 +245,9 @@ public static class MsiBoards
     {
         Model = "MS-1T41",
 
-        Registers = new()
-        {
-            PowerLimitSustained = 0x50,
-            PowerLimitBoost = 0x51,
-            CpuTemperature = 0x68,
-            CoolerBoost = 0x98,
-            ShiftMode = 0xD2,
-            FanControl = 0xD4,
-            ChargeLimit = 0xD7,
-        },
+        Registers = Claw8.Registers,
 
-        Shift = new()
-        {
-            Codes = new Dictionary<PerformanceMode, byte>
-            {
-                [PerformanceMode.Endurance] = 0x02,
-                [PerformanceMode.Balanced] = 0x01,
-                [PerformanceMode.Performance] = 0x04,
-                [PerformanceMode.Manual] = 0x04,
-            },
-            Otherwise = PerformanceMode.Balanced,   // including MSI's "Comfort", 0x00
-        },
+        Shift = Claw8AiPlus.Shift,
 
         PowerFloor = 15,
 
@@ -428,30 +322,13 @@ public static class MsiBoards
     {
         Model = "MS-1T8K",
 
-        Registers = new()
+        Registers = Claw8.Registers with
         {
-            PowerLimitSustained = 0x50,
-            PowerLimitBoost = 0x51,
             PowerLimitFastBoost = 0x52,
-            CpuTemperature = 0x68,
-            CoolerBoost = 0x98,
             AmdStamp = 0xC5,
-            ShiftMode = 0xD2,
-            FanControl = 0xD4,
-            ChargeLimit = 0xD7,
         },
 
-        Shift = new()
-        {
-            Codes = new Dictionary<PerformanceMode, byte>
-            {
-                [PerformanceMode.Endurance] = 0x02,
-                [PerformanceMode.Balanced] = 0x01,
-                [PerformanceMode.Performance] = 0x04,
-                [PerformanceMode.Manual] = 0x04,
-            },
-            Otherwise = PerformanceMode.Balanced,   // including MSI's "Comfort", 0x00
-        },
+        Shift = Claw8AiPlus.Shift,
 
         PowerFloor = 7,
         BoostFloor = 9,
@@ -482,30 +359,7 @@ public static class MsiBoards
             ChargeResumeGap = 10,
             TempWarnC = 75,
             TempHotC = 85,
-            Controls = new()
-            {
-                HasGameBarButton = true,
-                GameBarNativeWinG = true,
-                GameBarTriggers = [new KeyTrigger(VirtualKey: 0x47, Win: true)],   // Win+G
-                HasOemButton = true,
-                HasMsiCenterConflict = true,
-                OemButtonWmiCode = 0x29,
-                GameBarWmiCode = 0x58,
-                BackButtons = new()
-                {
-                    Protocol = BackButtonsProfile.MsiHidV1,
-                    VendorId = 0x0DB0,
-                    ProductIds = [0x1901, 0x1902],
-                    ProfileLength = 1478,
-                    BlockLength = 8,
-                    MaxSimultaneousKeys = 3,
-                    Buttons =
-                    [
-                        new("M1", "M1", "Left back button", Offset: 186),
-                        new("M2", "M2", "Right back button", Offset: 355),
-                    ],
-                },
-            },
+            Controls = Claw8.Profile.Controls,
         },
     };
 

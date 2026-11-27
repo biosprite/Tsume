@@ -13,8 +13,9 @@ public static class DisplayBrightness
         try
         {
             using var search = new ManagementObjectSearcher(Scope, "SELECT CurrentBrightness FROM WmiMonitorBrightness");
+            using var monitors = search.Get();
 
-            foreach (var monitor in search.Get())
+            foreach (var monitor in monitors)
                 using (monitor)
                     return (byte)monitor["CurrentBrightness"];
         }
@@ -28,8 +29,9 @@ public static class DisplayBrightness
         try
         {
             using var methods = new ManagementClass(Scope, "WmiMonitorBrightnessMethods", null);
+            using var monitors = methods.GetInstances();
 
-            foreach (ManagementObject monitor in methods.GetInstances())
+            foreach (ManagementObject monitor in monitors)
                 using (monitor)
                     monitor.InvokeMethod("WmiSetBrightness", [/* timeout, seconds */ 1u, (byte)Math.Clamp(percent, 0, 100)]);
         }

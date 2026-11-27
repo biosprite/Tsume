@@ -67,13 +67,27 @@ internal static class MsiCenterControl
 
     private static void Schtasks(string arguments)
     {
-        using var schtasks = Process.Start(new ProcessStartInfo("schtasks.exe", arguments)
+        var exe = Path.Combine(Environment.SystemDirectory, "schtasks.exe");
+        using var schtasks = Process.Start(new ProcessStartInfo(exe, arguments)
         {
             CreateNoWindow = true,
             UseShellExecute = false,
-        })!;
+        });
 
-        schtasks.WaitForExit(10_000);
+        if (schtasks is null)
+        {
+            Log.Write($"Could not start schtasks {arguments}.");
+            return;
+        }
+
+        if (!schtasks.WaitForExit(10_000))
+        {
+            Log.Write($"schtasks {arguments} timed out.");
+            try { schtasks.Kill(entireProcessTree: true); }
+            catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+            return;
+        }
+
         if (schtasks.ExitCode != 0) Log.Write($"schtasks {arguments} exited with {schtasks.ExitCode}.");
     }
 }

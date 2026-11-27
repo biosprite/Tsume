@@ -1,7 +1,4 @@
-using System.Net.Http;
-using System.Security.Cryptography;
 using System.Text.Json;
-using Tsume.Upscaling.Nightly;
 
 namespace Tsume.Upscaling.OptiPatcher;
 
@@ -64,8 +61,7 @@ public sealed class OptiPatcherStore(UpscalingPaths paths)
             return here;
         }
 
-        var tag = Path.GetFileName(release.Tag);   // strips any path from the tag: it is used as a folder name
-        var home = Path.Combine(paths.OptiPatcher, tag);
+        var home = Files.SafeChildFolder(paths.OptiPatcher, release.Tag);
         var making = home + ".new";
 
         Directory.CreateDirectory(paths.OptiPatcher);
@@ -76,7 +72,8 @@ public sealed class OptiPatcherStore(UpscalingPaths paths)
             Directory.CreateDirectory(making);
             var staged = Path.Combine(making, OptiPatcherLayout.FileName);
 
-            await DownloadAsync(release, staged, progress, cancel).ConfigureAwait(false);
+            await RemoteStore.DownloadFileAsync(release.Url, staged, release.Size, release.Sha256, progress, cancel)
+                .ConfigureAwait(false);
             CheckBinary(staged);
 
             var stored = new StoredOptiPatcher(release, staged, DateTimeOffset.Now);
@@ -85,20 +82,9 @@ public sealed class OptiPatcherStore(UpscalingPaths paths)
 
             // If a running game holds the previous same-tag folder open via a hard link,
             // retire its record first and fall back to a hash-qualified folder so the download still succeeds.
-            DiscardFolder(home);
-            var finalHome = home;
-            if (Directory.Exists(finalHome))
-            {
-                var suffix = release.Sha256.Length >= 8 ? release.Sha256[..8] : Guid.NewGuid().ToString("N")[..8];
-                finalHome = $"{home}-{suffix}";
-                DiscardFolder(finalHome);
-                if (Directory.Exists(finalHome))
-                    throw new UpscalingException(Trouble.FileInUse, finalHome);
-            }
+            var finalHome = RemoteStore.PromoteFolder(making, home, Record, release.Sha256);
 
-            Directory.Move(making, finalHome);
-
-            ForgetOthers(finalHome);
+            RemoteStore.ForgetOtherFolders(paths.OptiPatcher, finalHome, Record);
             return stored with { File = Path.Combine(finalHome, OptiPatcherLayout.FileName) };
         }
         finally
@@ -125,62 +111,8 @@ public sealed class OptiPatcherStore(UpscalingPaths paths)
     /// <summary>
     /// Stops <paramref name="stored"/> counting as downloaded, because the file on disk has changed.
     /// </summary>
-    public static void Distrust(StoredOptiPatcher stored)
-    {
-        try { Files.Delete(Path.Combine(Path.GetDirectoryName(stored.File)!, Record)); }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
-    }
-
-    private static async Task DownloadAsync(OptiPatcherRelease release, string target, IProgress<double>? progress,
-        CancellationToken cancel)
-    {
-        try
-        {
-            using var headersLimit = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-            headersLimit.CancelAfter(TimeSpan.FromSeconds(20));
-
-            using var response = await NightlyFeed.Web
-                .GetAsync(release.Url, HttpCompletionOption.ResponseHeadersRead, headersLimit.Token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-
-            var total = response.Content.Headers.ContentLength ?? release.Size;
-            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-
-            await using (var from = await response.Content.ReadAsStreamAsync(cancel).ConfigureAwait(false))
-            await using (var to = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16))
-            {
-                var buffer = new byte[1 << 16];
-                long done = 0;
-
-                while (true)
-                {
-                    using var stall = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-                    stall.CancelAfter(TimeSpan.FromSeconds(30));
-
-                    var read = await from.ReadAsync(buffer, stall.Token).ConfigureAwait(false);
-                    if (read == 0) break;
-
-                    hash.AppendData(buffer, 0, read);
-                    await to.WriteAsync(buffer.AsMemory(0, read), cancel).ConfigureAwait(false);
-
-                    done += read;
-                    if (total > 0) progress?.Report(Math.Min(1, done / (double)total));
-                }
-            }
-
-            var actual = Convert.ToHexStringLower(hash.GetHashAndReset());
-            if (actual != release.Sha256)
-                throw new UpscalingException(Trouble.DownloadDamaged, $"expected {release.Sha256}, got {actual}");
-        }
-        catch (Exception error) when (error is HttpRequestException or OperationCanceledException && !cancel.IsCancellationRequested)
-        {
-            throw new UpscalingException(Trouble.Offline, error.Message, error);
-        }
-        catch (IOException error) when (BuildStore.IsDiskFull(error))
-        {
-            throw new UpscalingException(Trouble.DiskFull, target, error);
-        }
-    }
+    public static void Distrust(StoredOptiPatcher stored) =>
+        RemoteStore.Distrust(Path.GetDirectoryName(stored.File)!, Record);
 
     private static void CheckBinary(string path)
     {
@@ -192,23 +124,5 @@ public sealed class OptiPatcherStore(UpscalingPaths paths)
         using var stream = File.OpenRead(path);
         if (stream.Read(header) != 2 || header[0] != (byte)'M' || header[1] != (byte)'Z')
             throw new UpscalingException(Trouble.OptiPatcherInvalid, info.Name);
-    }
-
-    private void ForgetOthers(string keep)
-    {
-        foreach (var folder in Directory.GetDirectories(paths.OptiPatcher))
-            if (!folder.Equals(keep, StringComparison.OrdinalIgnoreCase)) DiscardFolder(folder);
-    }
-
-    /// <summary>
-    /// Removes <c>patcher.json</c> before discarding the folder so an old release whose <c>.asi</c> is locked by a
-    /// running game can never be picked up again by <see cref="Current"/>.
-    /// </summary>
-    private static void DiscardFolder(string folder)
-    {
-        try { Files.Delete(Path.Combine(folder, Record)); }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
-
-        Files.Discard(folder);
     }
 }

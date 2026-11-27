@@ -192,7 +192,7 @@ public sealed record RtssSettings
     /// Opt-in: true to create RTSS <c>EnableHooking=0</c> exclusion profiles for detected anti-cheat games.
     /// Defaults to false because RTSS is signed and whitelisted by most anti-cheats (e.g. Easy Anti-Cheat).
     /// </summary>
-    public bool SkipAntiCheatGames { get; init; } = false;
+    public bool SkipAntiCheatGames { get; init; }
 
     /// <summary>Backed-up RTSS Global appearance from before Tsume modified it; null when unmodified.</summary>
     public RtssAppearanceBackup? SavedAppearance { get; init; }

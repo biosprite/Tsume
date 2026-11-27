@@ -44,6 +44,8 @@ public sealed class MarqueeText : System.Windows.Controls.Panel
     private double _runningOverflow;
     private string _runningText = "";
     private int _generation;
+    private GradientStop? _leftStop;
+    private GradientStop? _rightStop;
 
     // Set once the passes have played out (or another instance took over);
     // cleared when the control is re-activated or its text changes.
@@ -190,8 +192,11 @@ public sealed class MarqueeText : System.Windows.Controls.Panel
         var rightEdge = Alphas((true, TimeSpan.Zero), (true, t1), (false, t1 + Fade), (false, t2 - Fade), (true, t2),
                                (true, t3), (false, t3 + Fade), (false, t4), (true, t5));
 
-        var leftStop = new GradientStop(Opaque, 0);
-        var rightStop = new GradientStop(Opaque, 1);
+        _leftStop?.BeginAnimation(GradientStop.ColorProperty, null);
+        _rightStop?.BeginAnimation(GradientStop.ColorProperty, null);
+
+        var leftStop = _leftStop = new GradientStop(Opaque, 0);
+        var rightStop = _rightStop = new GradientStop(Opaque, 1);
         var fade = Math.Min(0.25, EdgeFadeWidth / ActualWidth);
         OpacityMask = new LinearGradientBrush(
             new GradientStopCollection { leftStop, new(Opaque, fade), new(Opaque, 1 - fade), rightStop },
@@ -226,6 +231,10 @@ public sealed class MarqueeText : System.Windows.Controls.Panel
         _offset.X = 0;
         _staticText.BeginAnimation(OpacityProperty, null);
         _scrollText.BeginAnimation(OpacityProperty, null);
+        _leftStop?.BeginAnimation(GradientStop.ColorProperty, null);
+        _rightStop?.BeginAnimation(GradientStop.ColorProperty, null);
+        _leftStop = null;
+        _rightStop = null;
         OpacityMask = null;
         _scrollText.Visibility = Visibility.Hidden;
     }

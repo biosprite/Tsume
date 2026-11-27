@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using Tsume.App.Input;
 using Tsume.App.Language;
+using Tsume.App.Mvvm;
 using Tsume.App.Platform;
 using Tsume.Core.Controller;
 using Tsume.Core.Devices;
@@ -513,12 +514,19 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
     {
         Controls.KeyDropdown.CloseIfOpen();
 
-        while (_writing) await _writer;
+        try
+        {
+            while (_writing) await _writer;
 
-        if (!_unsaved || _controller is null) return;
+            if (_disposed || !_unsaved || _controller is null) return;
 
-        if (await _controller.SaveAsync()) _unsaved = false;
-        else Lost();
+            if (await _controller.SaveAsync()) _unsaved = false;
+            else Lost();
+        }
+        catch (Exception error)
+        {
+            AsyncCommand.LogError(error);
+        }
     }
 
     public override void FlushPending() => OnClosed();

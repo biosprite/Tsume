@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Tsume.App.Platform.Interop;
 
 namespace Tsume.App.Platform;
 
@@ -13,7 +14,7 @@ internal static class UiAccess
 
     private static bool Read()
     {
-        if (!OpenProcessToken(GetCurrentProcess(), TokenQuery, out var token)) return false;
+        if (!OpenProcessToken(Kernel32.GetCurrentProcess(), TokenQuery, out var token)) return false;
 
         try
         {
@@ -21,18 +22,12 @@ internal static class UiAccess
         }
         finally
         {
-            CloseHandle(token);
+            Kernel32.CloseHandle(token);
         }
     }
 
     private const int TokenUIAccess = 26;        // TOKEN_INFORMATION_CLASS.TokenUIAccess
     private const uint TokenQuery = 0x0008;
-
-    [DllImport("kernel32.dll")]
-    private static extern nint GetCurrentProcess();
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool CloseHandle(nint handle);
 
     [DllImport("advapi32.dll", SetLastError = true)]
     private static extern bool OpenProcessToken(nint process, uint access, out nint token);

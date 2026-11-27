@@ -307,14 +307,38 @@ public static class DedicatedActionKeys
 
     internal static bool TryGetGamepad(byte code, out GamepadInput input) => GamepadMap.TryGetValue(code, out input);
 
-    internal static bool TryResolveCodeFromVk(uint vk, bool isExtended, out byte code, out KeySpec spec)
+    private static readonly Dictionary<(uint Vk, bool IsExtended), (byte Code, KeySpec Spec)> ReverseKeyboardMap = BuildReverseKeyboardMap();
+
+    private static Dictionary<(uint Vk, bool IsExtended), (byte Code, KeySpec Spec)> BuildReverseKeyboardMap()
     {
+        var map = new Dictionary<(uint Vk, bool IsExtended), (byte Code, KeySpec Spec)>(KeyboardMap.Count * 2);
         foreach (var (k, s) in KeyboardMap)
         {
-            if (s.Vk != vk && s.AltVk != vk) continue;
-            if (s.Extended is { } ext && ext != isExtended) continue;
-            code = k;
-            spec = s;
+            if (s.Extended is { } ext)
+            {
+                map.TryAdd((s.Vk, ext), (k, s));
+                if (s.AltVk is { } alt) map.TryAdd((alt, ext), (k, s));
+            }
+            else
+            {
+                map.TryAdd((s.Vk, false), (k, s));
+                map.TryAdd((s.Vk, true), (k, s));
+                if (s.AltVk is { } alt)
+                {
+                    map.TryAdd((alt, false), (k, s));
+                    map.TryAdd((alt, true), (k, s));
+                }
+            }
+        }
+        return map;
+    }
+
+    internal static bool TryResolveCodeFromVk(uint vk, bool isExtended, out byte code, out KeySpec spec)
+    {
+        if (ReverseKeyboardMap.TryGetValue((vk, isExtended), out var entry))
+        {
+            code = entry.Code;
+            spec = entry.Spec;
             return true;
         }
 
@@ -586,6 +610,7 @@ public sealed class DedicatedActionHook : IDisposable
                 return User32.CallNextHookEx(_hook, code, wParam, lParam);
 
             DedicatedActionKeys.GamepadInput? padState = null;
+            var padStateIncludesBack = false;
 
             foreach (var binding in _bindings)
             {
@@ -601,7 +626,11 @@ public sealed class DedicatedActionHook : IDisposable
                 if (binding.GamepadMask != DedicatedActionKeys.GamepadInput.None)
                 {
                     var wantsBack = (binding.GamepadMask & (DedicatedActionKeys.GamepadInput.BackLeft | DedicatedActionKeys.GamepadInput.BackRight)) != 0;
-                    padState ??= DedicatedActionKeys.ReadGamepadInputs(includeBackButtons: wantsBack);
+                    if (padState is null || (wantsBack && !padStateIncludesBack))
+                    {
+                        padState = DedicatedActionKeys.ReadGamepadInputs(includeBackButtons: wantsBack);
+                        padStateIncludesBack = wantsBack;
+                    }
                     if ((padState.Value & binding.GamepadMask) != binding.GamepadMask) continue;
                 }
 

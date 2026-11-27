@@ -48,6 +48,12 @@ internal static class RtssProfileWriter
 
     internal static readonly Lock FileGate = new();
 
+    /// <summary>
+    /// RTSS is a native Win32 app that reads/writes INI files using ANSI byte strings without a BOM.
+    /// Latin-1 round-trips all 256 byte values losslessly without replacing ANSI bytes with U+FFFD or emitting a UTF-8 BOM.
+    /// </summary>
+    internal static readonly Encoding IniEncoding = Encoding.Latin1;
+
     public static HelperReply Apply(SetRtssProfile request)
     {
         var installDir = FindRtssInstallDir();
@@ -65,9 +71,9 @@ internal static class RtssProfileWriter
                 Directory.CreateDirectory(profilesDir);
 
                 var lines = File.Exists(globalFile)
-                    ? File.ReadAllLines(globalFile, Encoding.UTF8).ToList()
+                    ? File.ReadAllLines(globalFile, IniEncoding).ToList()
                     : File.Exists(templateFile)
-                        ? File.ReadAllLines(templateFile, Encoding.UTF8).ToList()
+                        ? File.ReadAllLines(templateFile, IniEncoding).ToList()
                         : [];
 
                 if (request.FramerateLimit is { } limit)
@@ -89,7 +95,7 @@ internal static class RtssProfileWriter
                     SetKey(lines, "OSD", "FillColor", fillColor.ToString("X8", CultureInfo.InvariantCulture));
 
                 var tempFile = globalFile + ".tsume-tmp";
-                File.WriteAllLines(tempFile, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                File.WriteAllLines(tempFile, lines, IniEncoding);
                 File.Move(tempFile, globalFile, overwrite: true);
             }
 
@@ -111,9 +117,12 @@ internal static class RtssProfileWriter
         var profilesDir = Path.Combine(installDir, "Profiles");
         var wanted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var raw in request.Executables.Take(MaxExclusions))
+        if (request.Executables is { } executables)
         {
-            if (SanitizeExeName(raw) is { } clean) wanted.Add(clean);
+            foreach (var raw in executables.Take(MaxExclusions))
+            {
+                if (SanitizeExeName(raw) is { } clean) wanted.Add(clean);
+            }
         }
 
         try
@@ -142,7 +151,7 @@ internal static class RtssProfileWriter
                     if (File.Exists(cfgPath) && !IsTsumeOwned(cfgPath)) continue;
 
                     var content = $"{TsumeMarker}{Environment.NewLine}[Hooking]{Environment.NewLine}EnableHooking=0{Environment.NewLine}";
-                    File.WriteAllText(cfgPath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                    File.WriteAllText(cfgPath, content, IniEncoding);
                 }
             }
 
@@ -158,25 +167,24 @@ internal static class RtssProfileWriter
     public static HelperReply Stop()
     {
         var installDir = FindRtssInstallDir();
-        var fence = installDir is null
-            ? null
-            : Path.GetFullPath(installDir).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (installDir is null)
+            return HelperReply.Failure("RTSS is not installed.");
+
+        var fence = Path.GetFullPath(installDir).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
         try
         {
             // Ask RTSS.exe to exit cleanly first so it releases its hooks loaders and shared memory gracefully.
-            foreach (var process in Process.GetProcessesByName("RTSS"))
+            var mainProcesses = Process.GetProcessesByName("RTSS");
+            try
             {
-                using (process)
+                foreach (var process in mainProcesses)
                 {
                     try
                     {
-                        if (fence is not null)
-                        {
-                            var exe = TryReadProcessPath(process);
-                            if (exe is null || !Path.GetFullPath(exe).StartsWith(fence, StringComparison.OrdinalIgnoreCase))
-                                continue;
-                        }
+                        var exe = TryReadProcessPath(process);
+                        if (exe is null || !Path.GetFullPath(exe).StartsWith(fence, StringComparison.OrdinalIgnoreCase))
+                            continue;
 
                         if (process.CloseMainWindow())
                             process.WaitForExit(1500);
@@ -184,28 +192,34 @@ internal static class RtssProfileWriter
                     catch (Exception error) when (error is Win32Exception or InvalidOperationException) { }
                 }
             }
+            finally
+            {
+                foreach (var process in mainProcesses) process.Dispose();
+            }
 
             foreach (var name in RtssProcessNames)
             {
-                foreach (var process in Process.GetProcessesByName(name))
+                var processes = Process.GetProcessesByName(name);
+                try
                 {
-                    using (process)
+                    foreach (var process in processes)
                     {
                         try
                         {
                             // Only stop processes verified to live inside RTSS's install directory.
-                            if (fence is not null)
-                            {
-                                var exe = TryReadProcessPath(process);
-                                if (exe is null || !Path.GetFullPath(exe).StartsWith(fence, StringComparison.OrdinalIgnoreCase))
-                                    continue;
-                            }
+                            var exe = TryReadProcessPath(process);
+                            if (exe is null || !Path.GetFullPath(exe).StartsWith(fence, StringComparison.OrdinalIgnoreCase))
+                                continue;
 
                             process.Kill(entireProcessTree: false);
                             process.WaitForExit(3000);
                         }
                         catch (Exception error) when (error is Win32Exception or InvalidOperationException) { }
                     }
+                }
+                finally
+                {
+                    foreach (var process in processes) process.Dispose();
                 }
             }
 
@@ -225,8 +239,16 @@ internal static class RtssProfileWriter
         if (installDir is null)
             return HelperReply.Failure("RTSS is not installed.");
 
-        if (Process.GetProcessesByName("RTSS").Length > 0)
-            return new HelperReply { Ok = true };
+        var running = Process.GetProcessesByName("RTSS");
+        try
+        {
+            if (running.Length > 0)
+                return new HelperReply { Ok = true };
+        }
+        finally
+        {
+            foreach (var process in running) process.Dispose();
+        }
 
         // Do not pass /s here: RTSS treats /s as a Windows-startup launch and exits immediately when StartWithWindows=0.
         return PanelStarter.StartElevated(session, Path.Combine(installDir, "RTSS.exe"), "")
@@ -508,15 +530,15 @@ internal static class RtssProfileWriter
                 Directory.CreateDirectory(profilesDir);
 
                 var lines = File.Exists(configFile)
-                    ? File.ReadAllLines(configFile, Encoding.UTF8).ToList()
+                    ? File.ReadAllLines(configFile, IniEncoding).ToList()
                     : File.Exists(templateFile)
-                        ? File.ReadAllLines(templateFile, Encoding.UTF8).ToList()
+                        ? File.ReadAllLines(templateFile, IniEncoding).ToList()
                         : [];
 
                 SetKey(lines, "Settings", "StartWithWindows", enabled ? "1" : "0");
 
                 var tempFile = configFile + ".tsume-tmp";
-                File.WriteAllLines(tempFile, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                File.WriteAllLines(tempFile, lines, IniEncoding);
                 File.Move(tempFile, configFile, overwrite: true);
             }
         }
@@ -541,9 +563,9 @@ internal static class RtssProfileWriter
 
         try
         {
-            var sb = new StringBuilder(1024);
-            var len = (uint)sb.Capacity;
-            return QueryFullProcessImageNameW(handle, 0, sb, ref len) && len > 0 ? sb.ToString() : null;
+            var buffer = new char[1024];
+            var len = (uint)buffer.Length;
+            return QueryFullProcessImageNameW(handle, 0, buffer, ref len) && len > 0 ? new string(buffer, 0, (int)len) : null;
         }
         finally
         {
@@ -556,7 +578,7 @@ internal static class RtssProfileWriter
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool QueryFullProcessImageNameW(nint process, uint flags, StringBuilder exeName, ref uint size);
+    private static extern bool QueryFullProcessImageNameW(nint process, uint flags, [Out] char[] exeName, ref uint size);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -576,7 +598,7 @@ internal static class RtssProfileWriter
     {
         try
         {
-            using var reader = new StreamReader(path, Encoding.UTF8);
+            using var reader = new StreamReader(path, IniEncoding);
             var firstLine = reader.ReadLine();
             return string.Equals(firstLine?.Trim(), TsumeMarker, StringComparison.Ordinal);
         }

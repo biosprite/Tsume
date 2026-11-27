@@ -42,18 +42,18 @@ public sealed class Reveal : Decorator
         else this.Snap(ProgressProperty, target);
     }
 
-    protected override Size MeasureOverride(Size available)
+    protected override Size MeasureOverride(Size constraint)
     {
         if (Child is null) return default;
 
-        Child.Measure(new Size(available.Width, double.PositiveInfinity));
+        Child.Measure(new Size(constraint.Width, double.PositiveInfinity));
         return new Size(Child.DesiredSize.Width, Child.DesiredSize.Height * Progress);
     }
 
-    protected override Size ArrangeOverride(Size final)
+    protected override Size ArrangeOverride(Size arrangeSize)
     {
         // The child keeps its full height; the Reveal simply shows more or less of it.
-        Child?.Arrange(new Rect(0, 0, final.Width, Child.DesiredSize.Height));
-        return final;
+        Child?.Arrange(new Rect(0, 0, arrangeSize.Width, Child.DesiredSize.Height));
+        return arrangeSize;
     }
 }

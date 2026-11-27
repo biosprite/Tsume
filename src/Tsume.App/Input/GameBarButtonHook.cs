@@ -156,7 +156,6 @@ public sealed class GameBarButtonHook : IDisposable
         {
             if (isDown) _lWinDown = true;
             else if (isUp) _lWinDown = false;
-            LogAsync($"ll-kbd LWin {(isDown ? "down" : "up")} scan=0x{info.ScanCode:X2} flags=0x{info.Flags:X2}");
             return User32.CallNextHookEx(_hook, code, wParam, lParam);
         }
 
@@ -164,7 +163,6 @@ public sealed class GameBarButtonHook : IDisposable
         {
             if (isDown) _rWinDown = true;
             else if (isUp) _rWinDown = false;
-            LogAsync($"ll-kbd RWin {(isDown ? "down" : "up")} scan=0x{info.ScanCode:X2} flags=0x{info.Flags:X2}");
             return User32.CallNextHookEx(_hook, code, wParam, lParam);
         }
 
@@ -203,8 +201,8 @@ public sealed class GameBarButtonHook : IDisposable
                 return 1;
             }
 
-            // Log Win+<other> and F13-F24 presses so firmware chords on any BIOS can be identified.
-            if (winDown || info.VkCode is >= 0x7C and <= 0x87)
+            // Log rare F13-F24 firmware keys so OEM chords on new BIOSes can be identified without logging normal Win keystrokes.
+            if (info.VkCode is >= 0x7C and <= 0x87)
                 LogAsync($"ll-kbd vk=0x{info.VkCode:X2} down scan=0x{info.ScanCode:X2} flags=0x{info.Flags:X2} win={winDown}");
         }
 

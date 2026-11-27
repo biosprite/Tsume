@@ -180,8 +180,8 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         ];
         SelectedButtonPrompt = ButtonPrompts[0];
 
-        RunQuickScanCommand = new Command(async () => await RunQuickScanAsync());
-        CaptureStepCommand = new Command(async () => await CaptureCurrentStepAsync());
+        RunQuickScanCommand = new AsyncCommand(RunQuickScanAsync);
+        CaptureStepCommand = new AsyncCommand(CaptureCurrentStepAsync);
         ClearStepCommand = new Command(ClearCurrentStep);
         SkipStepCommand = new Command(SkipCurrentStep);
         UndoGuidedCommand = new Command(UndoGuided);
@@ -191,9 +191,9 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         PreviousStepCommand = new Command(() => SelectStepIndex(SelectedStepIndex - 1));
         NextStepCommand = new Command(() => SelectStepIndex(SelectedStepIndex + 1));
         ToggleButtonListeningCommand = new Command(ToggleButtonListening);
-        ToggleWatchModeCommand = new Command(async () => await ToggleWatchModeAsync());
+        ToggleWatchModeCommand = new AsyncCommand(ToggleWatchModeAsync);
         RefreshPreviewCommand = new Command(RefreshPreview);
-        ExportBundleCommand = new Command(async () => await ExportBundleAsync());
+        ExportBundleCommand = new AsyncCommand(ExportBundleAsync);
 
         UpdateSummaryPill();
     }
@@ -1435,7 +1435,7 @@ public sealed class DeviceDiscoveryViewModel : Observable, IDisposable
         }
     }
 
-    private static IReadOnlyList<QuickScanRow> BuildRows(params (string Label, string Value, bool IsWarning, bool IsMuted)[] items)
+    private static List<QuickScanRow> BuildRows(params (string Label, string Value, bool IsWarning, bool IsMuted)[] items)
     {
         var rows = new List<QuickScanRow>(items.Length);
         for (var i = 0; i < items.Length; i++)

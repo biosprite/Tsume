@@ -39,6 +39,7 @@ public sealed class SpectrumSlider : Control
     // The saturation strip's own brush: only its far end changes, with the hue.
     private readonly GradientStop _pure = new(Colors.Red, 1);
     private readonly LinearGradientBrush _fade;
+    private readonly SolidColorBrush _dotBrush = new(Colors.White);
 
     /// <summary>
     /// The hue last seen. White has none, so it is remembered here for the hue thumb
@@ -120,7 +121,11 @@ public sealed class SpectrumSlider : Control
         }
 
         if (_dot is not null)
-            _dot.Fill = new SolidColorBrush(Part == SpectrumPart.Hue ? pureColour : Colour);
+        {
+            _dotBrush.Color = Part == SpectrumPart.Hue ? pureColour : Colour;
+            if (!ReferenceEquals(_dot.Fill, _dotBrush))
+                _dot.Fill = _dotBrush;
+        }
 
         var x = _ratio * Math.Max(0, _track.ActualWidth - ThumbSize);
 
@@ -240,7 +245,7 @@ public sealed class SpectrumSlider : Control
     }
 
     /// <summary>Once around the wheel. Straight lines between these six are the pure hues exactly.</summary>
-    private static Brush MakeRainbow()
+    private static LinearGradientBrush MakeRainbow()
     {
         var stops = new GradientStopCollection();
         for (var sixth = 0; sixth <= 6; sixth++)

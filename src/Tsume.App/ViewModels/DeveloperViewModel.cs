@@ -1,4 +1,3 @@
-using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using Tsume.App.Language;
@@ -19,26 +18,24 @@ public sealed class DeveloperViewModel : LayerViewModel
 {
     private readonly HelperClient _helper;
     private readonly SavedState _state;
-    private bool _runningSnapshot;
-    private bool _checkingEnv;
+    private readonly AsyncCommand _runQuickSnapshot;
+    private readonly AsyncCommand _runEnvironmentCheck;
+    private readonly AsyncCommand _shareLogs;
     private bool _runningFirmwareCheck;
-    private bool _sharingLogs;
 
     public DeveloperViewModel(HelperClient helper, SavedState state, Func<Task> dismiss)
     {
         _helper = helper;
         _state = state;
 
-        OpenHardwareDiscovery = new Command(async () =>
+        OpenHardwareDiscovery = new AsyncCommand(async () =>
         {
             await dismiss();
             DeviceDiscoveryWindow.ShowOrActivate(_helper);
         });
 
-        RunQuickSnapshot = new Command(async () =>
+        _runQuickSnapshot = new AsyncCommand(async () =>
         {
-            if (_runningSnapshot) return;
-            _runningSnapshot = true;
             QuickSnapshotDetail = Strings.QuickHardwareSnapshotBusy;
 
             try
@@ -49,24 +46,14 @@ public sealed class DeveloperViewModel : LayerViewModel
                 QuickSnapshotDetail = Strings.QuickHardwareSnapshotDone;
                 await dismiss();
             }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-            {
-                QuickSnapshotDetail = Strings.QuickHardwareSnapshotFailed(error.Message);
-            }
             catch (Exception error)
             {
                 QuickSnapshotDetail = Strings.QuickHardwareSnapshotFailed(error.Message);
             }
-            finally
-            {
-                _runningSnapshot = false;
-            }
         });
 
-        RunEnvironmentCheck = new Command(async () =>
+        _runEnvironmentCheck = new AsyncCommand(async () =>
         {
-            if (_checkingEnv) return;
-            _checkingEnv = true;
             EnvironmentDetail = Strings.CheckEnvironmentBusy;
 
             try
@@ -81,49 +68,24 @@ public sealed class DeveloperViewModel : LayerViewModel
             {
                 EnvironmentDetail = error.Message;
             }
-            finally
-            {
-                _checkingEnv = false;
-            }
         });
 
-        RunFirmwareProbe = new Command(() => _ = RunFirmwareCheckAsync(
+        RunFirmwareProbe = new AsyncCommand(() => RunFirmwareCheckAsync(
             FirmwareCheckKind.Probe,
             Strings.RunFirmwareProbeBusy,
             detail => FirmwareProbeDetail = detail));
 
-        RunWriteCheck = new Command(() => _ = RunFirmwareCheckAsync(
+        RunWriteCheck = new AsyncCommand(() => RunFirmwareCheckAsync(
             FirmwareCheckKind.WriteCheck,
             Strings.RunWriteCheckBusy,
             detail => WriteCheckDetail = detail));
 
-        RunModeCheck = new Command(() => _ = RunFirmwareCheckAsync(
+        RunModeCheck = new AsyncCommand(() => RunFirmwareCheckAsync(
             FirmwareCheckKind.ModeCheck,
             Strings.RunModeCheckBusy,
             detail => ModeCheckDetail = detail));
 
-        ShareLogs = new Command(async () =>
-        {
-            if (_sharingLogs) return;
-            _sharingLogs = true;
-            ShareLogsDetail = Strings.ShareLogsBusy;
-
-            try
-            {
-                var zip = await LogBundle.ExportAsync(_helper);
-                LogBundle.CopyFileToClipboard(zip);
-                LogBundle.RevealInExplorer(zip);
-                await dismiss();
-            }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-            {
-                ShareLogsDetail = Strings.ShareLogsFailed(error.Message);
-            }
-            finally
-            {
-                _sharingLogs = false;
-            }
-        });
+        _shareLogs = SettingsViewModel.CreateShareLogsCommand(_helper, dismiss, detail => ShareLogsDetail = detail);
 
         ToggleIncludeHardwareInLogs = new Command(() =>
         {
@@ -134,12 +96,12 @@ public sealed class DeveloperViewModel : LayerViewModel
     }
 
     public ICommand OpenHardwareDiscovery { get; }
-    public ICommand RunQuickSnapshot { get; }
-    public ICommand RunEnvironmentCheck { get; }
+    public ICommand RunQuickSnapshot => _runQuickSnapshot;
+    public ICommand RunEnvironmentCheck => _runEnvironmentCheck;
     public ICommand RunFirmwareProbe { get; }
     public ICommand RunWriteCheck { get; }
     public ICommand RunModeCheck { get; }
-    public ICommand ShareLogs { get; }
+    public ICommand ShareLogs => _shareLogs;
     public ICommand ToggleIncludeHardwareInLogs { get; }
 
     public bool IncludeHardwareInLogs => _state.IncludeHardwareInLogs;
@@ -193,10 +155,10 @@ public sealed class DeveloperViewModel : LayerViewModel
 
     protected override void OnOpened()
     {
-        if (!_runningSnapshot) QuickSnapshotDetail = Strings.QuickHardwareSnapshotDetail;
-        if (!_checkingEnv && string.IsNullOrWhiteSpace(EnvironmentSummary))
+        if (!_runQuickSnapshot.IsRunning) QuickSnapshotDetail = Strings.QuickHardwareSnapshotDetail;
+        if (!_runEnvironmentCheck.IsRunning && string.IsNullOrWhiteSpace(EnvironmentSummary))
             EnvironmentDetail = Strings.CheckEnvironmentDetail;
-        if (!_sharingLogs) ShareLogsDetail = Strings.DeveloperShareLogsDetail;
+        if (!_shareLogs.IsRunning) ShareLogsDetail = Strings.DeveloperShareLogsDetail;
         Notify(nameof(IncludeHardwareInLogs));
     }
 }

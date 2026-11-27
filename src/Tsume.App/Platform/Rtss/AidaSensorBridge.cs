@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using Tsume.App.Platform.Interop;
 using Tsume.Core.Devices;
 using Tsume.Core.Diagnostics;
 
@@ -131,7 +132,7 @@ public sealed class AidaSensorBridge : IDisposable
             }
 
             var kind = IdentifyExistingOwner(handle, rtssFolder);
-            CloseHandle(handle);
+            Kernel32.CloseHandle(handle);
 
             if (_conflict != kind)
             {
@@ -145,7 +146,7 @@ public sealed class AidaSensorBridge : IDisposable
         if (view == 0)
         {
             var mapError = Marshal.GetLastWin32Error();
-            CloseHandle(handle);
+            Kernel32.CloseHandle(handle);
             Log.Write($"MapViewOfFile({MappingName}) failed (Win32 error {mapError})");
             return false;
         }
@@ -172,7 +173,7 @@ public sealed class AidaSensorBridge : IDisposable
 
         if (_mapping != 0)
         {
-            CloseHandle(_mapping);
+            Kernel32.CloseHandle(_mapping);
             _mapping = 0;
         }
     }
@@ -362,7 +363,7 @@ public sealed class AidaSensorBridge : IDisposable
         return false;
     }
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Ansi, SetLastError = true)]
+    [DllImport("kernel32.dll", CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
     private static extern nint CreateFileMappingA(
         nint hFile, nint lpAttributes, uint flProtect, uint dwMaximumSizeHigh, uint dwMaximumSizeLow, string lpName);
 
@@ -373,8 +374,4 @@ public sealed class AidaSensorBridge : IDisposable
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool UnmapViewOfFile(nint lpBaseAddress);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CloseHandle(nint hObject);
 }

@@ -8,7 +8,7 @@ namespace Tsume.Hardware.Msi.Diagnostics;
 public static class FirmwareProbe
 {
     /// <summary>Every sub-table the read methods are known to expose on WMI interface v2.</summary>
-    private static readonly (string Method, byte[] Selectors)[] Tables =
+    internal static readonly (string Method, byte[] Selectors)[] Tables =
     [
         ("Get_Fan",         [0, 1, 2, 3]),
         ("Get_Temperature", [0, 1, 2]),

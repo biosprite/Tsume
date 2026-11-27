@@ -21,11 +21,11 @@ public sealed class UpscalerTuningViewModel : Observable
     private static readonly IReadOnlySet<int> DisabledMultiFrame = new HashSet<int> { 1, 2 };
     private static readonly ProxyOption AsiProxyOption = new(ProxyNames.AsiName, ProxyNames.AsiName, Strings.ProxyAsiHint);
 
-    private readonly IReadOnlyList<ProxyOption> _standardProxyOptions;
+    private readonly List<ProxyOption> _standardProxyOptions;
     private readonly IReadOnlyList<ProxyOption> _asiProxyOptions;
     private bool _loading;
     private string? _lockedProxy;
-    private IReadOnlySet<string>? _occupiedProxies;
+    private HashSet<string>? _occupiedProxies;
     private bool _xmxAvailableToAdd;
 
     public UpscalerTuningViewModel()
@@ -272,7 +272,7 @@ public sealed class UpscalerTuningViewModel : Observable
         }
     }
 
-    private static IReadOnlyList<ProxyOption> BuildProxyOptions()
+    private static List<ProxyOption> BuildProxyOptions()
     {
         var list = new List<ProxyOption>(ProxyNames.All.Count);
 

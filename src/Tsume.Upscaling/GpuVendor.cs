@@ -68,9 +68,6 @@ public static partial class GpuVendor
         return default;
     }
 
-    internal static GpuCapabilities Classify(uint vendorId, string? description) =>
-        Classify(vendorId, 0, description);
-
     /// <summary>
     /// Intel handheld GPUs ordered oldest → newest: returns <c>(IntelArc, IntelXmx)</c>.
     /// </summary>

@@ -2,8 +2,8 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Text;
 using Microsoft.Win32;
+using Tsume.App.Platform.Interop;
 
 namespace Tsume.App.Platform.Rtss;
 
@@ -57,7 +57,7 @@ public static class RtssInstallation
     {
         try
         {
-            Process.Start(new ProcessStartInfo(OfficialDownloadUrl) { UseShellExecute = true });
+            using var _ = Process.Start(new ProcessStartInfo(OfficialDownloadUrl) { UseShellExecute = true });
             return true;
         }
         catch (Win32Exception)
@@ -184,11 +184,11 @@ public static class RtssInstallation
         nint best = 0;
         var bestScore = -1;
 
-        EnumWindows((hwnd, _) =>
+        User32.EnumWindows((hwnd, _) =>
         {
-            GetWindowThreadProcessId(hwnd, out var pid);
+            User32.GetWindowThreadProcessId(hwnd, out var pid);
             if (!pids.Contains(pid)) return true;
-            if (GetWindow(hwnd, GwOwner) != 0) return true;
+            if (User32.GetWindow(hwnd, User32.GW_OWNER) != 0) return true;
 
             var cls = WindowClass(hwnd);
             if (cls.Contains("IME", StringComparison.OrdinalIgnoreCase)
@@ -215,53 +215,25 @@ public static class RtssInstallation
 
         if (best == 0) return false;
 
-        ShowWindow(best, SwShow);
-        ShowWindow(best, SwRestore);
-        SetForegroundWindow(best);
+        User32.ShowWindow(best, User32.SW_SHOW);
+        User32.ShowWindow(best, User32.SW_RESTORE);
+        User32.SetForegroundWindow(best);
         return true;
     }
 
     private static string WindowTitle(nint hwnd)
     {
-        var sb = new StringBuilder(256);
-        return GetWindowText(hwnd, sb, sb.Capacity) > 0 ? sb.ToString() : "";
+        var buffer = new char[256];
+        var len = User32.GetWindowText(hwnd, buffer, buffer.Length);
+        return len > 0 ? new string(buffer, 0, len) : "";
     }
 
     private static string WindowClass(nint hwnd)
     {
-        var sb = new StringBuilder(256);
-        return GetClassName(hwnd, sb, sb.Capacity) > 0 ? sb.ToString() : "";
+        var buffer = new char[256];
+        var len = User32.GetClassName(hwnd, buffer, buffer.Length);
+        return len > 0 ? new string(buffer, 0, len) : "";
     }
-
-    private const uint GwOwner = 4;
-    private const int SwShow = 5;
-    private const int SwRestore = 9;
-
-    private delegate bool EnumWindowsProc(nint hwnd, nint lParam);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool EnumWindows(EnumWindowsProc callback, nint lParam);
-
-    [DllImport("user32.dll")]
-    private static extern uint GetWindowThreadProcessId(nint hwnd, out uint processId);
-
-    [DllImport("user32.dll")]
-    private static extern nint GetWindow(nint hwnd, uint cmd);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetWindowText(nint hwnd, StringBuilder text, int maxCount);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetClassName(nint hwnd, StringBuilder className, int maxCount);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ShowWindow(nint hwnd, int cmdShow);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetForegroundWindow(nint hwnd);
 
     /// <summary>
     /// Looks on the Desktop and in Downloads for an RTSS setup package the user has already fetched
@@ -318,7 +290,7 @@ public static class RtssInstallation
 
         try
         {
-            Process.Start(new ProcessStartInfo(setupExe) { UseShellExecute = true });
+            using var _ = Process.Start(new ProcessStartInfo(setupExe) { UseShellExecute = true });
             return true;
         }
         catch (Win32Exception)
@@ -347,7 +319,16 @@ public static class RtssInstallation
             if (process is null) return null;
 
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-            await process.WaitForExitAsync(timeout.Token);
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch (Exception error) when (error is Win32Exception or InvalidOperationException or AggregateException or NotSupportedException) { }
+                return null;
+            }
             if (process.ExitCode != 0) return null;
 
             return Directory.EnumerateFiles(tempDir, "RTSSSetup*.exe", SearchOption.AllDirectories)
@@ -422,7 +403,7 @@ public static class RtssInstallation
             if (!string.IsNullOrWhiteSpace(dir) && seen.Add(dir)) yield return dir;
     }
 
-    private static IEnumerable<string> FromRegistry()
+    private static List<string> FromRegistry()
     {
         var results = new List<string>();
 

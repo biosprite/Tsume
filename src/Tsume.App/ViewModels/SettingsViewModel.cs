@@ -34,7 +34,7 @@ public sealed class SettingsViewModel : LayerViewModel
         ToggleStartWithWindows = new Command(() => StartsWithWindows = !StartsWithWindows);
         ToggleStartMenu = new Command(() => IsInStartMenu = !IsInStartMenu);
 
-        ToggleMsiCenter = new Command(async () =>
+        ToggleMsiCenter = new AsyncCommand(async () =>
         {
             // Windows shows a permission prompt, which takes focus, so the panel leaves first.
             var pause = !IsMsiCenterPaused;
@@ -46,33 +46,9 @@ public sealed class SettingsViewModel : LayerViewModel
             Refresh();
         });
 
-        ShareLogs = new Command(async () =>
-        {
-            if (_sharing) return;
-            _sharing = true;
-            ShareLogsDetail = Strings.ShareLogsBusy;
+        _shareLogs = CreateShareLogsCommand(_helper, dismiss, detail => ShareLogsDetail = detail);
 
-            try
-            {
-                var zip = await LogBundle.ExportAsync(_helper);
-                LogBundle.CopyFileToClipboard(zip);
-
-                // Started while the panel is still in front: Windows lets only the foreground program
-                // bring a new window forward, so after dismissing Explorer would open behind the game.
-                LogBundle.RevealInExplorer(zip);
-                await dismiss();
-            }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-            {
-                ShareLogsDetail = Strings.ShareLogsFailed(error.Message);
-            }
-            finally
-            {
-                _sharing = false;
-            }
-        });
-
-        OpenDataFolder = new Command(async () =>
+        OpenDataFolder = new AsyncCommand(async () =>
         {
             LogBundle.OpenFolder(DataFolder.Path);
             await dismiss();
@@ -80,6 +56,29 @@ public sealed class SettingsViewModel : LayerViewModel
 
         Refresh();
     }
+
+    internal static AsyncCommand CreateShareLogsCommand(
+        Tsume.Core.Ipc.HelperClient helper,
+        Func<Task> dismiss,
+        Action<string> setDetail) => new(async () =>
+    {
+        setDetail(Strings.ShareLogsBusy);
+
+        try
+        {
+            var zip = await LogBundle.ExportAsync(helper);
+            LogBundle.CopyFileToClipboard(zip);
+
+            // Started while the panel is still in front: Windows lets only the foreground program
+            // bring a new window forward, so after dismissing Explorer would open behind the game.
+            LogBundle.RevealInExplorer(zip);
+            await dismiss();
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            setDetail(Strings.ShareLogsFailed(error.Message));
+        }
+    });
 
     public ICommand ToggleStartWithWindows { get; }
     public ICommand ToggleStartMenu { get; }
@@ -120,9 +119,9 @@ public sealed class SettingsViewModel : LayerViewModel
     public DeveloperViewModel Developer { get; }
 
     private readonly Tsume.Core.Ipc.HelperClient _helper;
-    private bool _sharing;
+    private readonly AsyncCommand _shareLogs;
 
-    public ICommand ShareLogs { get; }
+    public ICommand ShareLogs => _shareLogs;
     public ICommand OpenDataFolder { get; }
 
     public string ShareLogsDetail { get; private set => Set(ref field, value); } = Strings.ShareLogsDetail;
@@ -148,7 +147,7 @@ public sealed class SettingsViewModel : LayerViewModel
 
     protected override void OnOpened()
     {
-        if (!_sharing) ShareLogsDetail = Strings.ShareLogsDetail;
+        if (!_shareLogs.IsRunning) ShareLogsDetail = Strings.ShareLogsDetail;
         Refresh();
         _ = ChargeLimit.RefreshAsync();
     }

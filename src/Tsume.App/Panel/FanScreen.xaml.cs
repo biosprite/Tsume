@@ -1,15 +1,19 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using Tsume.App.Input;
+using Tsume.App.Mvvm;
 using Tsume.App.Platform;
 using Tsume.App.Shell;
 using Tsume.App.ViewModels;
 
 namespace Tsume.App.Panel;
 
+[SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
+    Justification = "WPF UserControl does not implement IDisposable; _touchKeyboardOp and _textInputScope are disposed in Unloaded/EndTextInput.")]
 public partial class FanScreen
 {
     private FanViewModel? _fan;
@@ -21,15 +25,7 @@ public partial class FanScreen
     public FanScreen()
     {
         InitializeComponent();
-
-        // Stops Windows moving the window when a touch list is dragged past its end.
-        List.ManipulationBoundaryFeedback += (_, e) => e.Handled = true;
-
-        // Lets focus reach Back, which is outside the list.
-        Controls.StepOut.LetFocusLeave((UIElement)List.Content);
-
-        // Scrolls smoothly to the focused item.
-        Controls.SmoothScroll.Follow(List);
+        ScreenList.Configure(List);
 
         // Reset disables itself once the curve matches stock; move focus back onto the curve so the controller is never stranded.
         ResetTile.IsEnabledChanged += (_, e) => { if (e.NewValue is false) RestoreFocus(preferCurve: true); };
@@ -76,32 +72,43 @@ public partial class FanScreen
 
         Dispatcher.BeginInvoke(DispatcherPriority.Input, async () =>
         {
-            if (session != _renameSession || _fan is not { IsRenamingProfile: true } || !IsVisible) return;
-
-            ProfileNameBox.Focus();
-            ProfileNameBox.SelectAll();
-            ProfileNameBox.BringIntoView();
-
-            // Only pop up Windows' on-screen keyboard when no external USB/Bluetooth keyboard is connected.
-            if (PhysicalKeyboard.IsConnected()) return;
-
-            PreShrinkForTouchKeyboard();
-
-            var token = ResetTouchKeyboardOp();
-            var hwnd = WindowHandle();
-            var opened = await QuickActions.ShowTouchKeyboardAsync(hwnd, token);
-            if (token.IsCancellationRequested || session != _renameSession || _fan is not { IsRenamingProfile: true })
+            try
             {
-                if (opened) QuickActions.HideTouchKeyboard(hwnd);
-                return;
-            }
+                if (session != _renameSession || _fan is not { IsRenamingProfile: true } || !IsVisible) return;
 
-            if (opened) _openedTouchKeyboard = true;
-
-            if (IsVisible && ProfileNameBox.IsVisible)
-            {
                 ProfileNameBox.Focus();
+                ProfileNameBox.SelectAll();
                 ProfileNameBox.BringIntoView();
+
+                // Only pop up Windows' on-screen keyboard when no external USB/Bluetooth keyboard is connected.
+                if (PhysicalKeyboard.IsConnected()) return;
+
+                PreShrinkForTouchKeyboard();
+
+                var token = ResetTouchKeyboardOp();
+                var hwnd = WindowHandle();
+                var opened = await QuickActions.ShowTouchKeyboardAsync(hwnd, token);
+                if (token.IsCancellationRequested || session != _renameSession || _fan is not { IsRenamingProfile: true })
+                {
+                    if (opened) QuickActions.HideTouchKeyboard(hwnd);
+                    return;
+                }
+
+                if (opened) _openedTouchKeyboard = true;
+
+                if (IsVisible && ProfileNameBox.IsVisible)
+                {
+                    ProfileNameBox.Focus();
+                    ProfileNameBox.BringIntoView();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancelled when text input ended.
+            }
+            catch (Exception error)
+            {
+                AsyncCommand.LogError(error);
             }
         });
     }
@@ -178,27 +185,38 @@ public partial class FanScreen
 
     private async void OnTouchKeyboardClick(object sender, RoutedEventArgs e)
     {
-        if (_fan is not { IsRenamingProfile: true }) return;
-        if (ProfileNameBox.IsVisible) ProfileNameBox.Focus();
-
-        var session = _renameSession;
-        var token = ResetTouchKeyboardOp();
-        var hwnd = WindowHandle();
-        var wasVisible = QuickActions.IsTouchKeyboardVisible();
-        if (!wasVisible) PreShrinkForTouchKeyboard();
-        var toggled = await QuickActions.ToggleTouchKeyboardAsync(hwnd, token);
-        if (!toggled) return;
-
-        if (token.IsCancellationRequested || session != _renameSession || _fan is not { IsRenamingProfile: true })
+        try
         {
-            if (!wasVisible) QuickActions.HideTouchKeyboard(hwnd);
-            return;
+            if (_fan is not { IsRenamingProfile: true }) return;
+            if (ProfileNameBox.IsVisible) ProfileNameBox.Focus();
+
+            var session = _renameSession;
+            var token = ResetTouchKeyboardOp();
+            var hwnd = WindowHandle();
+            var wasVisible = QuickActions.IsTouchKeyboardVisible();
+            if (!wasVisible) PreShrinkForTouchKeyboard();
+            var toggled = await QuickActions.ToggleTouchKeyboardAsync(hwnd, token);
+            if (!toggled) return;
+
+            if (token.IsCancellationRequested || session != _renameSession || _fan is not { IsRenamingProfile: true })
+            {
+                if (!wasVisible) QuickActions.HideTouchKeyboard(hwnd);
+                return;
+            }
+
+            _openedTouchKeyboard = !wasVisible;
+
+            if (IsVisible && ProfileNameBox.IsVisible)
+                ProfileNameBox.Focus();
         }
-
-        _openedTouchKeyboard = !wasVisible;
-
-        if (IsVisible && ProfileNameBox.IsVisible)
-            ProfileNameBox.Focus();
+        catch (OperationCanceledException)
+        {
+            // Cancelled when text input ended or clicked again.
+        }
+        catch (Exception error)
+        {
+            AsyncCommand.LogError(error);
+        }
     }
 
     private void OnProfileSelectorKeyDown(object sender, KeyEventArgs e)

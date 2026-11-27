@@ -21,13 +21,19 @@ public sealed class KeyDropdown : ComboBox
         new PropertyMetadata(0.0, (d, e) => ((ScrollViewer)d).ScrollToVerticalOffset((double)e.NewValue)));
 
     private static KeyDropdown? _openDropdown;
+    private static int _openCount;
 
     static KeyDropdown()
     {
         DefaultStyleKeyProperty.OverrideMetadata(typeof(KeyDropdown), new FrameworkPropertyMetadata(typeof(KeyDropdown)));
     }
 
-    public static bool IsAnyOpen => _openDropdown is { IsDropDownOpen: true };
+    public KeyDropdown()
+    {
+        Unloaded += OnUnloaded;
+    }
+
+    public static bool IsAnyOpen => Volatile.Read(ref _openCount) > 0;
 
     public static bool CloseIfOpen()
     {
@@ -40,6 +46,7 @@ public sealed class KeyDropdown : ComboBox
     private ScrollViewer? _dropDownScroll;
     private double _scrollGoal = double.NaN;
     private int _focusedIndex = -1;
+    private bool _countedOpen;
 
     public override void OnApplyTemplate()
     {
@@ -61,6 +68,7 @@ public sealed class KeyDropdown : ComboBox
     {
         base.OnDropDownOpened(e);
         _openDropdown = this;
+        MarkOpen();
         StopGlide();
 
         var index = SelectedIndex >= 0 ? SelectedIndex : 0;
@@ -87,7 +95,28 @@ public sealed class KeyDropdown : ComboBox
     {
         StopGlide();
         base.OnDropDownClosed(e);
+        MarkClosed();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        StopGlide();
+        MarkClosed();
+    }
+
+    private void MarkOpen()
+    {
+        if (_countedOpen) return;
+        _countedOpen = true;
+        Interlocked.Increment(ref _openCount);
+    }
+
+    private void MarkClosed()
+    {
         if (_openDropdown == this) _openDropdown = null;
+        if (!_countedOpen) return;
+        _countedOpen = false;
+        Interlocked.Decrement(ref _openCount);
     }
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)

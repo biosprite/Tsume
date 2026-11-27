@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
@@ -15,6 +16,8 @@ namespace Tsume.App;
 /// Start-up wiring. Tsume runs in the background with no window until summoned: the M button (while
 /// MSI Center M is paused), View + Menu on the pad, Win + Alt + Q, or launching Tsume again.
 /// </summary>
+[SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
+    Justification = "WPF Application does not implement IDisposable; all owned fields are disposed in OnExit.")]
 public partial class App
 {
     // --background is how Windows starts Tsume at sign-in; --stay keeps the panel open on focus loss (development).
@@ -439,7 +442,7 @@ public partial class App
                 break;
 
             case DedicatedAction.TouchKeyboard:
-                QuickActions.ToggleTouchKeyboard();
+                _ = ToggleTouchKeyboardSafeAsync(_appExit.Token);
                 break;
 
             case DedicatedAction.ShowDesktop:
@@ -472,13 +475,25 @@ public partial class App
         }
     }
 
+    private static async Task ToggleTouchKeyboardSafeAsync(CancellationToken cancel)
+    {
+        try
+        {
+            await QuickActions.ToggleTouchKeyboardAsync(cancellationToken: cancel);
+        }
+        catch (Exception error)
+        {
+            Errors.Write($"ToggleTouchKeyboardAsync failed: {error}");
+        }
+    }
+
     /// <summary>Trims memory once the panel has been closed for the idle interval.</summary>
     private void SlimDownWhenIdle(OverlayWindow window)
     {
         _idle.Tick += (_, _) =>
         {
             _idle.Stop();
-            if (!window.IsOpen) MemoryDiet.Trim();
+            if (!window.IsOpen) _ = Task.Run(MemoryDiet.Trim);
         };
 
         window.OpenChanged += open =>
