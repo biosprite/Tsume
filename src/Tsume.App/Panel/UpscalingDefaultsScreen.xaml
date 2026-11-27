@@ -27,8 +27,23 @@
     <ScrollViewer x:Name="List" Focusable="False"
                   VerticalScrollBarVisibility="Hidden" PanningMode="VerticalOnly">
       <StackPanel>
-        <panel:UpscalerProxyCard DataContext="{Binding Tuning}" Margin="0,0,0,20" />
-        <panel:UpscalerTuningView DataContext="{Binding Tuning}" />
+        <StackPanel Margin="0,0,0,20">
+          <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0" controls:Screen.TakesFocus="True"
+                         Glyph="{x:Static theme:Glyphs.Download}"
+                         Label="{x:Static lang:Strings.AutoInstallOptiScaler}"
+                         Detail="{x:Static lang:Strings.AutoInstallOptiScalerDetail}"
+                         IsOn="{Binding AutoInstall}"
+                         IsEnabled="{Binding CanAct}"
+                         Command="{Binding ToggleAutoInstall}" />
+
+          <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+                     Text="{Binding Status}" Visibility="{Binding StatusShown}" Margin="6,6,6,0" />
+        </StackPanel>
+
+        <panel:UpscalerProxyCard DataContext="{Binding Tuning}" Margin="0,0,0,20"
+                                 IsEnabled="{Binding DataContext.CanAct, RelativeSource={RelativeSource AncestorType=DockPanel}}" />
+        <panel:UpscalerTuningView DataContext="{Binding Tuning}"
+                                  IsEnabled="{Binding DataContext.CanAct, RelativeSource={RelativeSource AncestorType=DockPanel}}" />
       </StackPanel>
     </ScrollViewer>
 

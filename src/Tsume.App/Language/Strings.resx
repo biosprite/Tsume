@@ -545,6 +545,14 @@
 
   <!-- OptiScaler: defaults, and adding a game -->
 
+  <data name="AutoInstallOptiScaler" xml:space="preserve"><value>Auto-install in all games</value></data>
+  <data name="AutoInstallOptiScalerDetail" xml:space="preserve"><value>Installs OptiScaler into every supported game using these defaults. Skips games with anti-cheat.</value></data>
+  <data name="AutoInstalledGames" xml:space="preserve">
+    <value>Installed in {0} games.</value>
+    <comment>{0} = how many games OptiScaler was auto-installed into</comment>
+  </data>
+  <data name="AutoInstalledOneGame" xml:space="preserve"><value>Installed in 1 game.</value></data>
+  <data name="AutoInstallNoneNeeded" xml:space="preserve"><value>All eligible games already have OptiScaler.</value></data>
   <data name="DefaultsExplained" xml:space="preserve"><value>Starting settings for new games. Games you edit keep their own settings.</value></data>
   <data name="BrowseHint" xml:space="preserve"><value>Pick the game's .exe file.</value></data>
   <data name="BrowseFolderHint" xml:space="preserve"><value>Open a games folder, then press Add this folder.</value></data>

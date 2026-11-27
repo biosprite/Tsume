@@ -36,8 +36,10 @@ public sealed class UpscalingViewModel : LayerViewModel
     private int _rowsVersion;
     private CancellationTokenSource? _rowsCancel;
     private Task _rowsTask = Task.CompletedTask;
+    private Task _scanTask = Task.CompletedTask;
     private Task? _preparing;
     private bool _rescanRequested;
+    private bool _scanPending;
     private bool _manualScan;
 
     /// <param name="dismiss">Closes the panel and completes once it is fully off screen.</param>
@@ -193,7 +195,17 @@ public sealed class UpscalingViewModel : LayerViewModel
     public bool IsBusy
     {
         get;
-        set { if (Set(ref field, value)) Notify(nameof(IsIdle)); }
+        set
+        {
+            if (!Set(ref field, value)) return;
+            Notify(nameof(IsIdle));
+
+            if (!value && _scanPending)
+            {
+                _scanPending = false;
+                _ = LookForGamesAsync();
+            }
+        }
     }
 
     public bool IsIdle => !IsBusy;
@@ -334,6 +346,73 @@ public sealed class UpscalingViewModel : LayerViewModel
         return removed;
     }
 
+    /// <summary>
+    /// Runs the initial Auto-install pass across every eligible uninstalled game (scanning first so the list is
+    /// up to date). Games with unaccepted anti-cheat or an existing third-party OptiScaler are skipped.
+    /// </summary>
+    public Task<(int Installed, IReadOnlyList<string> Failures)> AutoInstallAllAsync(Action<string> say) =>
+        AutoInstallAsync(candidates: null, say, scanFirst: true);
+
+    /// <summary>
+    /// Installs OptiScaler into eligible uninstalled games from <paramref name="candidates"/> (or all listed games
+    /// when <paramref name="candidates"/> is null). One failure does not stop the rest.
+    /// </summary>
+    private async Task<(int Installed, IReadOnlyList<string> Failures)> AutoInstallAsync(
+        IReadOnlyList<ListedGame>? candidates, Action<string> say, bool scanFirst = false)
+    {
+        if (IsBusy) return (0, []);
+        IsBusy = true;
+
+        var installed = 0;
+        var failures = new List<string>();
+
+        try
+        {
+            if (scanFirst)
+            {
+                say(Strings.ScanningGames);
+                await (IsLooking ? _scanTask : (_scanTask = RunLookForGamesAsync()));
+            }
+
+            var pool = candidates ?? [.. CanonicalListedById().Values];
+            var ready = pool.Where(listed => listed.CanAutoInstall).ToList();
+            if (ready.Count == 0) return (0, []);
+
+            var alreadyInstalled = await Task.Run(Installer.InstalledGames);
+            var eligible = ready.Where(listed => !alreadyInstalled.Contains(listed.Game.Id)).ToList();
+            if (eligible.Count == 0) return (0, []);
+
+            var build = await NeedBuildAsync(say);
+
+            foreach (var listed in eligible)
+            {
+                var settings = List.SettingsFor(listed.Game.Id);
+                say($"{listed.Game.Name}: {Strings.Installing}");
+
+                try
+                {
+                    await Task.Run(() => PutIn(listed, build, settings));
+                    listed.Settings = settings;
+                    installed++;
+                }
+                catch (Exception error)
+                {
+                    Log.Write($"auto-install failed for {listed.Game.Name}: {error.Message}");
+                    failures.Add(Strings.CouldNotUpdate(listed.Game.Name, Strings.Explain(error)));
+                }
+            }
+
+            if (installed > 0) SaveList();
+            return (installed, failures);
+        }
+        finally
+        {
+            IsBusy = false;
+            RefreshTile();
+            if (IsOpen && !IsLooking) ShowGames();
+        }
+    }
+
     /// <summary>Counts the games with OptiScaler, for the main-screen tile. Costs one folder listing.</summary>
     public void RefreshTile()
     {
@@ -459,21 +538,34 @@ public sealed class UpscalingViewModel : LayerViewModel
     /// Finds the stores' and saved folders' installed games and inspects each one in the background,
     /// while the last known list is already on screen.
     /// </summary>
-    private async Task LookForGamesAsync(bool manual = false)
+    private Task LookForGamesAsync(bool manual = false)
     {
         _manualScan |= manual;
+
+        // Defer scans while an install/removal is in progress so game inspection and list absorption never race PutIn.
+        if (IsBusy)
+        {
+            _scanPending = true;
+            return _scanTask;
+        }
 
         // Already looking: go round once more when this pass ends, so the latest folders are read.
         if (IsLooking)
         {
             _rescanRequested = true;
-            return;
+            return _scanTask;
         }
 
+        return _scanTask = RunLookForGamesAsync();
+    }
+
+    private async Task RunLookForGamesAsync()
+    {
         IsLooking = true;
         ScanStatus = Strings.ScanningGames;
         var started = Stopwatch.StartNew();
         var listChanged = false;
+        var newGames = new List<ListedGame>();
 
         try
         {
@@ -481,10 +573,30 @@ public sealed class UpscalingViewModel : LayerViewModel
             {
                 _rescanRequested = false;
 
-                try { listChanged |= await ScanOnceAsync(); }
+                try
+                {
+                    var (changed, added) = await ScanOnceAsync();
+                    listChanged |= changed;
+                    if (added.Count > 0) newGames.AddRange(added);
+                }
                 catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException)
                 {
                     // Keep the list as it was.
+                }
+
+                if (!_rescanRequested && List.AutoInstall && !IsBusy && newGames.Count > 0)
+                {
+                    var toInstall = newGames.ToList();
+                    newGames.Clear();
+                    try
+                    {
+                        var (installed, _) = await AutoInstallAsync(toInstall, text => ScanStatus = text);
+                        if (installed > 0) listChanged = true;
+                    }
+                    catch (Exception error)
+                    {
+                        Log.Write($"auto-install pass failed: {error.Message}");
+                    }
                 }
 
                 // Give manual rescans a brief visible spin even when disk reads finish in a few milliseconds.
@@ -518,8 +630,8 @@ public sealed class UpscalingViewModel : LayerViewModel
         }
     }
 
-    /// <returns>True if the list changed.</returns>
-    private async Task<bool> ScanOnceAsync()
+    /// <returns>Whether the list changed, plus any games newly added by this scan.</returns>
+    private async Task<(bool Changed, IReadOnlyList<ListedGame> Added)> ScanOnceAsync()
     {
         var list = List;
         var folders = list.Folders.ToList();
@@ -551,12 +663,12 @@ public sealed class UpscalingViewModel : LayerViewModel
             })
             .ToList();
 
-        list.Absorb(eligible, installed);
+        var added = list.Absorb(eligible, installed);
 
         foreach (var listed in list.Games)
             if (facts.TryGetValue(listed.Game.Id, out var seen)) listed.Facts = seen;
 
-        return SaveList();
+        return (SaveList(), added);
     }
 
     /// <summary>

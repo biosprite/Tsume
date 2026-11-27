@@ -92,9 +92,10 @@ public sealed class RestoreAllViewModel : LayerViewModel
                 return (count, failed, refreshed);
             });
 
-            if (updatedFacts.Count > 0)
+            if (updatedFacts.Count > 0 || _hub.List.AutoInstall)
             {
                 foreach (var (listed, facts) in updatedFacts) listed.Facts = facts;
+                _hub.List.AutoInstall = false;
                 _hub.SaveList();
             }
 

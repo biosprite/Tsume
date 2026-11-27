@@ -443,6 +443,10 @@ public static class Strings
     public static string OptiPatcherNotInGame => Find();
     public static string BuildLineWithOptiPatcher(string buildLine, string tag) => Fill(Find(), buildLine, tag);
 
+    public static string AutoInstallOptiScaler => Find();
+    public static string AutoInstallOptiScalerDetail => Find();
+    public static string AutoInstalledGames(int count) => count == 1 ? Find("AutoInstalledOneGame") : Fill(Find(), count);
+    public static string AutoInstallNoneNeeded => Find();
     public static string DefaultsExplained => Find();
     public static string BrowseHint => Find();
     public static string BrowseFolderHint => Find();

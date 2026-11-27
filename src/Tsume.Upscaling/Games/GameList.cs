@@ -18,6 +18,15 @@ public sealed class ListedGame
     /// <summary>True once the user has accepted the ban risk of OptiScaler in a game with anti-cheat.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool AntiCheatAccepted { get; set; }
+
+    /// <summary>
+    /// True when Auto-install may put OptiScaler into this game: it has a target executable, no third-party
+    /// OptiScaler is already present, and either it has no anti-cheat or its anti-cheat warning was accepted.
+    /// </summary>
+    [JsonIgnore]
+    public bool CanAutoInstall => Facts is { } facts
+        && facts.ExistingProxy is null
+        && (facts.AntiCheat is null || AntiCheatAccepted);
 }
 
 /// <summary>
@@ -72,6 +81,10 @@ public sealed class GameList
         get => (ChosenDefaults ?? new()) with { OptiPatcher = false };
         set => ChosenDefaults = value with { OptiPatcher = false };
     }
+
+    /// <summary>When true, Tsume automatically installs OptiScaler into eligible games using Global Defaults.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool AutoInstall { get; set; }
 
     public List<ListedGame> Games { get; set; } = [];
 
@@ -179,13 +192,15 @@ public sealed class GameList
     /// Syncs the list with what the stores report now. Hand-added games stay; a vanished store game is dropped
     /// unless it is in <paramref name="keep"/> (games OptiScaler is still installed in, which must stay removable).
     /// </summary>
-    public void Absorb(IEnumerable<Game> found, IReadOnlySet<string> keep)
+    /// <returns>Games newly added to the list by this scan.</returns>
+    public IReadOnlyList<ListedGame> Absorb(IEnumerable<Game> found, IReadOnlySet<string> keep)
     {
         var now = found.ToDictionary(game => game.Id);
 
         Games.RemoveAll(listed =>
             listed.Game.Store != GameStore.Custom && !now.ContainsKey(listed.Game.Id) && !keep.Contains(listed.Game.Id));
 
+        var added = new List<ListedGame>();
         foreach (var game in now.Values)
         {
             if (Find(game.Id) is { } known)
@@ -194,10 +209,13 @@ public sealed class GameList
             }
             else
             {
-                Games.Add(new ListedGame { Game = game });
+                var listed = new ListedGame { Game = game };
+                Games.Add(listed);
+                added.Add(listed);
             }
         }
 
         Games.Sort((a, b) => string.Compare(a.Game.Name, b.Game.Name, StringComparison.CurrentCultureIgnoreCase));
+        return added;
     }
 }

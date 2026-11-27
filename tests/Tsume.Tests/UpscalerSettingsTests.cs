@@ -1,5 +1,7 @@
 using Tsume.App.Platform;
+using Tsume.Upscaling;
 using Tsume.Upscaling.Config;
+using Tsume.Upscaling.Games;
 using Tsume.Upscaling.Install;
 using Tsume.Upscaling.Xmx;
 
@@ -275,5 +277,61 @@ public sealed class UpscalerSettingsTests
     public void OptiScalerVrrFrameRateLimit_MatchesOptiScalerCalculator(int refreshHz, bool roundToWholeFps, double expected)
     {
         Assert.Equal(expected, DisplayMode.OptiScalerVrrFrameRateLimit(refreshHz, roundToWholeFps));
+    }
+
+    [Fact]
+    public void ListedGame_CanAutoInstall_RespectsFactsAntiCheatAndExistingProxy()
+    {
+        var game = Game.At(@"C:\Games\Sample", "Sample", GameStore.Steam);
+        var cleanFacts = new GameFacts(@"C:\Games\Sample", @"C:\Games\Sample\Sample.exe", ["DLSS"], null, null);
+        var antiCheatFacts = cleanFacts with { AntiCheat = "Easy Anti-Cheat" };
+        var existingProxyFacts = cleanFacts with { ExistingProxy = "dxgi.dll" };
+
+        Assert.False(new ListedGame { Game = game, Facts = null }.CanAutoInstall);
+        Assert.True(new ListedGame { Game = game, Facts = cleanFacts }.CanAutoInstall);
+        Assert.False(new ListedGame { Game = game, Facts = existingProxyFacts }.CanAutoInstall);
+        Assert.False(new ListedGame { Game = game, Facts = antiCheatFacts }.CanAutoInstall);
+        Assert.True(new ListedGame { Game = game, Facts = antiCheatFacts, AntiCheatAccepted = true }.CanAutoInstall);
+        Assert.False(new ListedGame { Game = game, Facts = existingProxyFacts with { AntiCheat = "Easy Anti-Cheat" }, AntiCheatAccepted = true }.CanAutoInstall);
+    }
+
+    [Fact]
+    public void GameList_Absorb_ReturnsOnlyNewlyAddedGames()
+    {
+        var first = Game.At(@"C:\Games\First", "First", GameStore.Steam);
+        var second = Game.At(@"C:\Games\Second", "Second", GameStore.Steam);
+        var list = new GameList { Games = [new ListedGame { Game = first }] };
+
+        var added = list.Absorb([first, second], new HashSet<string>());
+
+        var only = Assert.Single(added);
+        Assert.Equal(second.Id, only.Game.Id);
+        Assert.Empty(list.Absorb([first, second], new HashSet<string>()));
+    }
+
+    [Fact]
+    public void GameList_AutoInstall_RoundTripsThroughDisk()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "tsume-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var paths = new UpscalingPaths(tempRoot);
+            var game = Game.At(@"C:\Games\Sample", "Sample", GameStore.Steam);
+            var list = new GameList
+            {
+                AutoInstall = true,
+                Games = [new ListedGame { Game = game }],
+            };
+
+            Assert.True(GameList.Save(paths, list.Serialize()));
+
+            var loaded = GameList.Load(paths);
+            Assert.True(loaded.AutoInstall);
+            Assert.Single(loaded.Games);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
+        }
     }
 }
