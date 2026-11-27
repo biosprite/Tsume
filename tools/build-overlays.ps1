@@ -496,10 +496,12 @@ function Add-TextLayer(
     [int]$refresh = 0) {
 
     $pos = Format-DynamicPos $usedX $usedY $list.Count $dx $dy $ex $ey $origin
+    # Flush <E=...> with RTSS's invisible \r so an empty dynamic macro never leaks its alignment box into the next layer.
+    $flush = if ($ex -gt 0 -and $ey -gt 0) { '\r' } else { '' }
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add("Name=$name")
     $lines.Add("VisibilitySource=$vis")
-    $lines.Add("Text=$pos$text")
+    $lines.Add("Text=$pos$text$flush")
     $lines.Add("PositionX=0")
     $lines.Add("PositionY=0")
     $lines.Add("ExtentX=0")
