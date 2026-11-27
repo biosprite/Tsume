@@ -108,11 +108,10 @@ public sealed record StickLighting(
         LightingEffect.Steady, LightingPalette.Swatches[5], LightingPalette.Swatches[5], LightingPalette.Swatches[8], 100, 100, 5);
 
     /// <summary>
-    /// The controller has a single brightness. It is set to the brighter group's,
-    /// and the dimmer group's colours are darkened to make up the difference.
+    /// Kept at 100 while lit so each group scales its own RGB independently; changing the single
+    /// global brightness byte flashes the other group while the controller fades to rescaled colours.
     /// </summary>
-    private int TopBrightness => Effect == LightingEffect.Off ? 0 : Math.Clamp(
-        Math.Max(SticksLit ? StickBrightness : 0, ButtonsLit ? ButtonBrightness : 0), 0, 100);
+    private int TopBrightness => Effect == LightingEffect.Off ? 0 : 100;
 
     /// <summary>How much of the controller's brightness an LED's group gets, 0–1.</summary>
     private double Share(int led)
