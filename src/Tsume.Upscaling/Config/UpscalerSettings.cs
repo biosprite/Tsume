@@ -83,8 +83,14 @@ public sealed record UpscalerSettings
     public FrameGenChoice FrameGen { get; init; } = FrameGenChoice.Off;
     public FrameGenSource Source { get; init; } = FrameGenSource.Upscaler;
 
+    public const int MinFrameRateLimit = 15;
+    public const int MaxFrameRateLimit = 240;
+
     /// <summary>Frames shown per frame drawn, 2–4. XeFG only; FSR's is always 2.</summary>
     public int Multiplier { get; init; } = 2;
+
+    /// <summary>OptiScaler's frame-rate cap (<c>[Framerate] FramerateLimit</c>, 0.1 FPS precision). 0 means off (<c>auto</c>).</summary>
+    public double FrameRateLimit { get; init; }
 
     /// <summary>Tell the game an Nvidia card is fitted, so it offers DLSS for OptiScaler to take over.</summary>
     public bool SpoofNvidia { get; init; } = true;
@@ -148,6 +154,12 @@ public sealed record UpscalerSettings
 
         if (!intelArc && fitted.Multiplier > 2)
             fitted = fitted with { Multiplier = 2 };
+
+        var fittedLimit = double.IsFinite(fitted.FrameRateLimit) && fitted.FrameRateLimit > 0
+            ? Math.Round(Math.Clamp(fitted.FrameRateLimit, MinFrameRateLimit, MaxFrameRateLimit), 1, MidpointRounding.AwayFromZero)
+            : 0;
+        if (fittedLimit != fitted.FrameRateLimit)
+            fitted = fitted with { FrameRateLimit = fittedLimit };
 
         return fitted;
     }
@@ -299,6 +311,13 @@ public sealed record UpscalerSettings
             ? (Math.Clamp(Multiplier, 2, 4) - 1).ToString(CultureInfo.InvariantCulture)
             : Auto);
 
+        var limit = double.IsFinite(FrameRateLimit) && FrameRateLimit > 0
+            ? Math.Round(Math.Clamp(FrameRateLimit, MinFrameRateLimit, MaxFrameRateLimit), 1, MidpointRounding.AwayFromZero)
+            : 0;
+        ini.Set("Framerate", "FramerateLimit", limit > 0
+            ? limit.ToString("0.#", CultureInfo.InvariantCulture)
+            : Auto);
+
         // Spoof Nvidia across both DXGI and Vulkan so DLSS options unlock in Vulkan games as well as DirectX games.
         ini.Set("Spoofing", "Dxgi", SpoofNvidia ? Auto : "false");
         ini.Set("Spoofing", "Vulkan", SpoofNvidia ? "true" : "false");
@@ -379,6 +398,12 @@ public sealed record UpscalerSettings
             Multiplier = frameGen == FrameGenChoice.XeFG && int.TryParse(ini.Get("XeFG", "InterpolationCount"), out var made)
                 ? Math.Clamp(made + 1, 2, 4)
                 : Multiplier,
+
+            FrameRateLimit = double.TryParse(ini.Get("Framerate", "FramerateLimit"), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedLimit)
+                && double.IsFinite(parsedLimit)
+                && parsedLimit >= 1.0
+                ? Math.Round(Math.Clamp(parsedLimit, MinFrameRateLimit, MaxFrameRateLimit), 1, MidpointRounding.AwayFromZero)
+                : 0,
 
             SpoofNvidia = !Is(ini.Get("Spoofing", "Dxgi"), "false"),
 

@@ -328,6 +328,10 @@ public static class Strings
     public static string SourceXefgDetail => Find();
 
     public static string InGameHeading => Find();
+    public static string FrameCapVrr => Find();
+    public static string OptiScalerCapNote => Find();
+    public static string OptiScalerCapVrrNote(double fps, int hz) =>
+        Fill(Find(), fps.ToString("0.#", CultureInfo.CurrentCulture), hz);
     public static string SpoofNvidia => Find();
     public static string SpoofNvidiaDetail => Find();
     public static string OptiPatcher => Find();
@@ -576,6 +580,7 @@ public static class Strings
     public static string RtssCapCustom => Find();
     public static string RtssCapSlider => Find();
     public static string RtssCapNote => Find();
+    public static string RtssCapVrrNote(int fps, int hz) => Fill(Find(), fps, hz);
     public static string RtssFpsShort(int fps) => Fill(Find(), fps);
     public static string RtssOsdOn => Find();
 

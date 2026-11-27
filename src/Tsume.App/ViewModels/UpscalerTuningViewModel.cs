@@ -1,7 +1,9 @@
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Tsume.App.Language;
 using Tsume.App.Mvvm;
+using Tsume.App.Platform;
 using Tsume.Upscaling;
 using Tsume.Upscaling.Config;
 using Tsume.Upscaling.Install;
@@ -17,19 +19,33 @@ public sealed record ProxyOption(string Value, string Label, string Hint);
 /// </summary>
 public sealed class UpscalerTuningViewModel : Observable
 {
+    public const double MinCustomFps = UpscalerSettings.MinFrameRateLimit;
+    public const double MaxCustomFps = UpscalerSettings.MaxFrameRateLimit;
+
+    private static readonly int[] CapPresets = [0, 30, 40, 60];
+    private static readonly int VrrCapIndex = CapPresets.Length;
+    private static readonly int CustomCapIndex = CapPresets.Length + 1;
+    private static readonly IReadOnlySet<int> DisabledVrrCap = new HashSet<int> { VrrCapIndex };
     private static readonly IReadOnlySet<int> DisabledXmx = new HashSet<int> { (int)UpscalerChoice.Fsr4Xmx };
     private static readonly IReadOnlySet<int> DisabledMultiFrame = new HashSet<int> { 1, 2 };
     private static readonly ProxyOption AsiProxyOption = new(ProxyNames.AsiName, ProxyNames.AsiName, Strings.ProxyAsiHint);
 
     private readonly List<ProxyOption> _standardProxyOptions;
     private readonly IReadOnlyList<ProxyOption> _asiProxyOptions;
+    private readonly DispatcherTimer _capSettle = new() { Interval = TimeSpan.FromMilliseconds(220) };
     private bool _loading;
     private string? _lockedProxy;
     private HashSet<string>? _occupiedProxies;
     private bool _xmxAvailableToAdd;
+    private int _frameCapIndex;
+    private double _customCap = 45;
+    private int _displayRefreshHz;
+    private double _vrrCap;
 
     public UpscalerTuningViewModel()
     {
+        _capSettle.Tick += (_, _) => FlushPendingCap();
+
         ToggleSpoof = new Command(() => Change(Settings with { SpoofNvidia = !Settings.SpoofNvidia }));
         ToggleOptiPatcher = new Command(() =>
         {
@@ -69,6 +85,7 @@ public sealed class UpscalerTuningViewModel : Observable
         string? lockedProxy = null, bool xmxAvailableToAdd = false, bool showOptiPatcher = true,
         IReadOnlyList<string>? occupiedProxies = null)
     {
+        _capSettle.Stop();
         _loading = true;
         HasXmx = SupportsXmx && hasXmx;
         HasOptiPatcher = hasOptiPatcher;
@@ -80,8 +97,54 @@ public sealed class UpscalerTuningViewModel : Observable
             ? occupiedProxies.ToHashSet(StringComparer.OrdinalIgnoreCase)
             : null;
         Settings = settings.Fitting(HasXmx, hasOptiPatcher);
+
+        RefreshDisplayVrrCap();
+
+        var presetIndex = FindCapPresetIndex(Settings.FrameRateLimit);
+        if (presetIndex >= 0)
+        {
+            _frameCapIndex = presetIndex;
+        }
+        else if (_vrrCap > 0 && Math.Abs(Settings.FrameRateLimit - _vrrCap) < 0.05)
+        {
+            _frameCapIndex = VrrCapIndex;
+        }
+        else
+        {
+            _customCap = Math.Clamp(Math.Round(Settings.FrameRateLimit), UpscalerSettings.MinFrameRateLimit, UpscalerSettings.MaxFrameRateLimit);
+            _frameCapIndex = CustomCapIndex;
+        }
+
         Notify("");   // every control reads its value again
         _loading = false;
+    }
+
+    private static int FindCapPresetIndex(double fps)
+    {
+        for (var i = 0; i < CapPresets.Length; i++)
+        {
+            if (Math.Abs(fps - CapPresets[i]) < 0.05) return i;
+        }
+        return -1;
+    }
+
+    /// <summary>Applies any pending custom frame-rate cap immediately.</summary>
+    public void FlushPendingCap()
+    {
+        if (!_capSettle.IsEnabled) return;
+        _capSettle.Stop();
+        if (!_loading && ShowsCustomCapSlider)
+            Change(Settings with { FrameRateLimit = _customCap });
+    }
+
+    private void RefreshDisplayVrrCap()
+    {
+        _displayRefreshHz = DisplayMode.CurrentRefreshRate();
+        _vrrCap = DisplayMode.OptiScalerVrrFrameRateLimit(
+            _displayRefreshHz,
+            roundToWholeFps: GpuVendor.HasAmdGpu(),
+            minFps: UpscalerSettings.MinFrameRateLimit,
+            maxFps: UpscalerSettings.MaxFrameRateLimit);
     }
 
     private void Change(UpscalerSettings next)
@@ -217,6 +280,70 @@ public sealed class UpscalerTuningViewModel : Observable
     public string MultiplierHint => SupportsMultiFrame ? "" : Strings.MultiplierIntelOnly;
 
     public Visibility MultiplierHintShown => MultiplierHint.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    public IReadOnlyList<string> FrameCapModes { get; } =
+    [
+        Strings.ChoiceOff,
+        "30",
+        "40",
+        "60",
+        Strings.FrameCapVrr,
+        Strings.RtssCapCustom,
+    ];
+
+    public IReadOnlySet<int>? DisabledFrameCapModes => _vrrCap > 0 ? null : DisabledVrrCap;
+
+    public int FrameCapIndex
+    {
+        get => _frameCapIndex;
+        set
+        {
+            var clamped = Math.Clamp(value, 0, FrameCapModes.Count - 1);
+            if (clamped == VrrCapIndex && !_loading)
+            {
+                RefreshDisplayVrrCap();
+                if (_vrrCap <= 0)
+                {
+                    Notify(nameof(DisabledFrameCapModes));
+                    Notify(nameof(FrameCapNote));
+                    Notify(nameof(FrameCapIndex));
+                    return;
+                }
+            }
+
+            if (!Set(ref _frameCapIndex, clamped)) return;
+
+            Notify(nameof(ShowsCustomCapSlider));
+            Notify(nameof(FrameCapNote));
+
+            if (_loading) return;
+
+            _capSettle.Stop();
+            var targetFps = clamped < CapPresets.Length ? CapPresets[clamped]
+                : clamped == VrrCapIndex ? _vrrCap
+                : _customCap;
+            Change(Settings with { FrameRateLimit = targetFps });
+        }
+    }
+
+    public bool ShowsCustomCapSlider => _frameCapIndex == CustomCapIndex;
+
+    public string FrameCapNote => _frameCapIndex == VrrCapIndex && _vrrCap > 0
+        ? Strings.OptiScalerCapVrrNote(_vrrCap, _displayRefreshHz)
+        : Strings.OptiScalerCapNote;
+
+    public double CustomCap
+    {
+        get => _customCap;
+        set
+        {
+            var rounded = Math.Clamp(Math.Round(value), MinCustomFps, MaxCustomFps);
+            if (!Set(ref _customCap, rounded) || _loading || !ShowsCustomCapSlider) return;
+
+            _capSettle.Stop();
+            _capSettle.Start();
+        }
+    }
 
     public ICommand ToggleSpoof { get; }
 

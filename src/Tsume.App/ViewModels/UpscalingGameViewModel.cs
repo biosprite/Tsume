@@ -111,8 +111,13 @@ public sealed class UpscalingGameViewModel : LayerViewModel
     public ICommand TakeOffList { get; }
     public ICommand OpenFolder { get; }
 
+    protected override void OnClosed() => Tuning.FlushPendingCap();
+
+    public override void FlushPending() => Tuning.FlushPendingCap();
+
     public async void Show(ListedGame listed)
     {
+        Tuning.FlushPendingCap();
         _listed = listed;
         Status = "";
 
@@ -318,6 +323,7 @@ public sealed class UpscalingGameViewModel : LayerViewModel
     private async Task RunAsync(Func<Task> action)
     {
         if (_listed is null || _hub.IsBusy) return;
+        Tuning.FlushPendingCap();
         _hub.IsBusy = true;
 
         try

@@ -433,6 +433,12 @@
   <data name="SourceFsrDetail" xml:space="preserve"><value>Uses the game's FSR Frame Generation. Enable it in-game.</value></data>
   <data name="SourceXefgDetail" xml:space="preserve"><value>Uses the game's XeSS Frame Generation. Enable it in-game.</value></data>
   <data name="InGameHeading" xml:space="preserve"><value>IN THE GAME</value></data>
+  <data name="FrameCapVrr" xml:space="preserve"><value>VRR</value></data>
+  <data name="OptiScalerCapNote" xml:space="preserve"><value>Uses OptiScaler's low-latency limiter. Works better with frame generation than RTSS.</value></data>
+  <data name="OptiScalerCapVrrNote" xml:space="preserve">
+    <value>Caps at {0} FPS for your {1} Hz display using OptiScaler's low-latency limiter.</value>
+    <comment>{0} = calculated FPS cap, {1} = display refresh rate in Hz</comment>
+  </data>
   <data name="SpoofNvidia" xml:space="preserve"><value>Pose as an Nvidia card</value></data>
   <data name="SpoofNvidiaDetail" xml:space="preserve"><value>Lets DirectX and Vulkan games show DLSS options for OptiScaler</value></data>
   <data name="OptiPatcher" xml:space="preserve"><value>OptiPatcher</value></data>
@@ -808,6 +814,10 @@
   <data name="RtssCapCustom" xml:space="preserve"><value>Custom</value></data>
   <data name="RtssCapSlider" xml:space="preserve"><value>Limit</value></data>
   <data name="RtssCapNote" xml:space="preserve"><value>Sets RTSS's global frame-rate cap. Works with Tsume's overlay or your own.</value></data>
+  <data name="RtssCapVrrNote" xml:space="preserve">
+    <value>Caps at {0} FPS for your {1} Hz display via RTSS's global frame-rate cap.</value>
+    <comment>{0} = calculated FPS cap, {1} = display refresh rate in Hz</comment>
+  </data>
   <data name="RtssFpsShort" xml:space="preserve">
     <value>{0} FPS</value>
     <comment>{0} = frame rate cap in frames per second</comment>

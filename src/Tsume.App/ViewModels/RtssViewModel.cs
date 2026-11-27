@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using Tsume.App.Language;
 using Tsume.App.Mvvm;
+using Tsume.App.Platform;
 using Tsume.App.Platform.Rtss;
 
 namespace Tsume.App.ViewModels;
@@ -19,6 +20,9 @@ public sealed class RtssViewModel : LayerViewModel
     public const double MaxCustomFps = RtssSettings.MaxCustomFps;
 
     private static readonly int[] CapPresets = [0, 30, 40, 60];
+    private static readonly int VrrCapIndex = CapPresets.Length;
+    private static readonly int CustomCapIndex = CapPresets.Length + 1;
+    private static readonly IReadOnlySet<int> DisabledVrrCap = new HashSet<int> { VrrCapIndex };
 
     private readonly RtssOverlayService _service;
     private readonly Func<Task> _dismiss;
@@ -31,6 +35,8 @@ public sealed class RtssViewModel : LayerViewModel
     private bool _togglingStartup;
     private int? _excludedGamesCount;
     private string? _downloadedInstaller;
+    private int _displayRefreshHz;
+    private int _vrrCap;
 
     // Minimum gap between winget update checks, so reopening the pages never spams winget.
     private const long UpdateCheckSpacing = 5000;
@@ -46,7 +52,11 @@ public sealed class RtssViewModel : LayerViewModel
         _service.ConflictChanged += () => Application.Current?.Dispatcher.InvokeAsync(NotifyConflict);
         _service.OverlayStateChanged += () => Application.Current?.Dispatcher.InvokeAsync(SyncFromService);
 
-        _capSettle.Tick += (_, _) => { _capSettle.Stop(); ApplyFrameRateLimit(CustomCap); };
+        _capSettle.Tick += (_, _) =>
+        {
+            _capSettle.Stop();
+            if (ShowsCustomCapSlider) ApplyFrameRateLimit(CustomCap);
+        };
 
         OpenDownloadPage = new AsyncCommand(async () =>
         {
@@ -184,8 +194,11 @@ public sealed class RtssViewModel : LayerViewModel
         "30",
         "40",
         "60",
+        Strings.FrameCapVrr,
         Strings.RtssCapCustom,
     ];
+
+    public IReadOnlySet<int>? DisabledFrameCapModes => _vrrCap > 0 ? null : DisabledVrrCap;
 
     public bool IsInstalled
     {
@@ -583,18 +596,38 @@ public sealed class RtssViewModel : LayerViewModel
         set
         {
             var clamped = Math.Clamp(value, 0, FrameCapModes.Count - 1);
+            if (clamped == VrrCapIndex && !_absorbing)
+            {
+                RefreshDisplayVrrCap();
+                if (_vrrCap <= 0)
+                {
+                    Notify(nameof(DisabledFrameCapModes));
+                    Notify(nameof(FrameCapNote));
+                    Notify(nameof(FrameCapIndex));
+                    return;
+                }
+            }
+
             if (!Set(ref field, clamped)) return;
 
             Notify(nameof(ShowsCustomCapSlider));
+            Notify(nameof(FrameCapNote));
 
             if (_absorbing) return;
 
-            var targetFps = clamped < CapPresets.Length ? CapPresets[clamped] : (int)CustomCap;
+            _capSettle.Stop();
+            var targetFps = clamped < CapPresets.Length ? CapPresets[clamped]
+                : clamped == VrrCapIndex ? _vrrCap
+                : (int)CustomCap;
             ApplyFrameRateLimit(targetFps);
         }
     }
 
-    public bool ShowsCustomCapSlider => FrameCapIndex == CapPresets.Length;
+    public bool ShowsCustomCapSlider => FrameCapIndex == CustomCapIndex;
+
+    public string FrameCapNote => FrameCapIndex == VrrCapIndex && _vrrCap > 0
+        ? Strings.RtssCapVrrNote(_vrrCap, _displayRefreshHz)
+        : Strings.RtssCapNote;
 
     public double CustomCap
     {
@@ -775,6 +808,7 @@ public sealed class RtssViewModel : LayerViewModel
         }
 
         _absorbing = true;
+        RefreshDisplayVrrCap();
         var settings = _service.Settings;
         UseTsumeOverlay = settings.UseTsumeOverlay;
         SkipAntiCheatGames = settings.SkipAntiCheatGames;
@@ -791,10 +825,14 @@ public sealed class RtssViewModel : LayerViewModel
             {
                 FrameCapIndex = presetIndex;
             }
+            else if (_vrrCap > 0 && cap == _vrrCap)
+            {
+                FrameCapIndex = VrrCapIndex;
+            }
             else
             {
                 CustomCap = Math.Clamp(cap, RtssSettings.MinCustomFps, RtssSettings.MaxCustomFps);
-                FrameCapIndex = CapPresets.Length;
+                FrameCapIndex = CustomCapIndex;
             }
         }
         else if (!running)
@@ -803,8 +841,16 @@ public sealed class RtssViewModel : LayerViewModel
         }
         _absorbing = false;
 
+        Notify(nameof(DisabledFrameCapModes));
+        Notify(nameof(FrameCapNote));
         SyncPlacementState();
         NotifyTile();
+    }
+
+    private void RefreshDisplayVrrCap()
+    {
+        _displayRefreshHz = DisplayMode.CurrentRefreshRate();
+        _vrrCap = DisplayMode.VrrFrameRateLimit(_displayRefreshHz, RtssSettings.MinCustomFps, RtssSettings.MaxCustomFps);
     }
 
     private void SyncFromService()
@@ -1285,7 +1331,7 @@ public sealed class RtssViewModel : LayerViewModel
         else
         {
             CustomCap = Math.Clamp(frameRateLimit, RtssSettings.MinCustomFps, RtssSettings.MaxCustomFps);
-            FrameCapIndex = CapPresets.Length;
+            FrameCapIndex = CustomCapIndex;
         }
 
         Status = DefaultStatus();

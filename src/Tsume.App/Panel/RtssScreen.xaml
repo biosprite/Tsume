@@ -244,7 +244,9 @@
                          Margin="4,22,0,10" />
 
               <controls:SegmentedControl AutomationProperties.Name="{x:Static lang:Strings.RtssFrameCapHeading}"
-                                         Segments="{Binding FrameCapModes}" SelectedIndex="{Binding FrameCapIndex}" />
+                                         Segments="{Binding FrameCapModes}"
+                                         DisabledIndices="{Binding DisabledFrameCapModes}"
+                                         SelectedIndex="{Binding FrameCapIndex}" />
 
               <controls:Reveal IsOpen="{Binding ShowsCustomCapSlider}">
                 <controls:LevelSlider Glyph="{x:Static theme:Glyphs.RefreshRate}"
@@ -258,7 +260,7 @@
               </controls:Reveal>
 
               <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
-                         Text="{x:Static lang:Strings.RtssCapNote}" Margin="6,6,6,0" />
+                         Text="{Binding FrameCapNote}" Margin="6,6,6,0" />
 
             </StackPanel>
           </controls:Reveal>

@@ -4,6 +4,7 @@
              xmlns:controls="clr-namespace:Tsume.App.Controls"
              xmlns:theme="clr-namespace:Tsume.App.Theme"
              xmlns:lang="clr-namespace:Tsume.App.Language"
+             xmlns:vm="clr-namespace:Tsume.App.ViewModels"
              Focusable="False">
 
   <!-- The OptiScaler settings Tsume manages. Used on each game's page and the defaults page;
@@ -73,6 +74,28 @@
                    Text="{Binding MultiplierHint}" Visibility="{Binding MultiplierHintShown}" Margin="6,4,6,0" />
       </StackPanel>
     </controls:Reveal>
+
+    <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.RtssFrameCapHeading}"
+               Margin="4,24,0,10" />
+
+    <controls:SegmentedControl AutomationProperties.Name="{x:Static lang:Strings.RtssFrameCapHeading}"
+                               Segments="{Binding FrameCapModes}"
+                               DisabledIndices="{Binding DisabledFrameCapModes}"
+                               SelectedIndex="{Binding FrameCapIndex}" />
+
+    <controls:Reveal IsOpen="{Binding ShowsCustomCapSlider}">
+      <controls:LevelSlider Glyph="{x:Static theme:Glyphs.RefreshRate}"
+                            Label="{x:Static lang:Strings.RtssCapSlider}" Unit=" FPS"
+                            AutomationProperties.Name="{x:Static lang:Strings.RtssCapSlider}"
+                            Minimum="{x:Static vm:UpscalerTuningViewModel.MinCustomFps}"
+                            Maximum="{x:Static vm:UpscalerTuningViewModel.MaxCustomFps}"
+                            LargeChange="1"
+                            Value="{Binding CustomCap}"
+                            Margin="0,8,0,0" />
+    </controls:Reveal>
+
+    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
+               Text="{Binding FrameCapNote}" Margin="6,6,6,0" />
 
     <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.InGameHeading}"
                Margin="4,24,0,10" />

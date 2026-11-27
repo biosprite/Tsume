@@ -1,3 +1,4 @@
+using Tsume.App.Platform;
 using Tsume.Upscaling.Config;
 using Tsume.Upscaling.Install;
 using Tsume.Upscaling.Xmx;
@@ -102,6 +103,7 @@ public sealed class UpscalerSettingsTests
             FrameGen = FrameGenChoice.XeFG,
             Source = FrameGenSource.Upscaler,
             Multiplier = 3,
+            FrameRateLimit = 60,
             SpoofNvidia = true,
             OptiPatcher = true,
         };
@@ -120,6 +122,7 @@ public sealed class UpscalerSettingsTests
         Assert.Equal("upscaler", ini.Get("FrameGen", "FGInput"));
         Assert.Equal("false", ini.Get("Hotfix", "DisableOverlays"));
         Assert.Equal("2", ini.Get("XeFG", "InterpolationCount"));
+        Assert.Equal("60", ini.Get("Framerate", "FramerateLimit"));
         Assert.Equal("auto", ini.Get("Spoofing", "Dxgi"));
         Assert.Equal("true", ini.Get("Spoofing", "Vulkan"));
         Assert.Equal("true", ini.Get("Spoofing", "VulkanExtensionSpoofing"));
@@ -132,6 +135,7 @@ public sealed class UpscalerSettingsTests
         Assert.Equal(settings.FrameGen, roundTripped.FrameGen);
         Assert.Equal(settings.Source, roundTripped.Source);
         Assert.Equal(settings.Multiplier, roundTripped.Multiplier);
+        Assert.Equal(settings.FrameRateLimit, roundTripped.FrameRateLimit);
         Assert.Equal(settings.SpoofNvidia, roundTripped.SpoofNvidia);
         Assert.Equal(settings.OptiPatcher, roundTripped.OptiPatcher);
     }
@@ -187,5 +191,89 @@ public sealed class UpscalerSettingsTests
 
         Assert.Equal("xess_12", ini.Get("Upscalers", "Dx11Upscaler"));
         Assert.Equal("xess", ini.Get("Upscalers", "Dx12Upscaler"));
+    }
+
+    [Theory]
+    [InlineData("auto", 0)]
+    [InlineData("0", 0)]
+    [InlineData("0.0", 0)]
+    [InlineData("60", 60)]
+    [InlineData("60.0", 60)]
+    [InlineData("58.9", 58.9)]
+    [InlineData("115.8", 115.8)]
+    [InlineData("59.64", 59.6)]
+    [InlineData("5", UpscalerSettings.MinFrameRateLimit)]
+    [InlineData("500", UpscalerSettings.MaxFrameRateLimit)]
+    [InlineData("1e20", UpscalerSettings.MaxFrameRateLimit)]
+    [InlineData("Infinity", 0)]
+    [InlineData("-Infinity", 0)]
+    [InlineData("NaN", 0)]
+    public void CorrectedBy_ParsesAndClampsFrameRateLimit(string raw, double expected)
+    {
+        var ini = IniFile.Parse($"[Framerate]\nFramerateLimit={raw}\n");
+        var read = new UpscalerSettings().CorrectedBy(ini);
+        Assert.Equal(expected, read.FrameRateLimit);
+    }
+
+    [Fact]
+    public void WriteTo_PreservesOneDecimalForFractionalFrameRateLimit()
+    {
+        var ini = IniFile.Parse("");
+        var settings = new UpscalerSettings { FrameRateLimit = 115.8 };
+
+        settings.WriteTo(ini);
+
+        Assert.Equal("115.8", ini.Get("Framerate", "FramerateLimit"));
+        Assert.Equal(115.8, new UpscalerSettings().CorrectedBy(ini).FrameRateLimit);
+    }
+
+    [Fact]
+    public void WriteTo_WritesAutoWhenFrameRateLimitIsOff()
+    {
+        var ini = IniFile.Parse("[Framerate]\nFramerateLimit=60.0\n");
+        var settings = new UpscalerSettings { FrameRateLimit = 0 };
+
+        settings.WriteTo(ini);
+
+        Assert.Equal("auto", ini.Get("Framerate", "FramerateLimit"));
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(14, 0)]
+    [InlineData(48, 47)]
+    [InlineData(60, 59)]
+    [InlineData(90, 87)]
+    [InlineData(120, 116)]
+    [InlineData(144, 138)]
+    [InlineData(165, 157)]
+    [InlineData(240, 224)]
+    public void VrrFrameRateLimit_UsesReflexCeilingFormula(int refreshHz, int expected)
+    {
+        Assert.Equal(expected, DisplayMode.VrrFrameRateLimit(refreshHz));
+    }
+
+    [Theory]
+    [InlineData(0, false, 0)]
+    [InlineData(14, false, 0)]
+    [InlineData(48, false, 47.3)]
+    [InlineData(48, true, 47)]
+    [InlineData(60, false, 58.9)]
+    [InlineData(60, true, 59)]
+    [InlineData(90, false, 87.6)]
+    [InlineData(90, true, 88)]
+    [InlineData(120, false, 115.8)]
+    [InlineData(120, true, 116)]
+    [InlineData(144, false, 138)]
+    [InlineData(144, true, 138)]
+    [InlineData(165, false, 157.2)]
+    [InlineData(165, true, 157)]
+    [InlineData(180, false, 170.8)]
+    [InlineData(180, true, 171)]
+    [InlineData(240, false, 223.9)]
+    [InlineData(240, true, 224)]
+    public void OptiScalerVrrFrameRateLimit_MatchesOptiScalerCalculator(int refreshHz, bool roundToWholeFps, double expected)
+    {
+        Assert.Equal(expected, DisplayMode.OptiScalerVrrFrameRateLimit(refreshHz, roundToWholeFps));
     }
 }

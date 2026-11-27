@@ -11,7 +11,7 @@ namespace Tsume.App.Platform.Rtss;
 /// <param name="Folder">The RTSS install folder.</param>
 /// <param name="Executable">Full path to <c>RTSS.exe</c>.</param>
 /// <param name="HooksDll">Full path to <c>RTSSHooks64.dll</c>, or null if absent.</param>
-/// <param name="Version">Version string from <c>RTSS.exe</c> (e.g. "7.3.7"), or empty if unknown.</param>
+/// <param name="Version">Installed RTSS version (e.g. "7.3.7"), or empty if unknown.</param>
 public sealed record RtssInstallInfo(string Folder, string Executable, string? HooksDll, string Version);
 
 /// <summary>
@@ -477,7 +477,7 @@ public static class RtssInstallation
             if (!File.Exists(exe)) return null;
 
             var hooks = Path.Combine(folder, Hooks64Name);
-            var version = ReadVersion(exe);
+            var version = ReadVersion(folder, exe);
 
             return new RtssInstallInfo(folder, exe, File.Exists(hooks) ? hooks : null, version);
         }
@@ -487,8 +487,13 @@ public static class RtssInstallation
         }
     }
 
-    private static string ReadVersion(string exePath)
+    private static string ReadVersion(string folder, string exePath)
     {
+        // Prefer the installer's recorded version in the registry: RTSS.exe's embedded PE version
+        // resource is not always bumped on point releases (e.g. RTSS 7.3.7 ships with 7.3.5.x).
+        if (ReadVersionFromRegistry(folder) is { Length: > 0 } regVersion)
+            return regVersion;
+
         try
         {
             var info = FileVersionInfo.GetVersionInfo(exePath);
@@ -501,6 +506,77 @@ public static class RtssInstallation
         {
             return "";
         }
+    }
+
+    private static string? ReadVersionFromRegistry(string folder)
+    {
+        string[] directKeys =
+        [
+            @"SOFTWARE\WOW6432Node\Unwinder\RTSS",
+            @"SOFTWARE\Unwinder\RTSS",
+        ];
+
+        foreach (var subKey in directKeys)
+        {
+            try
+            {
+                using var key = Registry.LocalMachine.OpenSubKey(subKey);
+                if (key is null) continue;
+
+                var matchesFolder = SameFolder(NormalizeFolder(key.GetValue("InstallDir") as string), folder)
+                    || SameFolder(NormalizeFolder(key.GetValue("InstallPath") as string), folder);
+                if (!matchesFolder) continue;
+
+                if (key.GetValue("ProductVersion") is string version && !string.IsNullOrWhiteSpace(version))
+                    return version.Trim();
+            }
+            catch (Exception error) when (error is System.Security.SecurityException or UnauthorizedAccessException) { }
+        }
+
+        string[] uninstallRoots =
+        [
+            @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+            @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+        ];
+
+        foreach (var root in uninstallRoots)
+        {
+            try
+            {
+                using var parent = Registry.LocalMachine.OpenSubKey(root);
+                if (parent is null) continue;
+
+                foreach (var name in parent.GetSubKeyNames())
+                {
+                    try
+                    {
+                        using var entry = parent.OpenSubKey(name);
+                        var display = entry?.GetValue("DisplayName") as string;
+                        if (display is null || !display.Contains("RivaTuner", StringComparison.OrdinalIgnoreCase)) continue;
+
+                        var matchesFolder = SameFolder(NormalizeFolder(entry?.GetValue("InstallLocation") as string), folder)
+                            || SameFolder(NormalizeFolder(ExecutableIn(entry?.GetValue("UninstallString") as string)), folder);
+                        if (!matchesFolder) continue;
+
+                        if (entry?.GetValue("DisplayVersion") is string version && !string.IsNullOrWhiteSpace(version))
+                            return version.Trim();
+                    }
+                    catch (Exception error) when (error is System.Security.SecurityException or UnauthorizedAccessException) { }
+                }
+            }
+            catch (Exception error) when (error is System.Security.SecurityException or UnauthorizedAccessException) { }
+        }
+
+        return null;
+    }
+
+    private static bool SameFolder(string? a, string? b)
+    {
+        if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b)) return false;
+        return string.Equals(
+            Path.TrimEndingDirectorySeparator(a.Trim()),
+            Path.TrimEndingDirectorySeparator(b.Trim()),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? DownloadsFolder()

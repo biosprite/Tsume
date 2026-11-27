@@ -29,4 +29,8 @@ public sealed class UpscalingDefaultsViewModel : LayerViewModel
         hasXmx: Tsume.Upscaling.GpuVendor.HasIntelXmxGpu() && _hub.Xmx.Current() is not null,
         hasOptiPatcher: false,
         showOptiPatcher: false);
+
+    protected override void OnClosed() => Tuning.FlushPendingCap();
+
+    public override void FlushPending() => Tuning.FlushPendingCap();
 }
