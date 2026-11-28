@@ -11,7 +11,7 @@
   <StackPanel DataContext="{Binding Quit}">
 
     <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" TextTrimming="None"
-               Text="{x:Static lang:Strings.QuitExplanation}" Margin="10,0,10,12" />
+               Text="{Binding Explanation}" Margin="10,0,10,12" />
 
     <controls:Tile Style="{StaticResource Tile.Row}"
                    Glyph="{x:Static theme:Glyphs.Back}" Label="{x:Static lang:Strings.KeepRunning}"

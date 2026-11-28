@@ -123,7 +123,12 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
 
     public string GameBarButtonLabel => _controls?.GameBarButtonLabel ?? Strings.GameBarButton;
 
-    public string OemButtonLabel => _controls?.OemButtonLabel ?? Strings.MButton;
+    public string OemButtonLabel => OemButtonLabelFor(_controls);
+
+    public static string OemButtonLabelFor(ControlsProfile? controls) =>
+        controls?.EffectiveOemSoftware == OemSoftwareKind.AcerPredatorSense
+            ? Strings.OemButton
+            : controls?.OemButtonLabel ?? Strings.MButton;
 
     public ObservableCollection<HardwareButtonOption> GameBarOptions { get; }
 

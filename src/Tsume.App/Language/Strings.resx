@@ -270,6 +270,7 @@
 
   <data name="QuitHeading" xml:space="preserve"><value>QUIT TSUME?</value></data>
   <data name="QuitExplanation" xml:space="preserve"><value>The M button and shortcuts will stop opening the panel until Tsume is started again.</value></data>
+  <data name="QuitExplanationOem" xml:space="preserve"><value>The OEM button and shortcuts will stop opening the panel until Tsume is started again.</value></data>
   <data name="KeepRunning" xml:space="preserve"><value>Keep running</value></data>
 
   <!-- OptiScaler: the tile and its switch -->
@@ -957,16 +958,17 @@
   <data name="GameBarAcerSenseWarning" xml:space="preserve"><value>PredatorSense is running and may still open its Quick Menu widget. Pause it in Settings</value></data>
 
   <data name="MButton" xml:space="preserve"><value>M button</value></data>
+  <data name="OemButton" xml:space="preserve"><value>OEM button</value></data>
   <data name="MButtonDefault" xml:space="preserve"><value>Open Tsume (Default)</value></data>
   <data name="MButtonXboxGameBar" xml:space="preserve"><value>Xbox Game Bar</value></data>
   <data name="MButtonDetailTsume" xml:space="preserve"><value>Short-press the M button to toggle Tsume (while MSI Center M is paused)</value></data>
   <data name="MButtonDetailCustom" xml:space="preserve"><value>Runs this action on short-press (while MSI Center M is paused)</value></data>
   <data name="MButtonDetailDisabled" xml:space="preserve"><value>M button is ignored by Tsume</value></data>
   <data name="MButtonMsiCenterWarning" xml:space="preserve"><value>MSI Center M is running and owns the M button. Pause it in Settings to remap</value></data>
-  <data name="MButtonAcerSenseWarning" xml:space="preserve"><value>PredatorSense is running and owns the PredatorSense button. Pause it in Settings to remap</value></data>
-  <data name="PredatorButtonDetailTsume" xml:space="preserve"><value>Short-press the PredatorSense button to toggle Tsume (while PredatorSense is paused)</value></data>
+  <data name="MButtonAcerSenseWarning" xml:space="preserve"><value>PredatorSense is running and owns the OEM button. Pause it in Settings to remap</value></data>
+  <data name="PredatorButtonDetailTsume" xml:space="preserve"><value>Short-press the OEM button to toggle Tsume (while PredatorSense is paused)</value></data>
   <data name="PredatorButtonDetailCustom" xml:space="preserve"><value>Runs this action on short-press (while PredatorSense is paused)</value></data>
-  <data name="PredatorButtonDetailDisabled" xml:space="preserve"><value>PredatorSense button is ignored by Tsume</value></data>
+  <data name="PredatorButtonDetailDisabled" xml:space="preserve"><value>OEM button is ignored by Tsume</value></data>
 
   <data name="BackButtonsHeading" xml:space="preserve"><value>BACK BUTTONS</value></data>
   <data name="BackButtonUnbound" xml:space="preserve"><value>Unbound</value></data>

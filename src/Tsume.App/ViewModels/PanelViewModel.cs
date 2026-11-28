@@ -50,7 +50,7 @@ public sealed class PanelViewModel : IDisposable
         PadMode = new PadModeViewModel(padIsolation);
         Upscaling = new UpscalingViewModel(dismiss);
         Rtss = new RtssViewModel(_rtssService, dismiss);
-        Quit = new QuitViewModel(quit);
+        Quit = new QuitViewModel(Performance, quit);
 
         Actions.InitializeTiles(Performance, Lighting, PadMode, Upscaling, Rtss, Levels, CpuBoost);
         var mainTiles = Settings.Controls.MainTilesPage;

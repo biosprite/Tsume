@@ -191,6 +191,7 @@ public static class Strings
 
     public static string QuitHeading => Find();
     public static string QuitExplanation => Find();
+    public static string QuitExplanationOem => Find();
     public static string KeepRunning => Find();
 
     public static string OptiScaler => Find();
@@ -679,6 +680,7 @@ public static class Strings
     public static string GameBarMsiCenterWarning => Find();
     public static string GameBarAcerSenseWarning => Find();
     public static string MButton => Find();
+    public static string OemButton => Find();
     public static string MButtonDefault => Find();
     public static string MButtonXboxGameBar => Find();
     public static string MButtonDetailTsume => Find();

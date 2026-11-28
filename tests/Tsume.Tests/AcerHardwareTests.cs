@@ -46,6 +46,7 @@ public sealed class AcerHardwareTests
         var controls = board.Profile.Controls;
         Assert.NotNull(controls);
         Assert.True(controls.HasOemButton);
+        Assert.Equal("OEM button", controls.OemButtonLabel);
         Assert.True(controls.HasGameBarButton);
         Assert.True(controls.HasAcerHidButtons);
         Assert.Equal(OemSoftwareKind.AcerPredatorSense, controls.EffectiveOemSoftware);
@@ -590,23 +591,70 @@ public sealed class AcerHardwareTests
     }
 
     [Fact]
-    public void SystemButtonsViewModel_OemButtonDetail_UsesPredatorSenseWordingOnAtlas8()
+    public void SystemButtonsViewModel_OemButtonLabelAndDetail_UsesOemWordingOnlyOnAcerDevices()
     {
         var acerControls = AcerBoards.Atlas8.Profile.Controls!;
+        var msiControls = MsiBoards.Claw8.Profile.Controls!;
         var openTsume = new Tsume.App.ViewModels.HardwareButtonOption(HardwareButtonAction.OpenTsume, "Open Tsume");
         var screenshot = new Tsume.App.ViewModels.HardwareButtonOption(HardwareButtonAction.Screenshot, "Screenshot");
         var disabled = new Tsume.App.ViewModels.HardwareButtonOption(HardwareButtonAction.Disabled, "Disabled");
 
+        Assert.Equal("OEM button", Tsume.App.ViewModels.SystemButtonsViewModel.OemButtonLabelFor(acerControls));
+        Assert.Equal("OEM button", Tsume.App.ViewModels.SystemButtonsViewModel.OemButtonLabelFor(AcerBoards.Atlas8ArcG3.Profile.Controls));
+        Assert.Equal("OEM button", Tsume.App.ViewModels.SystemButtonsViewModel.OemButtonLabelFor(acerControls with { OemButtonLabel = "PredatorSense button" }));
+        Assert.Equal("M button", Tsume.App.ViewModels.SystemButtonsViewModel.OemButtonLabelFor(msiControls));
+        Assert.Equal("M button", Tsume.App.ViewModels.SystemButtonsViewModel.OemButtonLabelFor(MsiBoards.ClawA8.Profile.Controls));
+        Assert.Equal("M button", Tsume.App.ViewModels.SystemButtonsViewModel.OemButtonLabelFor(controls: null));
+
         var detailTsume = Tsume.App.ViewModels.SystemButtonsViewModel.OemButtonDetailFor(acerControls, openTsume, oemRuns: false);
         var detailCustom = Tsume.App.ViewModels.SystemButtonsViewModel.OemButtonDetailFor(acerControls, screenshot, oemRuns: false);
         var detailDisabled = Tsume.App.ViewModels.SystemButtonsViewModel.OemButtonDetailFor(acerControls, disabled, oemRuns: false);
+        var detailWarning = Tsume.App.ViewModels.SystemButtonsViewModel.OemButtonDetailFor(acerControls, openTsume, oemRuns: true);
 
+        Assert.Contains("OEM button", detailTsume);
         Assert.Contains("PredatorSense", detailTsume);
+        Assert.DoesNotMatch(@"\bM button\b", detailTsume);
         Assert.DoesNotContain("MSI", detailTsume);
+
         Assert.Contains("PredatorSense", detailCustom);
+        Assert.DoesNotMatch(@"\bM button\b", detailCustom);
         Assert.DoesNotContain("MSI", detailCustom);
-        Assert.Contains("PredatorSense", detailDisabled);
-        Assert.DoesNotContain("M button", detailDisabled);
+
+        Assert.Contains("OEM button", detailDisabled);
+        Assert.DoesNotMatch(@"\bM button\b", detailDisabled);
+        Assert.DoesNotContain("PredatorSense button", detailDisabled);
+
+        Assert.Contains("OEM button", detailWarning);
+        Assert.Contains("PredatorSense", detailWarning);
+        Assert.DoesNotMatch(@"\bM button\b", detailWarning);
+        Assert.DoesNotContain("PredatorSense button", detailWarning);
+
+        var msiDetailTsume = Tsume.App.ViewModels.SystemButtonsViewModel.OemButtonDetailFor(msiControls, openTsume, oemRuns: false);
+        var msiDetailDisabled = Tsume.App.ViewModels.SystemButtonsViewModel.OemButtonDetailFor(msiControls, disabled, oemRuns: false);
+        var msiDetailWarning = Tsume.App.ViewModels.SystemButtonsViewModel.OemButtonDetailFor(msiControls, openTsume, oemRuns: true);
+
+        Assert.Matches(@"\bM button\b", msiDetailTsume);
+        Assert.Matches(@"\bM button\b", msiDetailDisabled);
+        Assert.Matches(@"\bM button\b", msiDetailWarning);
+    }
+
+    [Fact]
+    public void QuitViewModel_Explanation_UsesOemButtonOnlyForAcerDevices()
+    {
+        var atlas8 = Tsume.App.ViewModels.QuitViewModel.ExplanationFor(AcerBoards.Atlas8.Profile);
+        var atlas8ArcG3 = Tsume.App.ViewModels.QuitViewModel.ExplanationFor(AcerBoards.Atlas8ArcG3.Profile);
+        var claw8 = Tsume.App.ViewModels.QuitViewModel.ExplanationFor(MsiBoards.Claw8.Profile);
+        var clawA8 = Tsume.App.ViewModels.QuitViewModel.ExplanationFor(MsiBoards.ClawA8.Profile);
+        var unknown = Tsume.App.ViewModels.QuitViewModel.ExplanationFor(DeviceProfile.Unknown);
+
+        Assert.Contains("OEM button", atlas8);
+        Assert.DoesNotMatch(@"\bM button\b", atlas8);
+        Assert.Equal(atlas8, atlas8ArcG3);
+
+        Assert.Matches(@"\bM button\b", claw8);
+        Assert.DoesNotContain("OEM button", claw8);
+        Assert.Equal(claw8, clawA8);
+        Assert.Equal(claw8, unknown);
     }
 
     [Fact]

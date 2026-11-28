@@ -64,7 +64,7 @@ public static class AcerBoards
                 GameBarButtonLabel = "Quick Menu button",
                 GameBarNativeWinG = false,
                 HasOemButton = true,
-                OemButtonLabel = "PredatorSense button",
+                OemButtonLabel = "OEM button",
                 OemSoftware = OemSoftwareKind.AcerPredatorSense,
                 HasAcerHidButtons = true,
                 LightingProtocol = ControlsProfile.AcerHidLighting,
