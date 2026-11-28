@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Tsume.Core\Tsume.Core.csproj" />
-    <PackageReference Include="System.Management" Version="10.0.14" />
+    <PackageReference Include="System.Management" Version="11.0.0" />
     <InternalsVisibleTo Include="Tsume.Tests" />
   </ItemGroup>
 
