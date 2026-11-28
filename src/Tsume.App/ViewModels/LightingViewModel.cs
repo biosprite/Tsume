@@ -314,13 +314,17 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
     {
         if (_disposed || !_usesAcerHid || _state.AcerLighting is not { } saved) return;
 
+        // Edits made before this call are already in `saved` (or still being written); only an edit made while
+        // this re-apply is waiting should win over it. `_changes` counts for the whole session, so compare to a snapshot.
+        var changesBefore = _changes;
+
         if (initialDelayMs > 0)
         {
             await Task.Delay(TimeSpan.FromMilliseconds(initialDelayMs));
             if (_disposed) return;
         }
 
-        if (_changes > 0 || _writing) return;
+        if (_changes != changesBefore || _writing) return;
         if (await Task.Run(() => AcerSense.IsLightingRunning) || _disposed) return;
 
         if (dropCachedFirst)
@@ -335,17 +339,17 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
         for (var attempt = 0; attempt < 3; attempt++)
         {
             acer = await ConnectAcerAsync(refreshIfIncomplete: true);
-            if (_disposed || _changes > 0 || _writing) return;
+            if (_disposed || _changes != changesBefore || _writing) return;
             if (acer is { HasSticks: true }) break;
 
             if (attempt + 1 < 3)
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(1500));
-                if (_disposed || _changes > 0 || _writing) return;
+                if (_disposed || _changes != changesBefore || _writing) return;
             }
         }
 
-        if (_disposed || acer is null || _changes > 0 || _writing) return;
+        if (_disposed || acer is null || _changes != changesBefore || _writing) return;
         Notify(nameof(ShowsSecondaryZone));
 
         await Task.Run(() => acer.Apply(saved));
