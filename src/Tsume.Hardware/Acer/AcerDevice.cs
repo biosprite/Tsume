@@ -26,7 +26,8 @@ public sealed class AcerDevice(
     AcerBoard board,
     bool enableFanLoop = true,
     TimeSpan? fanLoopInterval = null,
-    Func<bool>? isMakerToolRunning = null) : IDevice
+    Func<bool>? isMakerToolRunning = null,
+    Func<(bool OnBattery, int? Percent)>? readPowerState = null) : IDevice
 {
     /// <summary>PredatorSense processes that fight Tsume for modes and settings while active.</summary>
     private static readonly string[] PredatorSenseProcesses = ["Handheld.Desktop", "AcerAgentService"];
@@ -48,6 +49,15 @@ public sealed class AcerDevice(
 
     // OC Profile index for Manual mode (bytes f1=PL1 at 0..1, f3=PL2 at 4..5).
     public const byte ManualOcProfile = 3;
+
+    // EC low-battery PECI override (FUN_ram_00023b8c): on battery at RSOC <= 30 %, or on wall power at RSOC < 10 %,
+    // the EC sends 45 W / 65 W over PECI without reading OC Profile 3. In Manual, Intel DTT's limit is also 45/65 W,
+    // so nothing holds power down; native Quiet keeps DTT at 25–30 / 45 W. Windows' percentage can differ from the
+    // EC's RSOC by rounding, so fall back one point early; go back to Manual only once the level is
+    // LowBatteryHysteresisPercent above the threshold, so a level bouncing around it does not flip modes.
+    public const int LowBatteryOnBatteryPercent = 31;
+    public const int LowBatteryOnWallPercent = 10;
+    public const int LowBatteryHysteresisPercent = 2;
     private const int Pl1Offset = 0;
     private const int Pl2Offset = 4;
 
@@ -75,6 +85,10 @@ public sealed class AcerDevice(
     private bool _standbyPaused;
     private Timer? _fanLoopTimer;
 
+    // The limits last applied for the user's choice, and whether native Quiet stands in for them (low battery).
+    private PowerLimits? _appliedLimits;
+    private bool _quietFallback;
+
     /// <summary>
     /// Opens an Acer handheld when the board/system matches <see cref="AcerBoards"/> AND both the required
     /// EC HID power interface (<c>1025:174B</c>) and <c>AcerGamingFunction</c> WMI interface are present.
@@ -94,7 +108,8 @@ public sealed class AcerDevice(
             return null;
         }
 
-        return new AcerDevice(ecHid, wmi, known);
+        return new AcerDevice(ecHid, wmi, known,
+            readPowerState: () => (PowerSource.IsOnBattery(), PowerSource.BatteryPercent()));
     }
 
     public DeviceProfile Profile => board.Profile;
@@ -121,6 +136,8 @@ public sealed class AcerDevice(
     /// All modes apply through EC Usage Mode 3 (Manual) + OC Profile 3 so Tsume's MSI Claw EX watt presets
     /// (<c>12/15</c>, <c>25/28</c>, <c>32/36 W</c>) and custom limits (with PL2 &gt;= PL1 + 2 W) are enforced
     /// directly via EC PECI rather than Acer's hard-coded native ceilings (<c>30/45</c>, <c>35/65</c>, <c>40/65 W</c>).
+    /// At low battery the EC ignores OC Profile 3, so native Quiet stands in (see <see cref="LowBatteryOnBatteryPercent"/>);
+    /// <see cref="Performance"/> still reports Manual with the chosen limits then.
     /// </summary>
     public PerformanceMode HardwareModeFor(PerformanceMode mode, PowerLimits limits) => PerformanceMode.Manual;
 
@@ -138,38 +155,96 @@ public sealed class AcerDevice(
 
         lock (_oneIntentionAtATime)
         {
-            var beforeMode = ecHid.GetSystemUsageMode();
-            var beforeProfile = ecHid.GetOcProfile(ManualOcProfile);
-            if (beforeProfile is not { Length: AcerEcHid.OcProfileFieldLength })
-                throw new FirmwareException("The EC did not answer GetOCProfile(3).");
-
-            // After an EC power loss, OC Profile 3 reads back all 0xFF; start from zeros rather than preserving 0xFFFF.
-            var nextProfile = IsAllFf(beforeProfile)
-                ? new byte[AcerEcHid.OcProfileFieldLength]
-                : beforeProfile.ToArray();
-
-            BinaryPrimitives.WriteUInt16LittleEndian(nextProfile.AsSpan(Pl1Offset, 2), (ushort)limits.Sustained);
-            BinaryPrimitives.WriteUInt16LittleEndian(nextProfile.AsSpan(Pl2Offset, 2), (ushort)limits.Boost);
-
-            // Verified Acer write order: SetOCProfile(3) first, then SetSystemUsageMode(3).
-            if (!ecHid.SetOcProfile(ManualOcProfile, nextProfile))
-                throw new FirmwareException($"The EC refused to write OC Profile 3 ({limits.Sustained}/{limits.Boost} W).");
-
-            if (!ecHid.SetSystemUsageMode(ModeManual))
-            {
-                // Best-effort rollback of profile and mode before surfacing the failure.
-                if (!IsAllFf(beforeProfile))
-                    ecHid.SetOcProfile(ManualOcProfile, beforeProfile);
-                if (beforeMode is <= AcerEcHid.MaxUsageMode)
-                    ecHid.SetSystemUsageMode(beforeMode.Value);
-
-                throw new FirmwareException("The EC refused to switch to Manual operating mode (mode 3).");
-            }
-
-            // EC command 0x83 (from _Q30) reloads the auto fan table and may pulse PWM; immediately re-apply our custom duty.
-            if (_activeCurve is { } active && !_standbyPaused && !MakerToolIsRunning)
-                ApplyFanCurveStepLocked(active, forceWrite: true, resetHysteresis: true);
+            ApplyLimitsLocked(limits, QuietFallbackWantedLocked(out _));
         }
+    }
+
+    /// <summary>
+    /// True when the EC is likely to ignore OC Profile 3 at this battery level (see <see cref="LowBatteryOnBatteryPercent"/>),
+    /// so native Quiet should stand in for the user's limits. Unknown battery state never falls back.
+    /// </summary>
+    public static bool LowBatteryOverrideLikely(bool onBattery, int? percent, bool alreadyFallingBack)
+    {
+        if (percent is not { } level) return false;
+        var threshold = (onBattery ? LowBatteryOnBatteryPercent : LowBatteryOnWallPercent)
+            + (alreadyFallingBack ? LowBatteryHysteresisPercent : 0);
+        return level <= threshold;
+    }
+
+    public string? OnPowerStatusChange()
+    {
+        lock (_oneIntentionAtATime)
+        {
+            if (_disposed || _standbyPaused || _appliedLimits is not { } limits) return null;
+
+            var wanted = QuietFallbackWantedLocked(out var state);
+            if (wanted == _quietFallback || MakerToolIsRunning) return null;
+
+            var where = state is { } s ? $"{s.Percent} % on {(s.OnBattery ? "battery" : "wall power")}" : "unknown battery";
+            try
+            {
+                ApplyLimitsLocked(limits, wanted);
+                return wanted
+                    ? $"Battery {where}: switched to native Quiet, since the EC ignores the {limits.Sustained}/{limits.Boost} W profile at this level."
+                    : $"Battery {where}: put back {limits.Sustained}/{limits.Boost} W (Manual).";
+            }
+            catch (FirmwareException error)
+            {
+                return $"Battery {where}: could not switch modes: {error.Message}";
+            }
+        }
+    }
+
+    private bool QuietFallbackWantedLocked(out (bool OnBattery, int Percent)? state)
+    {
+        state = null;
+        if (readPowerState is null) return false;
+
+        var (onBattery, percent) = readPowerState();
+        if (percent is { } level) state = (onBattery, level);
+        return LowBatteryOverrideLikely(onBattery, percent, _quietFallback);
+    }
+
+    private void ApplyLimitsLocked(PowerLimits limits, bool quietFallback)
+    {
+        var beforeMode = ecHid.GetSystemUsageMode();
+        var beforeProfile = ecHid.GetOcProfile(ManualOcProfile);
+        if (beforeProfile is not { Length: AcerEcHid.OcProfileFieldLength })
+            throw new FirmwareException("The EC did not answer GetOCProfile(3).");
+
+        // After an EC power loss, OC Profile 3 reads back all 0xFF; start from zeros rather than preserving 0xFFFF.
+        var nextProfile = IsAllFf(beforeProfile)
+            ? new byte[AcerEcHid.OcProfileFieldLength]
+            : beforeProfile.ToArray();
+
+        BinaryPrimitives.WriteUInt16LittleEndian(nextProfile.AsSpan(Pl1Offset, 2), (ushort)limits.Sustained);
+        BinaryPrimitives.WriteUInt16LittleEndian(nextProfile.AsSpan(Pl2Offset, 2), (ushort)limits.Boost);
+
+        // Verified Acer write order: SetOCProfile(3) first, then SetSystemUsageMode(3). The profile is written in the
+        // Quiet fallback too, so the switch back to Manual finds the user's limits already in place.
+        if (!ecHid.SetOcProfile(ManualOcProfile, nextProfile))
+            throw new FirmwareException($"The EC refused to write OC Profile 3 ({limits.Sustained}/{limits.Boost} W).");
+
+        var mode = quietFallback ? ModeQuiet : ModeManual;
+        if (!ecHid.SetSystemUsageMode(mode))
+        {
+            // Best-effort rollback of profile and mode before surfacing the failure.
+            if (!IsAllFf(beforeProfile))
+                ecHid.SetOcProfile(ManualOcProfile, beforeProfile);
+            if (beforeMode is <= AcerEcHid.MaxUsageMode)
+                ecHid.SetSystemUsageMode(beforeMode.Value);
+
+            throw new FirmwareException(quietFallback
+                ? "The EC refused to switch to Quiet operating mode (mode 2)."
+                : "The EC refused to switch to Manual operating mode (mode 3).");
+        }
+
+        _appliedLimits = limits;
+        _quietFallback = quietFallback;
+
+        // EC command 0x83 (from _Q30) reloads the auto fan table and may pulse PWM; immediately re-apply our custom duty.
+        if (_activeCurve is { } active && !_standbyPaused && !MakerToolIsRunning)
+            ApplyFanCurveStepLocked(active, forceWrite: true, resetHysteresis: true);
     }
 
     public (PerformanceMode Mode, PowerLimits Limits) Performance()
@@ -421,6 +496,10 @@ public sealed class AcerDevice(
 
             return (PerformanceMode.Manual, default);
         }
+
+        // Quiet standing in for the user's limits at low battery is still their choice; report it as applied.
+        if (rawMode == ModeQuiet && _quietFallback && _appliedLimits is { } chosen)
+            return (PerformanceMode.Manual, chosen);
 
         // Native EC modes: Quiet (2) = 25/45 W, Balanced (1) = 30/65 W, Turbo (0) = 35/65 W.
         return rawMode switch

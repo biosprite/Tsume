@@ -129,15 +129,14 @@ public sealed class HelperService : ServiceBase
                 fan.RestoreIfForgotten(occasion);
             });
 
-        // A switch between wall power and battery (Windows sends this for battery level changes too). Only boards
-        // whose limits differ on battery act on it; on any other board nothing is done here.
+        // A switch between wall power and battery (Windows sends this for battery level changes too). Boards whose
+        // limits differ on battery, and devices whose firmware changes its limits at a battery level, act on it.
         if (powerStatus == PowerBroadcastStatus.PowerStatusChange)
             RunDeviceBackground(
                 (_, keeper, _, _, stop) =>
                 {
                     if (!stop.IsCancellationRequested) keeper.OnPowerStatusChange();
-                },
-                requirePowerSourceTracking: true);
+                });
 
         if (isWake)
             RunBackground(s => PanelStarter.EnsureRunningAfterWake(PanelStarter.ScreenSession, s));
@@ -155,15 +154,11 @@ public sealed class HelperService : ServiceBase
     }
 
     private void RunDeviceBackground(
-        Action<IDevice, ModeKeeper, ChargeKeeper, FanCurveKeeper, CancellationToken> work,
-        bool requirePowerSourceTracking = false)
+        Action<IDevice, ModeKeeper, ChargeKeeper, FanCurveKeeper, CancellationToken> work)
     {
         lock (_taskGate)
         {
             if (_stop is null || _deviceSession is not { } session)
-                return;
-
-            if (requirePowerSourceTracking && !session.Keeper.FollowsPowerSource)
                 return;
 
             QueueBackgroundLocked(stop => work(session.Device, session.Keeper, session.Charge, session.Fan, stop), session);

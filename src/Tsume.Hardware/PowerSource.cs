@@ -11,7 +11,16 @@ public static class PowerSource
     /// </summary>
     public static bool IsOnBattery() => GetSystemPowerStatus(out var status) && status.ACLineStatus == AcLineOffline;
 
+    /// <summary>The battery's remaining charge (0–100 %), or null when there is no battery or Windows does not know.</summary>
+    public static int? BatteryPercent() =>
+        GetSystemPowerStatus(out var status)
+        && (status.BatteryFlag & NoSystemBattery) == 0
+        && status.BatteryLifePercent <= 100
+            ? status.BatteryLifePercent
+            : null;
+
     private const byte AcLineOffline = 0;
+    private const byte NoSystemBattery = 0x80;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct SystemPowerStatus

@@ -102,6 +102,13 @@ public interface IDevice : IDisposable
     /// </summary>
     void OnSystemPowerState(bool suspended) { }
 
+    /// <summary>
+    /// Called on every Windows power status notification (a switch between wall power and battery, or a change of
+    /// battery level), for devices whose firmware changes its limits at a battery level. Returns a line for the log
+    /// when the device changed what it applies, otherwise null. Must not throw.
+    /// </summary>
+    string? OnPowerStatusChange() => null;
+
     /// <summary>Stops charging at this level, which must be one of the profile's <see cref="DeviceProfile.ChargeLimits"/>.</summary>
     void SetChargeLimit(int percent);
 

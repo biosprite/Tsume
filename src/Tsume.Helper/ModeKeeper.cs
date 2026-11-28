@@ -132,12 +132,14 @@ public sealed class ModeKeeper(IDevice device)
     /// </summary>
     public void OnPowerStatusChange()
     {
-        if (!FollowsPowerSource) return;
-
         lock (DiscoveryWorker.KeeperGate)
         lock (_gate)
         {
-            RestoreLocked("power source change", onlyIfSourceChanged: true);
+            if (FollowsPowerSource) RestoreLocked("power source change", onlyIfSourceChanged: true);
+
+            // Devices whose firmware changes its own limits at a battery level (Atlas 8) adjust here.
+            if (DiscoveryWorker.IsMutatingFirmwareCheckRunning) return;
+            if (device.OnPowerStatusChange() is { } line) Log.Write(line);
         }
     }
 

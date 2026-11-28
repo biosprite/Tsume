@@ -697,6 +697,92 @@ public sealed class AcerHardwareTests
         Assert.Equal("Pause MSI Center M", Tsume.App.ViewModels.SettingsViewModel.OemPauseLabelFor(DeviceProfile.Unknown));
     }
 
+    [Theory]
+    [InlineData(true, 32, false, false)]   // EC uses the profile above 30 % on battery
+    [InlineData(true, 31, false, true)]    // one point early for rounding against the EC's RSOC
+    [InlineData(true, 5, false, true)]
+    [InlineData(true, 33, true, true)]     // already on Quiet: stay until above 33 %
+    [InlineData(true, 34, true, false)]
+    [InlineData(false, 11, false, false)]  // on wall power the EC overrides only below 10 %
+    [InlineData(false, 10, false, true)]
+    [InlineData(false, 12, true, true)]
+    [InlineData(false, 13, true, false)]
+    [InlineData(true, null, false, false)] // no battery or unknown: never fall back
+    public void AcerDevice_LowBatteryOverrideLikely_MatchesEcThresholdsWithHysteresis(
+        bool onBattery, int? percent, bool alreadyFallingBack, bool expected) =>
+        Assert.Equal(expected, AcerDevice.LowBatteryOverrideLikely(onBattery, percent, alreadyFallingBack));
+
+    [Fact]
+    public void AcerDevice_SetPerformance_UsesNativeQuietAtLowBatteryButStillWritesTheProfile()
+    {
+        var ec = new FakeAcerEcHid { UsageMode = AcerDevice.ModeBalanced };
+        var wmi = new FakeAcerWmi();
+        using var device = new AcerDevice(ec, wmi, AcerBoards.Atlas8, enableFanLoop: false,
+            readPowerState: () => (true, 25));
+
+        device.SetPerformance(PerformanceMode.Endurance, new PowerLimits(25, 28));
+
+        Assert.Equal(["GetMode", "GetOcProfile(3)", "SetOcProfile(3)", "SetMode(2)"], ec.Log);
+        Assert.Equal(AcerDevice.ModeQuiet, ec.UsageMode);
+        Assert.Equal(12, BinaryPrimitives.ReadUInt16LittleEndian(ec.OcProfile3.AsSpan(0, 2)));
+        Assert.Equal(15, BinaryPrimitives.ReadUInt16LittleEndian(ec.OcProfile3.AsSpan(4, 2)));
+
+        // Quiet standing in for the choice still reads back as the chosen Manual limits.
+        Assert.Equal((PerformanceMode.Manual, new PowerLimits(12, 15)), device.Performance());
+    }
+
+    [Fact]
+    public void AcerDevice_OnPowerStatusChange_SwitchesBetweenManualAndQuietAsBatteryCrossesThreshold()
+    {
+        var ec = new FakeAcerEcHid { UsageMode = AcerDevice.ModeBalanced };
+        var wmi = new FakeAcerWmi();
+        var power = (OnBattery: true, Percent: (int?)50);
+        using var device = new AcerDevice(ec, wmi, AcerBoards.Atlas8, enableFanLoop: false,
+            readPowerState: () => power);
+
+        Assert.Null(device.OnPowerStatusChange());   // nothing applied yet: nothing to adjust
+
+        device.SetPerformance(PerformanceMode.Performance, new PowerLimits(25, 28));
+        Assert.Equal(AcerDevice.ModeManual, ec.UsageMode);
+
+        ec.Log.Clear();
+        Assert.Null(device.OnPowerStatusChange());   // still above the threshold
+        Assert.DoesNotContain("SetMode(2)", ec.Log);
+
+        power = (true, 30);
+        Assert.NotNull(device.OnPowerStatusChange());
+        Assert.Equal(AcerDevice.ModeQuiet, ec.UsageMode);
+        Assert.Equal((PerformanceMode.Manual, new PowerLimits(32, 36)), device.Performance());
+
+        power = (true, 33);
+        Assert.Null(device.OnPowerStatusChange());   // inside the hysteresis band
+        Assert.Equal(AcerDevice.ModeQuiet, ec.UsageMode);
+
+        power = (false, 33);                          // plugged in: the EC uses the profile again
+        Assert.NotNull(device.OnPowerStatusChange());
+        Assert.Equal(AcerDevice.ModeManual, ec.UsageMode);
+        Assert.Equal(32, BinaryPrimitives.ReadUInt16LittleEndian(ec.OcProfile3.AsSpan(0, 2)));
+        Assert.Equal((PerformanceMode.Manual, new PowerLimits(32, 36)), device.Performance());
+    }
+
+    [Fact]
+    public void AcerDevice_OnPowerStatusChange_LeavesModesAloneWhilePredatorSenseRuns()
+    {
+        var ec = new FakeAcerEcHid { UsageMode = AcerDevice.ModeBalanced };
+        var wmi = new FakeAcerWmi();
+        var power = (OnBattery: true, Percent: (int?)50);
+        var makerRunning = false;
+        using var device = new AcerDevice(ec, wmi, AcerBoards.Atlas8, enableFanLoop: false,
+            isMakerToolRunning: () => makerRunning, readPowerState: () => power);
+
+        device.SetPerformance(PerformanceMode.Balanced, new PowerLimits(25, 28));
+        makerRunning = true;
+        power = (true, 20);
+
+        Assert.Null(device.OnPowerStatusChange());
+        Assert.Equal(AcerDevice.ModeManual, ec.UsageMode);
+    }
+
     private sealed class FakeAcerEcHid : IAcerEcHid
     {
         public byte UsageMode { get; set; } = AcerDevice.ModeBalanced;
