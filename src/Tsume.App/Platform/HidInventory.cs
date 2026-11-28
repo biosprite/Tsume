@@ -15,7 +15,7 @@ public static partial class HidInventory
     public static async Task<HidTopologySnapshot> CaptureAsync(bool readVendorProfiles = true)
     {
         var collections = new List<HidCollectionInfo>();
-        var msiCandidatePids = new HashSet<ushort>();
+        var hjcCandidates = new HashSet<(ushort Vid, ushort Pid)>();
 
         foreach (var path in Hid.DevicePaths())
         {
@@ -39,10 +39,10 @@ public static partial class HidInventory
             var outIds = full is { } f2 ? f2.OutputReports.Order().ToList() : [];
             var featIds = full is { } f3 ? f3.FeatureReports.Order().ToList() : [];
 
-            if (vid == 0x0DB0 && canRw && outIds.Contains(0x0F)
+            if (IsKnownHjcVendor(vid) && canRw && outIds.Contains(0x0F)
                 && caps.OutputReportByteLength == 64 && caps.InputReportByteLength == 64)
             {
-                msiCandidatePids.Add(pid);
+                hjcCandidates.Add((vid, pid));
             }
 
             collections.Add(new HidCollectionInfo
@@ -80,9 +80,9 @@ public static partial class HidInventory
         var vendorControllers = new List<VendorControllerSnapshot>();
         if (readVendorProfiles)
         {
-            foreach (var pid in msiCandidatePids.Order())
+            foreach (var (vid, pid) in hjcCandidates.OrderBy(x => x.Vid).ThenBy(x => x.Pid))
             {
-                if (await TryReadMsiControllerAsync(pid) is { } snap)
+                if (await TryReadHjcControllerAsync(vid, pid) is { } snap)
                     vendorControllers.Add(snap);
             }
         }
@@ -102,9 +102,12 @@ public static partial class HidInventory
         };
     }
 
-    private static async Task<VendorControllerSnapshot?> TryReadMsiControllerAsync(ushort pid)
+    private static bool IsKnownHjcVendor(ushort vid) =>
+        vid == ClawController.MsiVendorId || ClawController.AcerVendorIds.Contains(vid);
+
+    private static async Task<VendorControllerSnapshot?> TryReadHjcControllerAsync(ushort vid, ushort pid)
     {
-        using var controller = ClawController.Find(0x0DB0, [pid]);
+        using var controller = ClawController.Find(vid, [pid]);
         if (controller is null) return null;
 
         var mode = await controller.ReadModeAsync();
@@ -125,7 +128,7 @@ public static partial class HidInventory
         return new VendorControllerSnapshot
         {
             Protocol = "msi-hid-v1",
-            VendorId = 0x0DB0,
+            VendorId = vid,
             ProductId = pid,
             FirmwareVersion = controller.FirmwareVersion,
             ModeByte = mode?.Mode,

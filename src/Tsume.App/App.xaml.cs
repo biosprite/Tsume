@@ -55,6 +55,7 @@ public partial class App
     private Gamepad? _gamepad;
     private PadIsolation? _padIsolation;
     private ClawButtons? _buttons;
+    private AcerButtons? _acerButtons;
     private GameBarButtonHook? _gameBarHook;
     private DedicatedActionHook? _dedicatedActions;
     private PanelViewModel? _panel;
@@ -348,6 +349,52 @@ public partial class App
             _buttons = new ClawButtons();
             _buttons.CodePressed += code => OnWmiButtonCode(code, window, panel);
         }
+
+        if (_acerButtons is null && controls is { HasAcerHidButtons: true })
+        {
+            _acerButtons = new AcerButtons(Dispatcher);
+            _acerButtons.OemButtonPressed += () => OnAcerOemButton(window, panel);
+            _acerButtons.GameBarButtonPressed += () => OnAcerGameBarButton(window, panel);
+        }
+    }
+
+    private void OnAcerOemButton(OverlayWindow window, PanelViewModel panel)
+    {
+        var controls = Volatile.Read(ref _activeControls);
+        if (controls is null || !controls.HasOemButton) return;
+
+        var blockedByOem = controls.EffectiveOemSoftware == OemSoftwareKind.AcerPredatorSense && _msiCenterRuns;
+        var bindings = Volatile.Read(ref _dedicatedActionBindings);
+
+        if (!blockedByOem && DedicatedActionKeys.TryMatchHardwareButton(bindings, DedicatedActionKeys.OemButtonCode, out var dedicated))
+        {
+            if (dedicated == DedicatedAction.OpenTsume) OpenTrace.Summoned();
+            OnDedicatedAction(dedicated, window, panel);
+        }
+
+        if (controls.EffectiveOemSoftware == OemSoftwareKind.AcerPredatorSense)
+            _ = Task.Run(() => _msiCenterRuns = AcerSense.IsRunning);
+    }
+
+    private void OnAcerGameBarButton(OverlayWindow window, PanelViewModel panel)
+    {
+        var controls = Volatile.Read(ref _activeControls);
+        if (controls is null || !controls.HasGameBarButton) return;
+
+        var bindings = Volatile.Read(ref _dedicatedActionBindings);
+        if (DedicatedActionKeys.TryMatchHardwareButton(bindings, DedicatedActionKeys.XboxButtonCode, out var dedicated))
+        {
+            if (dedicated == DedicatedAction.OpenTsume) OpenTrace.Summoned();
+            OnDedicatedAction(dedicated, window, panel);
+            return;
+        }
+
+        var blockedByOem = controls.EffectiveOemSoftware == OemSoftwareKind.AcerPredatorSense && _msiCenterRuns;
+        if (!panel.Settings.Controls.SystemButtonsPage.IsGameBarDisabled && !blockedByOem)
+            OnGameBarButton(window, panel);
+
+        if (controls.EffectiveOemSoftware == OemSoftwareKind.AcerPredatorSense)
+            _ = Task.Run(() => _msiCenterRuns = AcerSense.IsRunning);
     }
 
     private void OnWmiButtonCode(int code, OverlayWindow window, PanelViewModel panel)
@@ -551,6 +598,7 @@ public partial class App
             // Pause native WMI/XInput/WinMM listeners cleanly before S3/S4 so nothing races PnP/WMI teardown.
             _gamepad?.Suspend();
             _buttons?.Suspend();
+            _acerButtons?.Suspend();
             _gameBarHook?.ResetState();
             _dedicatedActions?.ResetState();
             _padIsolation?.RestoreSynchronously();
@@ -560,11 +608,13 @@ public partial class App
         {
             _gamepad?.Resume();
             _buttons?.Resume();
+            _acerButtons?.Resume();
             Dispatcher.BeginInvoke(() =>
             {
                 _hotkey?.EnsureRegistered();
                 _gameBarHook?.ResetAndReinstall();
                 _dedicatedActions?.ResetAndReinstall();
+                if (_panel is { } panel) _ = panel.Lighting.ReapplyAfterResumeAsync();
             });
         }
     }
@@ -597,6 +647,7 @@ public partial class App
         _panel?.Dispose();
         _dedicatedActions?.Dispose();
         _gameBarHook?.Dispose();
+        _acerButtons?.Dispose();
         _buttons?.Dispose();
         _gamepad?.Dispose();
         _hotkey?.Dispose();

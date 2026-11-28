@@ -278,7 +278,9 @@ public sealed class FanViewModel : LayerViewModel
     private void LayOut()
     {
         var device = _performance.Device;
-        FanMode[] order = [FanMode.Auto, FanMode.Custom];
+        FanMode[] order = _performance.FanLimits is null && device.Offers(FanMode.Max)
+            ? [FanMode.Auto, FanMode.Max]
+            : [FanMode.Auto, FanMode.Custom];
 
         _modes = [.. order.Where(mode => mode == FanMode.Custom ? ListsCustom : device.Offers(mode))];
         Modes = [.. _modes.Select(Label)];
@@ -294,6 +296,7 @@ public sealed class FanViewModel : LayerViewModel
     private static string Label(FanMode mode) => mode switch
     {
         FanMode.Custom => Strings.FanCustom,
+        FanMode.Max    => Strings.FanMax,
         _              => Strings.FanAuto,
     };
 

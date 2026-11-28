@@ -13,8 +13,18 @@ namespace Tsume.App.Platform;
 /// </summary>
 public sealed class ClawController : IDisposable
 {
-    private const ushort VendorId = 0x0DB0;
-    private static readonly ushort[] ProductIds = [0x1901, 0x1902];
+    public const ushort MsiVendorId = 0x0DB0;
+    public static readonly IReadOnlyList<ushort> MsiProductIds = [0x1901, 0x1902];
+
+    public static readonly IReadOnlyList<ushort> AcerVendorIds = [0x0502, 0x0489];
+    public static readonly IReadOnlyList<ushort> AcerProductIds = [0xF900, 0xF901, 0xF909, 0xF90A, 0xF310, 0xF311, 0xF319, 0xF31A];
+
+    /// <summary>All known HJC/JieLi handheld controller USB ID families (MSI Claw + Acer Predator Atlas 8).</summary>
+    public static readonly IReadOnlyList<(IReadOnlyList<ushort> VendorIds, IReadOnlyList<ushort> ProductIds)> KnownFamilies =
+    [
+        ([MsiVendorId], MsiProductIds),
+        (AcerVendorIds, AcerProductIds),
+    ];
 
     private const byte ReportId = 0x0F;
     private const int ReportLength = 64;
@@ -83,18 +93,27 @@ public sealed class ClawController : IDisposable
     }
 
     /// <summary>
-    /// Opens the Claw controller's vendor collection, or returns null if there is none.
-    /// Recognised as MSI does: it accepts output report 0x0F, with 64-byte reports.
+    /// Opens the built-in handheld controller's HJC vendor collection (MSI Claw or Acer Predator Atlas 8),
+    /// or returns null if there is none. Recognised by output report 0x0F with 64-byte input/output reports.
     /// </summary>
-    public static ClawController? Find() => Find(VendorId, ProductIds);
-
-    public static ClawController? Find(ushort vendorId, IReadOnlyList<ushort> productIds)
+    public static ClawController? Find()
     {
-        if (productIds.Count == 0) return null;
+        foreach (var (vendorIds, productIds) in KnownFamilies)
+            if (Find(vendorIds, productIds) is { } found) return found;
+
+        return null;
+    }
+
+    public static ClawController? Find(ushort vendorId, IReadOnlyList<ushort> productIds) =>
+        Find([vendorId], productIds);
+
+    public static ClawController? Find(IReadOnlyList<ushort> vendorIds, IReadOnlyList<ushort> productIds)
+    {
+        if (vendorIds.Count == 0 || productIds.Count == 0) return null;
 
         foreach (var path in Hid.DevicePaths())
         {
-            if (!MatchesUsbIds(path, vendorId, productIds)) continue;
+            if (!MatchesUsbIds(path, vendorIds, productIds)) continue;
 
             var handle = Hid.OpenReadWrite(path);
             if (handle is null) continue;
@@ -121,12 +140,28 @@ public sealed class ClawController : IDisposable
         return null;
     }
 
-    internal static bool IsClaw(string path) => MatchesUsbIds(path, VendorId, ProductIds);
+    public static bool IsClaw(string path)
+    {
+        foreach (var (vendorIds, productIds) in KnownFamilies)
+            if (MatchesUsbIds(path, vendorIds, productIds)) return true;
 
-    private static bool MatchesUsbIds(string path, ushort vendorId, IReadOnlyList<ushort> productIds)
+        return false;
+    }
+
+    private static bool MatchesUsbIds(string path, IReadOnlyList<ushort> vendorIds, IReadOnlyList<ushort> productIds)
     {
         var lower = path.ToLowerInvariant();
-        if (!lower.Contains($"vid_{vendorId:x4}")) return false;
+        var vidMatch = false;
+        foreach (var vid in vendorIds)
+        {
+            if (lower.Contains($"vid_{vid:x4}"))
+            {
+                vidMatch = true;
+                break;
+            }
+        }
+
+        if (!vidMatch) return false;
 
         foreach (var id in productIds)
             if (lower.Contains($"pid_{id:x4}")) return true;

@@ -53,6 +53,14 @@ switch (args)
         MsiCenterControl.Resume();
         return 0;
 
+    case ["--acer-sense", "pause"]:
+        AcerSenseControl.Pause();
+        return 0;
+
+    case ["--acer-sense", "resume"]:
+        AcerSenseControl.Resume();
+        return 0;
+
     // Run by the uninstaller: gives RTSS's OverlayEditor back the layout and plugin state the user had.
     case ["--rtss-overlay", "restore"]:
         RtssOverlayWriter.Apply(new Tsume.Core.Ipc.SetRtssOverlay(null, null));

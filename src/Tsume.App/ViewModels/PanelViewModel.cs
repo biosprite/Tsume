@@ -46,7 +46,7 @@ public sealed class PanelViewModel : IDisposable
                 _ = CpuBoost.RefreshAsync();
             }
         };
-        Lighting = new LightingViewModel(Performance);
+        Lighting = new LightingViewModel(Performance, state);
         PadMode = new PadModeViewModel(padIsolation);
         Upscaling = new UpscalingViewModel(dismiss);
         Rtss = new RtssViewModel(_rtssService, dismiss);

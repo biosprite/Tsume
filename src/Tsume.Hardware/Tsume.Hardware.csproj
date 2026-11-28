@@ -3,6 +3,10 @@
   <!-- Tsume.Hardware — everything that talks to firmware: one IDevice per kind of machine.
        Needs administrator rights at run time, so only the helper loads it. -->
 
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Tsume.Core\Tsume.Core.csproj" />
     <PackageReference Include="System.Management" Version="10.0.14" />

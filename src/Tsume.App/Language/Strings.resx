@@ -203,6 +203,11 @@
   <data name="MsiCenterRunning" xml:space="preserve"><value>Running: it owns the M button</value></data>
   <data name="MsiCenterNoHelper" xml:space="preserve"><value>Running: helper not found</value></data>
 
+  <data name="PauseAcerSense" xml:space="preserve"><value>Pause PredatorSense</value></data>
+  <data name="AcerSensePaused" xml:space="preserve"><value>Paused: PredatorSense and lighting services are stopped</value></data>
+  <data name="AcerSenseRunning" xml:space="preserve"><value>Running: it owns buttons, modes and lighting</value></data>
+  <data name="AcerSenseNoHelper" xml:space="preserve"><value>Running: helper not found</value></data>
+
   <data name="TroubleshootingHeading" xml:space="preserve"><value>TROUBLESHOOTING</value></data>
   <data name="ShareLogs" xml:space="preserve"><value>Share logs</value></data>
   <data name="ShareLogsDetail" xml:space="preserve"><value>Saves a zip to your Desktop and copies it to the clipboard</value></data>
@@ -252,7 +257,14 @@
     <comment>{0} = controller firmware version, e.g. 2.11</comment>
   </data>
   <data name="LightingMsiCenterRuns" xml:space="preserve"><value>MSI Center M is running and may undo these changes</value></data>
+  <data name="LightingAcerSenseRuns" xml:space="preserve"><value>PredatorSense lighting is running and may undo these changes</value></data>
   <data name="LightingSaved" xml:space="preserve"><value>Kept on the controller when you leave this screen</value></data>
+  <data name="LightingAcerSaved" xml:space="preserve"><value>Applied directly and restored by Tsume after sleep</value></data>
+  <data name="LogoHeading" xml:space="preserve"><value>REAR LOGO</value></data>
+  <data name="LogoLights" xml:space="preserve"><value>Logo light</value></data>
+  <data name="LogoLightsDetail" xml:space="preserve"><value>The Predator logo on the back</value></data>
+  <data name="LogoSteadyDetail" xml:space="preserve"><value>The rear logo holds its color while the sticks move</value></data>
+  <data name="RearLogo" xml:space="preserve"><value>Rear logo</value></data>
 
   <!-- Quit confirmation -->
 
@@ -942,6 +954,7 @@
   <data name="GameBarNonNativeDefaultDetail" xml:space="preserve"><value>Opens Xbox Game Bar when pressed</value></data>
   <data name="GameBarCustomDetail" xml:space="preserve"><value>Intercepts the button so Xbox Game Bar does not open</value></data>
   <data name="GameBarMsiCenterWarning" xml:space="preserve"><value>MSI Center M is running and may still open its Quick Settings widget. Pause it in Settings</value></data>
+  <data name="GameBarAcerSenseWarning" xml:space="preserve"><value>PredatorSense is running and may still open its Quick Menu widget. Pause it in Settings</value></data>
 
   <data name="MButton" xml:space="preserve"><value>M button</value></data>
   <data name="MButtonDefault" xml:space="preserve"><value>Open Tsume (Default)</value></data>
@@ -950,6 +963,7 @@
   <data name="MButtonDetailCustom" xml:space="preserve"><value>Runs this action on short-press (while MSI Center M is paused)</value></data>
   <data name="MButtonDetailDisabled" xml:space="preserve"><value>M button is ignored by Tsume</value></data>
   <data name="MButtonMsiCenterWarning" xml:space="preserve"><value>MSI Center M is running and owns the M button. Pause it in Settings to remap</value></data>
+  <data name="MButtonAcerSenseWarning" xml:space="preserve"><value>PredatorSense is running and owns the PredatorSense button. Pause it in Settings to remap</value></data>
 
   <data name="BackButtonsHeading" xml:space="preserve"><value>BACK BUTTONS</value></data>
   <data name="BackButtonUnbound" xml:space="preserve"><value>Unbound</value></data>
@@ -1010,6 +1024,7 @@
   <data name="ControlsSaved" xml:space="preserve"><value>Panel &amp; button settings save immediately; back buttons save to the controller when you leave.</value></data>
   <data name="ControlsSavedPanelOnly" xml:space="preserve"><value>Panel &amp; button settings save immediately.</value></data>
   <data name="ControlsMsiCenterRuns" xml:space="preserve"><value>MSI Center M is running and may undo back-button bindings.</value></data>
+  <data name="ControlsAcerSenseRuns" xml:space="preserve"><value>PredatorSense is running and may undo back-button bindings.</value></data>
 
   <!-- Developer options & Hardware Discovery -->
 

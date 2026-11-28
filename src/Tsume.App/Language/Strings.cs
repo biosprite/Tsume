@@ -134,6 +134,11 @@ public static class Strings
     public static string MsiCenterRunning => Find();
     public static string MsiCenterNoHelper => Find();
 
+    public static string PauseAcerSense => Find();
+    public static string AcerSensePaused => Find();
+    public static string AcerSenseRunning => Find();
+    public static string AcerSenseNoHelper => Find();
+
     public static string TroubleshootingHeading => Find();
     public static string ShareLogs => Find();
     public static string ShareLogsDetail => Find();
@@ -175,7 +180,14 @@ public static class Strings
     public static string ControllerNotAnswering => Find();
     public static string ControllerFirmwareTooOld(string version) => Fill(Find(), version);
     public static string LightingMsiCenterRuns => Find();
+    public static string LightingAcerSenseRuns => Find();
     public static string LightingSaved => Find();
+    public static string LightingAcerSaved => Find();
+    public static string LogoHeading => Find();
+    public static string LogoLights => Find();
+    public static string LogoLightsDetail => Find();
+    public static string LogoSteadyDetail => Find();
+    public static string RearLogo => Find();
 
     public static string QuitHeading => Find();
     public static string QuitExplanation => Find();
@@ -665,6 +677,7 @@ public static class Strings
     public static string GameBarNonNativeDefaultDetail => Find();
     public static string GameBarCustomDetail => Find();
     public static string GameBarMsiCenterWarning => Find();
+    public static string GameBarAcerSenseWarning => Find();
     public static string MButton => Find();
     public static string MButtonDefault => Find();
     public static string MButtonXboxGameBar => Find();
@@ -672,6 +685,7 @@ public static class Strings
     public static string MButtonDetailCustom => Find();
     public static string MButtonDetailDisabled => Find();
     public static string MButtonMsiCenterWarning => Find();
+    public static string MButtonAcerSenseWarning => Find();
     public static string BackButtonsHeading => Find();
     public static string BackButtonUnbound => Find();
     public static string BackButtonMacro => Find();
@@ -725,6 +739,7 @@ public static class Strings
     public static string ControlsSaved => Find();
     public static string ControlsSavedPanelOnly => Find();
     public static string ControlsMsiCenterRuns => Find();
+    public static string ControlsAcerSenseRuns => Find();
 
     public static string DeveloperOptions => Find();
     public static string DeveloperOptionsDetail => Find();

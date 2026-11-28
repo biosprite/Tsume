@@ -130,7 +130,7 @@ public static class ControllerReport
         void Seen(string when)
         {
             report.AppendLine($"{when}:");
-            foreach (var path in Interop.Hid.DevicePaths().Where(path => path.Contains("vid_0db0", StringComparison.OrdinalIgnoreCase)))
+            foreach (var path in Interop.Hid.DevicePaths().Where(ClawController.IsClaw))
                 report.AppendLine($"  HID  {path}");
 
             var slots = Enumerable.Range(0, Interop.XInput.MaxControllers)

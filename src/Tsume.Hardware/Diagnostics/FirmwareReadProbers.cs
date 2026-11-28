@@ -1,7 +1,9 @@
+using System.Buffers.Binary;
 using System.Globalization;
 using System.Management;
 using System.Text;
 using Tsume.Core.Diagnostics;
+using Tsume.Hardware.Acer;
 using Tsume.Hardware.Msi;
 using Tsume.Hardware.Msi.Diagnostics;
 
@@ -53,6 +55,7 @@ public static class FirmwareReadProbers
 {
     public static IFirmwareReadProber? TryOpen() =>
         MsiReadProber.TryOpen()
+        ?? AcerReadProber.TryOpen()
         ?? AsusReadProber.TryOpen()
         ?? LenovoReadProber.TryOpen();
 }
@@ -582,5 +585,118 @@ internal sealed class LenovoReadProber : IFirmwareReadProber
     {
         _gameZone?.Dispose();
         _otherMethod?.Dispose();
+    }
+}
+
+/// <summary>
+/// Strictly read-only Acer handheld prober (<c>AcerGamingFunction</c>, <c>BatteryControl</c>, and EC HID
+/// <c>1025:174B</c>). Invokes only getters; never writes operating modes, profiles, fan settings, or charge limits.
+/// </summary>
+internal sealed class AcerReadProber : IFirmwareReadProber
+{
+    private readonly AcerWmiBridge? _wmi;
+    private readonly AcerEcHid? _ecHid;
+    private readonly string _instanceName;
+
+    private AcerReadProber(AcerWmiBridge? wmi, AcerEcHid? ecHid, string instanceName)
+    {
+        _wmi = wmi;
+        _ecHid = ecHid;
+        _instanceName = instanceName;
+    }
+
+    public string VendorFamily => "acer-wmi-echid";
+
+    public static IFirmwareReadProber? TryOpen()
+    {
+        var wmi = AcerWmiBridge.TryOpen();
+        var ecHid = AcerEcHid.TryOpen();
+        if (wmi is null && ecHid is null) return null;
+
+        var label = (wmi is not null, ecHid is not null) switch
+        {
+            (true, true)  => "AcerGamingFunction + EC-HID 1025:174B",
+            (true, false) => "AcerGamingFunction",
+            _             => "EC-HID 1025:174B",
+        };
+
+        return new AcerReadProber(wmi, ecHid, label);
+    }
+
+    public FirmwareReadSnapshot ReadFull()
+    {
+        var values = QueryAll(includeStaticLimits: true);
+        return new FirmwareReadSnapshot
+        {
+            VendorFamily = VendorFamily,
+            BridgeInstance = _instanceName,
+            FirmwareVersionText = _wmi?.ReadBiosVersion(),
+            Values = values,
+        };
+    }
+
+    public (Dictionary<string, string> Values, string? EcMemoryHex) ReadFastState() =>
+        (QueryAll(includeStaticLimits: false), null);
+
+    private Dictionary<string, string> QueryAll(bool includeStaticLimits)
+    {
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        if (_wmi is not null)
+        {
+            if (_wmi.GetGamingSysInfo(0x0000) is { } cap)
+                values["WMI.SensorBitmap"] = $"0x{(cap >> 24) & 0xFFFF:X4}";
+            if (_wmi.GetGamingSysInfo(AcerDevice.SensorCpuTemp) is { } cpu)
+                values["WMI.CpuTempC"] = $"{(cpu >> 8) & 0xFFFF} C";
+            if (_wmi.GetGamingSysInfo(0x0301) is { } sys)
+                values["WMI.SysTempC"] = $"{(sys >> 8) & 0xFFFF} C";
+            if (_wmi.GetGamingSysInfo(AcerDevice.SensorFan1Rpm) is { } f1)
+                values["WMI.Fan1Rpm"] = $"{(f1 >> 8) & 0xFFFF} rpm";
+            if (_wmi.GetGamingSysInfo(AcerDevice.SensorFan2Rpm) is { } f2)
+                values["WMI.Fan2Rpm"] = $"{(f2 >> 8) & 0xFFFF} rpm";
+            if (_wmi.GetGamingFanBehavior(AcerDevice.FanMaskBoth) is { } fb)
+                values["WMI.FanBehavior"] = $"0x{fb:X8} (fan1={(fb >> 10) & 3}, fan2={(fb >> 12) & 3})";
+            if (_wmi.GetGamingFanSpeed(2) is { } fs1)
+                values["WMI.Fan1StoredDuty"] = $"{(fs1 >> 8) & 0xFF}%";
+            if (_wmi.GetGamingFanSpeed(3) is { } fs2)
+                values["WMI.Fan2StoredDuty"] = $"{(fs2 >> 8) & 0xFF}%";
+            if (_wmi.GetBatteryHealthControl() is { } bh)
+                values["WMI.BatteryHealthLimit80"] = bh ? "on" : "off";
+        }
+
+        if (_ecHid is not null)
+        {
+            if (_ecHid.GetSystemUsageMode() is { } mode)
+                values["EcHid.SystemUsageMode"] = mode.ToString(CultureInfo.InvariantCulture);
+
+            if (_ecHid.GetOcProfile(AcerDevice.ManualOcProfile) is { Length: >= 6 } prof)
+            {
+                var pl1 = BinaryPrimitives.ReadUInt16LittleEndian(prof.AsSpan(0, 2));
+                var pl2 = BinaryPrimitives.ReadUInt16LittleEndian(prof.AsSpan(4, 2));
+                values["EcHid.OcProfile3.PL1_PL2"] = $"{pl1} W / {pl2} W";
+                values["EcHid.OcProfile3.Raw"] = Convert.ToHexString(prof);
+            }
+
+            if (includeStaticLimits)
+            {
+                if (_ecHid.GetOcProfileLimit(AcerDevice.ManualOcProfile, 1) is { } pl1Min)
+                    values["EcHid.Limit.PL1_Min"] = $"{pl1Min} W";
+                if (_ecHid.GetOcProfileLimit(AcerDevice.ManualOcProfile, 2) is { } pl1Max)
+                    values["EcHid.Limit.PL1_Max"] = $"{pl1Max} W";
+                if (_ecHid.GetOcProfileLimit(AcerDevice.ManualOcProfile, 4) is { } pl2Max)
+                    values["EcHid.Limit.PL2_Max"] = $"{pl2Max} W";
+            }
+
+            if (_ecHid.GetBatteryBoundary() is { } bound)
+                values["EcHid.BatteryBoundary"] = bound.Enabled ? $"on ({bound.Lower}%..{bound.Upper}%)" : "off";
+        }
+
+        return values;
+    }
+
+    public void Dispose()
+    {
+        _wmi?.Dispose();
+        _ecHid?.Dispose();
     }
 }

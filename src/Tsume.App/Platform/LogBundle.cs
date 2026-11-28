@@ -254,6 +254,7 @@ public static class LogBundle
         summary.AppendLine($"  Start with Windows: {(StartWithWindows.IsEnabled ? "enabled" : "disabled")}");
         summary.AppendLine($"  Start menu: {(StartMenuShortcut.IsProvidedByInstaller ? "installer" : StartMenuShortcut.Exists ? "shortcut" : "none")}");
         summary.AppendLine($"  MSI Center M: {(MsiCenter.IsRunning ? "running" : "paused")} (can control: {(MsiCenter.CanControl ? "yes" : "no")})");
+        summary.AppendLine($"  PredatorSense: {(AcerSense.IsRunning ? "running" : "paused")} (lighting: {(AcerSense.IsLightingRunning ? "running" : "stopped")}, can control: {(AcerSense.CanControl ? "yes" : "no")})");
 
         var refresh = DisplayMode.CurrentRefreshRate();
         if (refresh > 0) summary.AppendLine($"  Refresh rate: {refresh} Hz");

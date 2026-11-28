@@ -17,7 +17,8 @@ public static class OemFootprintCollector
         "msi", "micro-star", "claw", "mystic",
         "asus", "asustek", "armoury", "rog", "acpower",
         "lenovo", "legion", "vantage",
-        "gpd", "ayaneo", "ayaspace", "onex", "aokzoe", "zotac", "acer", "nitro", "predator",
+        "gpd", "ayaneo", "ayaspace", "onex", "aokzoe", "zotac",
+        "acer", "nitro", "predator", "ulic", "predatorhandheld", "acerhandheld", "handheld.",
         "handheldcompanion", "hhd", "ryzenadj",
     ];
 
@@ -29,6 +30,9 @@ public static class OemFootprintCollector
         (RegistryHive.LocalMachine, @"SOFTWARE\ASUS\ARMOURY CRATE Service"),
         (RegistryHive.LocalMachine, @"SOFTWARE\Lenovo\LegionSpace"),
         (RegistryHive.LocalMachine, @"SOFTWARE\WOW6432Node\Lenovo\LegionSpace"),
+        (RegistryHive.LocalMachine, @"SOFTWARE\OEM\AcerAgentService"),
+        (RegistryHive.LocalMachine, @"SOFTWARE\OEM\AcerLightingService"),
+        (RegistryHive.LocalMachine, @"SOFTWARE\Acer\PredatorHandheld"),
     ];
 
     public static OemFootprintSnapshot Collect(string? boardManufacturer, string? systemManufacturer)

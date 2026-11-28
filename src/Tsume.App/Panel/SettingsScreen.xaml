@@ -93,7 +93,7 @@
 
         <controls:Tile Style="{StaticResource Tile.Switch}"
                        Glyph="{x:Static theme:Glyphs.Pause}"
-                       Label="{x:Static lang:Strings.PauseMsiCenter}"
+                       Label="{Binding OemPauseLabel}"
                        Detail="{Binding MsiCenterDetail}"
                        IsOn="{Binding IsMsiCenterPaused}"
                        Command="{Binding ToggleMsiCenter}" />

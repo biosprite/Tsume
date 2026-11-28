@@ -72,12 +72,14 @@
 
                 <controls:Reveal IsOpen="{Binding UsesColours}">
                   <StackPanel>
-                    <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0,8,0,0"
-                                   Glyph="{x:Static theme:Glyphs.Link}"
-                                   Label="{x:Static lang:Strings.SameOnBothSticks}"
-                                   Detail="{x:Static lang:Strings.SameOnBothSticksDetail}"
-                                   IsOn="{Binding SameOnBoth}"
-                                   Command="{Binding ToggleSameOnBoth}" />
+                    <controls:Reveal IsOpen="{Binding SupportsPerStickColour}">
+                      <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0,8,0,0"
+                                     Glyph="{x:Static theme:Glyphs.Link}"
+                                     Label="{x:Static lang:Strings.SameOnBothSticks}"
+                                     Detail="{x:Static lang:Strings.SameOnBothSticksDetail}"
+                                     IsOn="{Binding SameOnBoth}"
+                                     Command="{Binding ToggleSameOnBoth}" />
+                    </controls:Reveal>
 
                     <controls:SwatchPicker Label="{Binding LeftLabel}" Margin="0,8,0,0"
                                            AutomationProperties.Name="{Binding LeftLabel}"
@@ -93,40 +95,44 @@
               </StackPanel>
             </controls:Reveal>
 
-            <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.ButtonsHeading}"
-                       Margin="4,24,0,10" />
-
-            <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0"
-                           Glyph="{x:Static theme:Glyphs.Buttons}"
-                           Label="{x:Static lang:Strings.ButtonLights}"
-                           Detail="{x:Static lang:Strings.ButtonLightsDetail}"
-                           IsOn="{Binding ButtonsLit}"
-                           Command="{Binding ToggleButtonsLit}" />
-
-            <controls:Reveal IsOpen="{Binding ButtonsLit}">
+            <controls:Reveal IsOpen="{Binding ShowsSecondaryZone}">
               <StackPanel>
-                <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Brightness}"
-                                      Label="{x:Static lang:Strings.LightBrightness}" Unit="%"
-                                      AutomationProperties.Name="{x:Static lang:Strings.ButtonBrightness}"
-                                      Minimum="{x:Static vm:LightingViewModel.MinBrightness}"
-                                      Maximum="100" LargeChange="1"
-                                      Value="{Binding ButtonBrightness}"
-                                      Margin="0,8,0,0" />
+                <TextBlock Style="{StaticResource Text.Heading}" Text="{Binding SecondaryZoneHeading}"
+                           Margin="4,24,0,10" />
 
-                <!-- Only for effects that would otherwise animate the buttons too. -->
-                <controls:Reveal IsOpen="{Binding ShowsButtonsSteady}">
-                  <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0,8,0,0"
-                                 Glyph="{x:Static theme:Glyphs.Steady}"
-                                 Label="{x:Static lang:Strings.ButtonsSteady}"
-                                 Detail="{x:Static lang:Strings.ButtonsSteadyDetail}"
-                                 IsOn="{Binding ButtonsSteady}"
-                                 Command="{Binding ToggleButtonsSteady}" />
-                </controls:Reveal>
+                <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0"
+                               Glyph="{x:Static theme:Glyphs.Buttons}"
+                               Label="{Binding SecondaryZoneToggleLabel}"
+                               Detail="{Binding SecondaryZoneToggleDetail}"
+                               IsOn="{Binding ButtonsLit}"
+                               Command="{Binding ToggleButtonsLit}" />
 
-                <controls:Reveal IsOpen="{Binding ShowsButtonColour}">
-                  <controls:SwatchPicker Label="{x:Static lang:Strings.FaceButtons}" Margin="0,8,0,0"
-                                         AutomationProperties.Name="{x:Static lang:Strings.FaceButtons}"
-                                         Colours="{Binding Colours}" SelectedColour="{Binding ButtonsColour}" />
+                <controls:Reveal IsOpen="{Binding ButtonsLit}">
+                  <StackPanel>
+                    <controls:LevelSlider Glyph="{x:Static theme:Glyphs.Brightness}"
+                                          Label="{x:Static lang:Strings.LightBrightness}" Unit="%"
+                                          AutomationProperties.Name="{x:Static lang:Strings.ButtonBrightness}"
+                                          Minimum="{x:Static vm:LightingViewModel.MinBrightness}"
+                                          Maximum="100" LargeChange="1"
+                                          Value="{Binding ButtonBrightness}"
+                                          Margin="0,8,0,0" />
+
+                    <!-- Only for effects that would otherwise animate the secondary zone too. -->
+                    <controls:Reveal IsOpen="{Binding ShowsButtonsSteady}">
+                      <controls:Tile Style="{StaticResource Tile.Switch}" Margin="0,8,0,0"
+                                     Glyph="{x:Static theme:Glyphs.Steady}"
+                                     Label="{x:Static lang:Strings.ButtonsSteady}"
+                                     Detail="{Binding SecondaryZoneSteadyDetail}"
+                                     IsOn="{Binding ButtonsSteady}"
+                                     Command="{Binding ToggleButtonsSteady}" />
+                    </controls:Reveal>
+
+                    <controls:Reveal IsOpen="{Binding ShowsButtonColour}">
+                      <controls:SwatchPicker Label="{Binding SecondaryZoneColourLabel}" Margin="0,8,0,0"
+                                             AutomationProperties.Name="{Binding SecondaryZoneColourLabel}"
+                                             Colours="{Binding Colours}" SelectedColour="{Binding ButtonsColour}" />
+                    </controls:Reveal>
+                  </StackPanel>
                 </controls:Reveal>
               </StackPanel>
             </controls:Reveal>

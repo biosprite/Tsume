@@ -599,6 +599,10 @@ public sealed class PerformanceViewModel : Observable
             for (var profile = 0; profile < SavedState.FanProfileCount; profile++)
                 if (IsFanProfileUsed(profile)) steps.Add((FanMode.Custom, profile));
         }
+        else if (Device.Offers(FanMode.Max))
+        {
+            steps.Add((FanMode.Max, null));
+        }
 
         if (steps.Count == 0) return;
 

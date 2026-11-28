@@ -149,7 +149,8 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
         SelectedGameBarOption.CustomAction is not null ? Strings.SystemButtonCustomDetail
         : GameBarAction == HardwareButtonAction.XboxGameBar
             ? (_controls?.GameBarNativeWinG != false ? Strings.GameBarDefaultDetail : Strings.GameBarNonNativeDefaultDetail)
-        : _msiCenterRuns && _controls?.HasMsiCenterConflict == true ? Strings.GameBarMsiCenterWarning
+        : _msiCenterRuns && _controls?.EffectiveOemSoftware == OemSoftwareKind.AcerPredatorSense ? Strings.GameBarAcerSenseWarning
+        : _msiCenterRuns && _controls?.EffectiveOemSoftware == OemSoftwareKind.MsiCenter ? Strings.GameBarMsiCenterWarning
         : Strings.GameBarCustomDetail;
 
     public ObservableCollection<HardwareButtonOption> OemButtonOptions { get; }
@@ -174,7 +175,8 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
 
     public string OemButtonDetail =>
         SelectedOemButtonOption.CustomAction is not null ? Strings.SystemButtonCustomDetail
-        : _msiCenterRuns && _controls?.HasMsiCenterConflict == true ? Strings.MButtonMsiCenterWarning
+        : _msiCenterRuns && _controls?.EffectiveOemSoftware == OemSoftwareKind.AcerPredatorSense ? Strings.MButtonAcerSenseWarning
+        : _msiCenterRuns && _controls?.EffectiveOemSoftware == OemSoftwareKind.MsiCenter ? Strings.MButtonMsiCenterWarning
         : OemButtonAction switch
         {
             HardwareButtonAction.OpenTsume => Strings.MButtonDetailTsume,
@@ -400,10 +402,16 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
         var changesBefore = _changes;
         var controls = _controls;
 
-        var msiRuns = controls?.HasMsiCenterConflict == true && await Task.Run(() => MsiCenter.IsRunning);
+        var oem = controls?.EffectiveOemSoftware ?? OemSoftwareKind.None;
+        var oemRuns = oem switch
+        {
+            OemSoftwareKind.MsiCenter         => await Task.Run(() => MsiCenter.IsRunning),
+            OemSoftwareKind.AcerPredatorSense => await Task.Run(() => AcerSense.IsRunning),
+            _                                 => false,
+        };
         if (_disposed) return;
 
-        _msiCenterRuns = msiRuns;
+        _msiCenterRuns = oemRuns;
         Notify(nameof(GameBarDetail));
         Notify(nameof(OemButtonDetail));
 
@@ -436,7 +444,9 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
         foreach (var (editor, binding) in readings)
             editor.Load(binding);
 
-        Status = msiRuns ? Strings.ControlsMsiCenterRuns : Strings.ControlsSaved;
+        Status = oemRuns
+            ? (oem == OemSoftwareKind.AcerPredatorSense ? Strings.ControlsAcerSenseRuns : Strings.ControlsMsiCenterRuns)
+            : Strings.ControlsSaved;
     }
 
     private async Task<IBackButtonController?> ConnectAsync(BackButtonsProfile profile)

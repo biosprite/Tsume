@@ -19,21 +19,25 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
         [LightingEffect.Off, LightingEffect.Steady, LightingEffect.Breathe, LightingEffect.Rainbow, LightingEffect.Spin];
 
     private readonly PerformanceViewModel _performance;
+    private readonly SavedState _state;
     private ClawController? _controller;
+    private AcerLightingHid? _acerHid;
     private ushort? _minFirmwareVersion;
     private bool _boardKnown;
+    private bool _usesAcerHid;
     private bool _disposed;
 
-    public LightingViewModel(PerformanceViewModel performance)
+    public LightingViewModel(PerformanceViewModel performance, SavedState state)
     {
         _performance = performance;
+        _state = state;
 
         ToggleSameOnBoth = new Command(() => SameOnBoth = !SameOnBoth);
         ToggleSticksLit = new Command(() => SticksLit = !SticksLit);
         ToggleButtonsLit = new Command(() => ButtonsLit = !ButtonsLit);
         ToggleButtonsSteady = new Command(() => ButtonsSteady = !ButtonsSteady);
 
-        var current = StickLighting.Default;
+        var current = state.AcerLighting ?? StickLighting.Default;
         _absorbing = true;
         Show(current);
         _absorbing = false;
@@ -147,9 +151,20 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
         }
     }
 
-    public string LeftLabel => SameOnBoth ? Strings.BothSticks : Strings.LeftStick;
+    /// <summary>False on Acer 0xFF5A lighting where one colour controls both stick rings together.</summary>
+    public bool SupportsPerStickColour => !_usesAcerHid;
 
-    public bool ShowsRightPicker => !SameOnBoth;
+    public string LeftLabel => !_usesAcerHid && !SameOnBoth ? Strings.LeftStick : Strings.BothSticks;
+
+    public bool ShowsRightPicker => SupportsPerStickColour && !SameOnBoth;
+
+    /// <summary>Secondary zone: face buttons on MSI, rear Predator logo on Acer Atlas 8.</summary>
+    public bool ShowsSecondaryZone => !_usesAcerHid || _acerHid is null || _acerHid.HasLogo;
+    public string SecondaryZoneHeading => _usesAcerHid ? Strings.LogoHeading : Strings.ButtonsHeading;
+    public string SecondaryZoneToggleLabel => _usesAcerHid ? Strings.LogoLights : Strings.ButtonLights;
+    public string SecondaryZoneToggleDetail => _usesAcerHid ? Strings.LogoLightsDetail : Strings.ButtonLightsDetail;
+    public string SecondaryZoneSteadyDetail => _usesAcerHid ? Strings.LogoSteadyDetail : Strings.ButtonsSteadyDetail;
+    public string SecondaryZoneColourLabel => _usesAcerHid ? Strings.RearLogo : Strings.FaceButtons;
 
     public ICommand ToggleSticksLit { get; }
 
@@ -228,6 +243,31 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
 
         var changesBefore = _changes;
 
+        if (_usesAcerHid)
+        {
+            var acer = await ConnectAcerAsync();
+            if (_disposed) return;
+
+            if (acer is not null)
+            {
+                Notify(nameof(ShowsSecondaryZone));
+
+                // 0xFF5A has no read-back command: show the last saved setup unless the user already edited.
+                if (_changes == changesBefore && !_writing && _state.AcerLighting is { } saved)
+                {
+                    _absorbing = true;
+                    Show(saved);
+                    _absorbing = false;
+                }
+
+                var lightingRuns = await Task.Run(() => AcerSense.IsLightingRunning);
+                if (_disposed) return;
+
+                Status = lightingRuns ? Strings.LightingAcerSenseRuns : Strings.LightingAcerSaved;
+                return;
+            }
+        }
+
         var controller = await ConnectAsync();
         if (_disposed || controller is null) return;
 
@@ -247,10 +287,34 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
         Show(StickLighting.Decode(bytes));
         _absorbing = false;
 
-        var msiCenterRuns = await Task.Run(() => MsiCenter.IsRunning);
+        var oemRuns = _usesAcerHid
+            ? await Task.Run(() => AcerSense.IsLightingRunning)
+            : await Task.Run(() => MsiCenter.IsRunning);
         if (_disposed) return;
 
-        Status = msiCenterRuns ? Strings.LightingMsiCenterRuns : Strings.LightingSaved;
+        Status = oemRuns
+            ? (_usesAcerHid ? Strings.LightingAcerSenseRuns : Strings.LightingMsiCenterRuns)
+            : Strings.LightingSaved;
+    }
+
+    /// <summary>Re-applies saved Acer 0xFF5A lighting after sleep/resume because USB stick RGB resets on sleep.</summary>
+    public async Task ReapplyAfterResumeAsync()
+    {
+        if (_disposed || !_usesAcerHid || _state.AcerLighting is not { } saved) return;
+
+        // Wait briefly for the USB gamepad (0502:F901) to finish re-enumerating after wake.
+        await Task.Delay(TimeSpan.FromMilliseconds(1500));
+        if (_disposed) return;
+
+        if (await Task.Run(() => AcerSense.IsLightingRunning) || _disposed) return;
+
+        _acerHid?.Dispose();
+        _acerHid = null;
+
+        var acer = await ConnectAcerAsync();
+        if (_disposed || acer is null) return;
+
+        await Task.Run(() => acer.Apply(saved));
     }
 
     private void Show(StickLighting lighting)
@@ -276,18 +340,37 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
     {
         var boardKnown = !ReferenceEquals(device, DeviceProfile.Unknown) && device.Controls is not null;
         var minFirmware = device.Controls?.BackButtons?.MinFirmwareVersion;
-        if (_boardKnown == boardKnown && _minFirmwareVersion == minFirmware) return;
+        var usesAcerHid = string.Equals(device.Controls?.LightingProtocol, ControlsProfile.AcerHidLighting, StringComparison.Ordinal);
 
+        if (_boardKnown == boardKnown && _minFirmwareVersion == minFirmware && _usesAcerHid == usesAcerHid) return;
+
+        var protocolChanged = _usesAcerHid != usesAcerHid;
         _boardKnown = boardKnown;
         _minFirmwareVersion = minFirmware;
+        _usesAcerHid = usesAcerHid;
 
-        if (_controller is not null && _controller.IsUnsupportedProfileFirmware(_minFirmwareVersion, _boardKnown))
+        if (protocolChanged)
+        {
+            _acerHid?.Dispose();
+            _acerHid = null;
+            Notify(nameof(SupportsPerStickColour));
+            Notify(nameof(LeftLabel));
+            Notify(nameof(ShowsRightPicker));
+            Notify(nameof(ShowsSecondaryZone));
+            Notify(nameof(SecondaryZoneHeading));
+            Notify(nameof(SecondaryZoneToggleLabel));
+            Notify(nameof(SecondaryZoneToggleDetail));
+            Notify(nameof(SecondaryZoneSteadyDetail));
+            Notify(nameof(SecondaryZoneColourLabel));
+            _ = RefreshAfterAdoptAsync();
+        }
+        else if (_controller is not null && _controller.IsUnsupportedProfileFirmware(_minFirmwareVersion, _boardKnown))
         {
             _controller.Dispose();
             _controller = null;
             _ = RefreshAfterAdoptAsync();
         }
-        else if (_controller is null && !IsAvailable)
+        else if (_controller is null && _acerHid is null && !IsAvailable)
         {
             _ = RefreshAfterAdoptAsync();
         }
@@ -299,6 +382,36 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
             await pending;
 
         await RefreshAsync();
+    }
+
+    private async Task<AcerLightingHid?> ConnectAcerAsync()
+    {
+        if (_disposed) return null;
+
+        if (_acerHid is null)
+        {
+            var found = await Task.Run(AcerLightingHid.Find);
+            if (_disposed)
+            {
+                found?.Dispose();
+                return null;
+            }
+
+            if (_acerHid is not null) found?.Dispose();
+            else _acerHid = found;
+        }
+
+        if (_acerHid is not null) IsAvailable = true;
+        return _acerHid;
+    }
+
+    private void LostAcer(AcerLightingHid failed)
+    {
+        if (!ReferenceEquals(_acerHid, failed)) return;
+
+        failed.Dispose();
+        _acerHid = null;
+        Status = Strings.ControllerNotAnswering;
     }
 
     private async Task<ClawController?> ConnectAsync()
@@ -376,6 +489,30 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
             {
                 _queued = null;
 
+                if (_usesAcerHid)
+                {
+                    var acer = await ConnectAcerAsync();
+                    if (_disposed) return;
+
+                    if (acer is not null)
+                    {
+                        var applied = await Task.Run(() => acer.Apply(setup));
+                        if (_disposed) return;
+
+                        if (applied)
+                        {
+                            _state.AcerLighting = setup;
+                            _state.Save();
+                        }
+                        else
+                        {
+                            LostAcer(acer);
+                        }
+
+                        continue;
+                    }
+                }
+
                 var controller = await ConnectAsync();
                 if (_disposed || controller is null) return;
 
@@ -420,6 +557,8 @@ public sealed class LightingViewModel : LayerViewModel, IDisposable
         if (_disposed) return;
         _disposed = true;
         _performance.PropertyChanged -= OnPerformancePropertyChanged;
+        _acerHid?.Dispose();
+        _acerHid = null;
         _controller?.Dispose();
         _controller = null;
     }

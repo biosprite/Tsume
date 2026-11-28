@@ -1,9 +1,11 @@
+using System.ComponentModel;
 using System.IO;
 using System.Windows.Input;
 using Tsume.App.Language;
 using Tsume.App.Mvvm;
 using Tsume.App.Platform;
 using Tsume.Core;
+using Tsume.Core.Devices;
 
 namespace Tsume.App.ViewModels;
 
@@ -24,6 +26,7 @@ public sealed class SettingsViewModel : LayerViewModel
         Action<bool>? onRtssVisibilityChanged = null)
     {
         _helper = helper;
+        _performance = performance;
         ChargeLimit = new ChargeLimitViewModel(helper, state);
         PerformancePresets = new PerformancePresetsViewModel(performance, state);
         Fan = new FanViewModel(performance);
@@ -38,13 +41,24 @@ public sealed class SettingsViewModel : LayerViewModel
         {
             // Windows shows a permission prompt, which takes focus, so the panel leaves first.
             var pause = !IsMsiCenterPaused;
+            var acer = IsAcerDevice;
             await dismiss();
 
-            if (pause) await MsiCenter.PauseAsync();
-            else await MsiCenter.ResumeAsync();
+            if (acer)
+            {
+                if (pause) await AcerSense.PauseAsync();
+                else await AcerSense.ResumeAsync();
+            }
+            else
+            {
+                if (pause) await MsiCenter.PauseAsync();
+                else await MsiCenter.ResumeAsync();
+            }
 
             Refresh();
         });
+
+        _performance.PropertyChanged += OnPerformancePropertyChanged;
 
         _shareLogs = CreateShareLogsCommand(_helper, dismiss, detail => ShareLogsDetail = detail);
 
@@ -55,6 +69,15 @@ public sealed class SettingsViewModel : LayerViewModel
         });
 
         Refresh();
+    }
+
+    private void OnPerformancePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(PerformanceViewModel.Device)) return;
+
+        Notify(nameof(OemPauseLabel));
+        Notify(nameof(MsiCenterDetail));
+        IsMsiCenterPaused = IsAcerDevice ? !AcerSense.IsRunning : !MsiCenter.IsRunning;
     }
 
     internal static AsyncCommand CreateShareLogsCommand(
@@ -121,6 +144,7 @@ public sealed class SettingsViewModel : LayerViewModel
     public DeveloperViewModel Developer { get; }
 
     private readonly Tsume.Core.Ipc.HelperClient _helper;
+    private readonly PerformanceViewModel _performance;
     private readonly AsyncCommand _shareLogs;
 
     public ICommand ShareLogs => _shareLogs;
@@ -130,7 +154,13 @@ public sealed class SettingsViewModel : LayerViewModel
 
     public ICommand ToggleMsiCenter { get; }
 
-    /// <summary>True when MSI Center M is not running. While paused, the M button belongs to Tsume.</summary>
+    private bool IsAcerDevice =>
+        _performance.Device.Controls?.EffectiveOemSoftware == OemSoftwareKind.AcerPredatorSense;
+
+    /// <summary>Label for the OEM software pause switch: "Pause MSI Center M" on MSI, "Pause PredatorSense" on Acer.</summary>
+    public string OemPauseLabel => IsAcerDevice ? Strings.PauseAcerSense : Strings.PauseMsiCenter;
+
+    /// <summary>True when the device's OEM control suite (MSI Center M or PredatorSense) is not running.</summary>
     public bool IsMsiCenterPaused
     {
         get;
@@ -140,10 +170,9 @@ public sealed class SettingsViewModel : LayerViewModel
         }
     }
 
-    public string MsiCenterDetail =>
-        IsMsiCenterPaused     ? Strings.MsiCenterPaused
-        : MsiCenter.CanControl ? Strings.MsiCenterRunning
-        : Strings.MsiCenterNoHelper;
+    public string MsiCenterDetail => IsAcerDevice
+        ? (IsMsiCenterPaused ? Strings.AcerSensePaused : AcerSense.CanControl ? Strings.AcerSenseRunning : Strings.AcerSenseNoHelper)
+        : (IsMsiCenterPaused ? Strings.MsiCenterPaused : MsiCenter.CanControl ? Strings.MsiCenterRunning : Strings.MsiCenterNoHelper);
 
     private bool _absorbing;
 
@@ -162,6 +191,6 @@ public sealed class SettingsViewModel : LayerViewModel
         IsInStartMenu = StartMenuShortcut.Exists;
         _absorbing = false;
 
-        IsMsiCenterPaused = !MsiCenter.IsRunning;
+        IsMsiCenterPaused = IsAcerDevice ? !AcerSense.IsRunning : !MsiCenter.IsRunning;
     }
 }

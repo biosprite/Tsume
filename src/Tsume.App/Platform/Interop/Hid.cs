@@ -81,6 +81,20 @@ internal static unsafe partial class Hid
     }
 
     /// <summary>
+    /// Opens a collection synchronously for <c>HidD_GetFeature</c>/<c>HidD_SetFeature</c> calls.
+    /// Falls back to zero data-access rights when a collection rejects read/write access.
+    /// </summary>
+    public static SafeFileHandle? OpenForFeature(string path)
+    {
+        var handle = CreateFile(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            0, OPEN_EXISTING, 0, 0);
+        if (!handle.IsInvalid) return handle;
+        handle.Dispose();
+
+        return OpenMetadataOnly(path);
+    }
+
+    /// <summary>
     /// Opens a collection with zero data-access rights so Windows allows querying attributes, strings, and
     /// preparsed capabilities even on exclusive system keyboards, mice, and touchpads.
     /// </summary>
@@ -159,6 +173,14 @@ internal static unsafe partial class Hid
     [return: MarshalAs(UnmanagedType.U1)]
     public static partial bool HidD_FlushQueue(SafeFileHandle device);
 
+    [LibraryImport("hid.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.U1)]
+    public static partial bool HidD_SetFeature(SafeFileHandle device, byte[] reportBuffer, uint reportBufferLength);
+
+    [LibraryImport("hid.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.U1)]
+    public static partial bool HidD_GetFeature(SafeFileHandle device, [Out] byte[] reportBuffer, uint reportBufferLength);
+
     [LibraryImport("hid.dll")]
     private static partial int HidP_GetCaps(nint preparsed, out HidpCaps caps);
 
@@ -167,6 +189,51 @@ internal static unsafe partial class Hid
 
     [LibraryImport("hid.dll")]
     private static partial int HidP_GetValueCaps(int reportType, byte* caps, ref ushort length, nint preparsed);
+
+    /// <summary>
+    /// Reads each feature value cap's byte size keyed by <c>(ReportId, Usage)</c>. Matches how Acer's
+    /// <c>LightingHID</c> determines field widths (e.g. 1-byte vs 2-byte LED count in report <c>0xA3</c>).
+    /// </summary>
+    public static Dictionary<(byte ReportId, ushort Usage), int> FeatureValueByteSizes(SafeFileHandle device)
+    {
+        var map = new Dictionary<(byte, ushort), int>();
+        if (!HidD_GetPreparsedData(device, out var preparsed)) return map;
+
+        try
+        {
+            if (HidP_GetCaps(preparsed, out var caps) != HIDP_STATUS_SUCCESS || caps.NumberFeatureValueCaps == 0)
+                return map;
+
+            var count = caps.NumberFeatureValueCaps;
+            var buffer = new byte[count * CapsSize];
+            fixed (byte* bytes = buffer)
+                if (HidP_GetValueCaps(HidP_Feature, bytes, ref count, preparsed) != HIDP_STATUS_SUCCESS)
+                    return map;
+
+            for (var i = 0; i < count; i++)
+            {
+                var off = i * CapsSize;
+                var reportId = buffer[off + CapsReportIdOffset];
+                var isRange = buffer[off + 12] != 0;
+                var bitSize = (ushort)(buffer[off + 18] | (buffer[off + 19] << 8));
+                var byteSize = Math.Max(1, bitSize / 8);
+                var usageMin = (ushort)(buffer[off + 56] | (buffer[off + 57] << 8));
+                var usageMax = isRange ? (ushort)(buffer[off + 58] | (buffer[off + 59] << 8)) : usageMin;
+
+                for (var usage = usageMin; usage <= usageMax; usage++)
+                {
+                    map[(reportId, (ushort)usage)] = byteSize;
+                    if (usage == ushort.MaxValue) break;
+                }
+            }
+        }
+        finally
+        {
+            HidD_FreePreparsedData(preparsed);
+        }
+
+        return map;
+    }
 
     /// <summary>Firmware version as the device reports it: 0x0414 for "4.14".</summary>
     public static ushort? Version(SafeFileHandle device) => Attributes(device)?.VersionNumber;

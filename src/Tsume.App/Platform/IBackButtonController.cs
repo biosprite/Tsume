@@ -62,7 +62,7 @@ internal sealed class MsiBackButtonController : IBackButtonController
 
     public static BackButtonOpenResult Open(BackButtonsProfile profile)
     {
-        var controller = ClawController.Find(profile.VendorId, profile.ProductIds);
+        var controller = ClawController.Find(profile.EffectiveVendorIds, profile.ProductIds);
         if (controller is null)
             return new(null, BackButtonOpenFailure.NotFound);
 
@@ -125,7 +125,7 @@ internal sealed class MsiBackButtonController : IBackButtonController
             await Task.Delay(ReopenDelay);
             if (_disposed) return false;
 
-            var reopened = await Task.Run(() => ClawController.Find(_profile.VendorId, _profile.ProductIds));
+            var reopened = await Task.Run(() => ClawController.Find(_profile.EffectiveVendorIds, _profile.ProductIds));
             if (_disposed)
             {
                 reopened?.Dispose();

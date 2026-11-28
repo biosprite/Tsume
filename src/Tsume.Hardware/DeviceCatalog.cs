@@ -1,3 +1,4 @@
+using Tsume.Hardware.Acer;
 using Tsume.Hardware.Msi;
 
 namespace Tsume.Hardware;
@@ -11,6 +12,7 @@ public static class DeviceCatalog
     private static readonly Func<Board, IDevice?>[] Makers =
     [
         MsiDevice.TryOpen,
+        AcerDevice.TryOpen,
     ];
 
     /// <returns>The board found, and the device that drives it — null on a machine Tsume does not know.</returns>

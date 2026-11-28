@@ -116,6 +116,10 @@ public sealed class SavedState
     /// <summary>The last known firmware charge limit percentage, so Settings opens on it without waiting for the helper.</summary>
     public int? ChargeLimit { get; set; }
 
+    /// <summary>Last chosen Acer 0xFF5A lighting settings (write-only protocol; re-applied after sleep/restart).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Core.Lighting.StickLighting? AcerLighting { get; set; }
+
     /// <summary>Whether the OptiScaler tile is on the main screen. Hiding it uninstalls nothing.</summary>
     public bool ShowOptiScaler { get; set; } = true;
 
