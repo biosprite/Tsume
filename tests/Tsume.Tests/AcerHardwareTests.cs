@@ -832,6 +832,395 @@ public sealed class AcerHardwareTests
         Assert.Null(device.Readings().CpuTemperature);
     }
 
+    [Fact]
+    public void AcerLightingHid_Apply_DiffsPerZoneSkipsDuplicateSpeedStepsAndForcesOnResume()
+    {
+        const uint stickCaps = AcerLightingHid.CapStatic | AcerLightingHid.CapBreathing | AcerLightingHid.CapWave | AcerLightingHid.CapRainbow;
+        const uint logoCaps = 0x0000_003B;
+
+        var stickReports = new List<byte[]>();
+        var logoReports = new List<byte[]>();
+
+        using var hid = AcerLightingHid.CreateForTesting(
+        [
+            ([new AcerLightingHid.Zone(AcerLightingHid.DeviceIdSticks, 8, stickCaps)], 64,
+                report => { stickReports.Add(report.ToArray()); return true; }, null),
+            ([new AcerLightingHid.Zone(AcerLightingHid.DeviceIdLogo, 1, logoCaps)], 64,
+                report => { logoReports.Add(report.ToArray()); return true; }, null),
+        ]);
+
+        var initial = new StickLighting(
+            LightingEffect.Breathe,
+            LeftStick: new Rgb(0x00, 0x60, 0xFF),
+            RightStick: new Rgb(0x00, 0x60, 0xFF),
+            Buttons: new Rgb(0xFF, 0xFF, 0xFF),
+            StickBrightness: 80,
+            ButtonBrightness: 60,
+            Speed: 5);
+
+        // Initial apply writes both zones once.
+        Assert.True(hid.Apply(initial));
+        Assert.Single(stickReports);
+        Assert.Single(logoReports);
+
+        // Changing only the rear logo brightness must NOT resend to the sticks (no cross-zone flicker).
+        stickReports.Clear();
+        logoReports.Clear();
+        var logoDimmed = initial with { ButtonBrightness = 30 };
+        Assert.True(hid.Apply(logoDimmed));
+        Assert.Empty(stickReports);
+        Assert.Single(logoReports);
+        Assert.Equal(30, logoReports[0][3]);
+
+        // Changing only the stick colour must NOT resend to the rear logo.
+        stickReports.Clear();
+        logoReports.Clear();
+        var stickRed = logoDimmed with { LeftStick = new Rgb(0xFF, 0x00, 0x00), RightStick = new Rgb(0xFF, 0x00, 0x00) };
+        Assert.True(hid.Apply(stickRed));
+        Assert.Single(stickReports);
+        Assert.Empty(logoReports);
+
+        // Speed 5 and 6 both map to Acer firmware speed 3: neither zone should receive a redundant packet.
+        stickReports.Clear();
+        logoReports.Clear();
+        Assert.True(hid.Apply(stickRed with { Speed = 6 }));
+        Assert.Empty(stickReports);
+        Assert.Empty(logoReports);
+
+        // Speed 7 maps to firmware speed 4: both breathing zones update.
+        Assert.True(hid.Apply(stickRed with { Speed = 7 }));
+        Assert.Single(stickReports);
+        Assert.Single(logoReports);
+
+        // force: true (resume/startup) always sends both zones even when identical to the last sent state.
+        stickReports.Clear();
+        logoReports.Clear();
+        Assert.True(hid.Apply(stickRed with { Speed = 7 }, force: true));
+        Assert.Single(stickReports);
+        Assert.Single(logoReports);
+    }
+
+    [Fact]
+    public void AcerLightingHid_Apply_ReopensStaleEndpointAndRetriesOnce()
+    {
+        const uint stickCaps = AcerLightingHid.CapStatic | AcerLightingHid.CapBreathing | AcerLightingHid.CapWave | AcerLightingHid.CapRainbow;
+        var sendAttempts = 0;
+        var reopenCalls = 0;
+
+        using var hid = AcerLightingHid.CreateForTesting(
+        [
+            ([new AcerLightingHid.Zone(AcerLightingHid.DeviceIdSticks, 8, stickCaps)], 64,
+                _ => ++sendAttempts > 1,
+                () => { reopenCalls++; return true; }),
+        ]);
+
+        Assert.True(hid.Apply(StickLighting.Default));
+        Assert.Equal(1, reopenCalls);
+        Assert.Equal(2, sendAttempts);
+    }
+
+    [Fact]
+    public void DisplayWakeWatcher_Tracker_OnlyFiresOnOffToOnTransitions()
+    {
+        var tracker = new DisplayWakeWatcher.Tracker();
+
+        // Initial registration reports DisplayOn -> must not trigger a spurious reapply.
+        Assert.False(tracker.Feed(DisplayWakeWatcher.DisplayOn));
+
+        // Dimming and undimming -> must not trigger a reapply.
+        Assert.False(tracker.Feed(DisplayWakeWatcher.DisplayDimmed));
+        Assert.False(tracker.Feed(DisplayWakeWatcher.DisplayOn));
+
+        // Display Off -> On (Modern Standby wake) -> triggers exactly once.
+        Assert.False(tracker.Feed(DisplayWakeWatcher.DisplayOff));
+        Assert.True(tracker.Feed(DisplayWakeWatcher.DisplayOn));
+        Assert.False(tracker.Feed(DisplayWakeWatcher.DisplayOn));
+
+        // Off -> Dimmed -> On still counts as waking from Off.
+        Assert.False(tracker.Feed(DisplayWakeWatcher.DisplayOff));
+        Assert.False(tracker.Feed(DisplayWakeWatcher.DisplayDimmed));
+        Assert.True(tracker.Feed(DisplayWakeWatcher.DisplayOn));
+    }
+
+    [Fact]
+    public async Task LightingViewModel_Acer_SerializesProbesDefersSaveCoalescesResumesAndUserEditWins()
+    {
+        var savedLighting = new StickLighting(
+            LightingEffect.Steady,
+            LeftStick: new Rgb(0x00, 0x60, 0xFF),
+            RightStick: new Rgb(0x00, 0x60, 0xFF),
+            Buttons: new Rgb(0xFF, 0xFF, 0xFF),
+            StickBrightness: 50,
+            ButtonBrightness: 50,
+            Speed: 5);
+
+        var state = new Tsume.App.SavedState
+        {
+            Device = AcerBoards.Atlas8.Profile,
+            AcerLighting = savedLighting,
+        };
+        var performance = new Tsume.App.ViewModels.PerformanceViewModel(new HelperClient(), state);
+
+        var activeProbes = 0;
+        var maxConcurrentProbes = 0;
+        var totalProbes = 0;
+        var saveCount = 0;
+        var applied = new List<(StickLighting Setup, bool Force)>();
+
+        using var vm = new Tsume.App.ViewModels.LightingViewModel(
+            performance,
+            state,
+            findAcer: () =>
+            {
+                var concurrent = Interlocked.Increment(ref activeProbes);
+                Interlocked.Increment(ref totalProbes);
+                int prev;
+                do
+                {
+                    prev = maxConcurrentProbes;
+                    if (concurrent <= prev) break;
+                } while (Interlocked.CompareExchange(ref maxConcurrentProbes, concurrent, prev) != prev);
+
+                Thread.Sleep(25);
+                Interlocked.Decrement(ref activeProbes);
+                return new FakeAcerLightingDevice(hasSticks: true, hasLogo: true, (setup, force) =>
+                {
+                    lock (applied) applied.Add((setup, force));
+                    return true;
+                });
+            },
+            isAcerLightingRunning: () => false,
+            saveState: () => Interlocked.Increment(ref saveCount),
+            acerWriteMinInterval: TimeSpan.FromMilliseconds(20),
+            acerSaveDelay: TimeSpan.FromMilliseconds(200),
+            resumeInitialDelayMs: 60,
+            resumeRetryDelayMs: 20);
+
+        // Wait for startup refresh + startup reapply to finish; probes must never overlap!
+        var deadline = DateTime.UtcNow.AddSeconds(3);
+        while (DateTime.UtcNow < deadline)
+        {
+            lock (applied)
+            {
+                if (applied.Count >= 1) break;
+            }
+            await Task.Delay(15);
+        }
+
+        Assert.Equal(1, maxConcurrentProbes);
+        Assert.Equal(1, totalProbes);
+        Assert.Single(applied);
+        Assert.True(applied[0].Force);
+
+        // Two rapid resume notifications must coalesce into a single force-reapply.
+        lock (applied) applied.Clear();
+        var r1 = vm.ReapplyAfterResumeAsync();
+        await Task.Delay(15);
+        var r2 = vm.ReapplyAfterResumeAsync();
+        await Task.WhenAll(r1, r2);
+
+        lock (applied)
+        {
+            Assert.Single(applied);
+            Assert.True(applied[0].Force);
+            applied.Clear();
+        }
+
+        // A user edit during a pending resume delay cancels the resume reapply and wins cleanly;
+        // rapid slider ticks are coalesced and do not synchronously hammer state.json on every step.
+        saveCount = 0;
+        var r3 = vm.ReapplyAfterResumeAsync();
+        for (var b = 60; b <= 90; b += 5)
+            vm.StickBrightness = b;
+
+        await vm.WaitForPendingWritesAsync();
+        await r3;
+
+        lock (applied)
+        {
+            Assert.NotEmpty(applied);
+            Assert.Equal(90, applied[^1].Setup.StickBrightness);
+            Assert.False(applied[^1].Force);
+        }
+        Assert.Equal(0, saveCount);   // deferred while dragging
+
+        // FlushPending persists the settled state once.
+        vm.FlushPending();
+        Assert.Equal(1, saveCount);
+        Assert.Equal(90, state.AcerLighting!.StickBrightness);
+    }
+
+    [Fact]
+    public async Task LightingViewModel_Acer_RecoversFromStaleHandleOnFirstEditAndWaitsForSticksOnResume()
+    {
+        var state = new Tsume.App.SavedState
+        {
+            Device = AcerBoards.Atlas8.Profile,
+            AcerLighting = null,   // keep startup quiet so resume and edit stages are deterministic
+        };
+        var performance = new Tsume.App.ViewModels.PerformanceViewModel(new HelperClient(), state);
+
+        var stage = 0;   // 0 = startup, 1 = resume sequence, 2 = stale-handle user edit
+        var resumeAttempt = 0;
+        var editAttempt = 0;
+        var applied = new List<(string Tag, StickLighting Setup, bool Force)>();
+
+        using var vm = new Tsume.App.ViewModels.LightingViewModel(
+            performance,
+            state,
+            findAcer: () =>
+            {
+                var currentStage = Volatile.Read(ref stage);
+                if (currentStage == 0)
+                    return new FakeAcerLightingDevice(hasSticks: true, hasLogo: true, (_, _) => true);
+
+                if (currentStage == 1)
+                {
+                    var n = Interlocked.Increment(ref resumeAttempt);
+                    return n switch
+                    {
+                        1 => new FakeAcerLightingDevice(hasSticks: false, hasLogo: true, (s, f) =>
+                        {
+                            lock (applied) applied.Add(("logo-only", s, f));
+                            return true;
+                        }),
+                        2 => new FakeAcerLightingDevice(hasSticks: true, hasLogo: true, (s, f) =>
+                        {
+                            lock (applied) applied.Add(("resume-fail", s, f));
+                            return false;
+                        }),
+                        _ => new FakeAcerLightingDevice(hasSticks: true, hasLogo: true, (s, f) =>
+                        {
+                            lock (applied) applied.Add(("resume-ok", s, f));
+                            return true;
+                        }),
+                    };
+                }
+
+                var e = Interlocked.Increment(ref editAttempt);
+                return e == 1
+                    ? new FakeAcerLightingDevice(hasSticks: true, hasLogo: true, (s, f) =>
+                    {
+                        lock (applied) applied.Add(("edit-stale", s, f));
+                        return false;
+                    })
+                    : new FakeAcerLightingDevice(hasSticks: true, hasLogo: true, (s, f) =>
+                    {
+                        lock (applied) applied.Add(("edit-recovered", s, f));
+                        return true;
+                    });
+            },
+            isAcerLightingRunning: () => false,
+            saveState: () => { },
+            acerWriteMinInterval: TimeSpan.Zero,
+            acerSaveDelay: TimeSpan.Zero,
+            resumeInitialDelayMs: 0,
+            resumeRetryDelayMs: 15);
+
+        await vm.RefreshAsync();
+
+        // Resume: attempt 0 gets logo-only (skips applying early so logo never double-flashes),
+        // attempt 1 gets sticks+logo whose Apply fails and drops handle, attempt 2 succeeds.
+        state.AcerLighting = StickLighting.Default;
+        Volatile.Write(ref stage, 1);
+        await vm.ReapplyAfterResumeAsync();
+
+        lock (applied)
+        {
+            Assert.DoesNotContain(applied, x => x.Tag == "logo-only");
+            Assert.Equal("resume-fail", applied[0].Tag);
+            Assert.Equal("resume-ok", applied[1].Tag);
+            Assert.True(applied[1].Force);
+            applied.Clear();
+        }
+
+        // First user edit on a stale cached handle transparently drops, re-probes, and retries once.
+        var failCurrentHandle = true;
+        var editProbes = 0;
+        var editApplied = new List<(int DeviceNum, StickLighting Setup, bool Force)>();
+        var editState = new Tsume.App.SavedState { Device = AcerBoards.Atlas8.Profile };
+        var editPerf = new Tsume.App.ViewModels.PerformanceViewModel(new HelperClient(), editState);
+        using var editVm = new Tsume.App.ViewModels.LightingViewModel(
+            editPerf,
+            editState,
+            findAcer: () =>
+            {
+                var num = Interlocked.Increment(ref editProbes);
+                return new FakeAcerLightingDevice(hasSticks: true, hasLogo: true, (s, f) =>
+                {
+                    lock (editApplied) editApplied.Add((num, s, f));
+                    if (num == 1 && failCurrentHandle) return false;
+                    return true;
+                });
+            },
+            isAcerLightingRunning: () => false,
+            saveState: () => { },
+            acerWriteMinInterval: TimeSpan.Zero,
+            acerSaveDelay: TimeSpan.Zero,
+            resumeInitialDelayMs: 0,
+            resumeRetryDelayMs: 0);
+
+        await editVm.RefreshAsync();
+        Assert.Equal(1, editProbes);
+
+        // Cached handle #1 fails -> WriteQueuedAsync drops it, re-probes #2, and lands 42% on the first edit!
+        editVm.StickBrightness = 42;
+        await editVm.WaitForPendingWritesAsync();
+
+        Assert.Equal(2, editProbes);
+        lock (editApplied)
+        {
+            Assert.Equal(2, editApplied.Count);
+            Assert.Equal((1, 42, false), (editApplied[0].DeviceNum, editApplied[0].Setup.StickBrightness, editApplied[0].Force));
+            Assert.Equal((2, 42, true), (editApplied[1].DeviceNum, editApplied[1].Setup.StickBrightness, editApplied[1].Force));
+        }
+        Assert.True(editVm.IsAvailable);
+        Assert.Equal(Tsume.App.Language.Strings.LightingAcerSaved, editVm.Status);
+    }
+
+    [Fact]
+    public async Task LightingViewModel_Acer_DoesNotFallThroughWhenAcerHidUnavailable()
+    {
+        var state = new Tsume.App.SavedState
+        {
+            Device = AcerBoards.Atlas8.Profile,
+            AcerLighting = StickLighting.Default,
+        };
+        var performance = new Tsume.App.ViewModels.PerformanceViewModel(new HelperClient(), state);
+
+        using var vm = new Tsume.App.ViewModels.LightingViewModel(
+            performance,
+            state,
+            findAcer: () => null,
+            isAcerLightingRunning: () => false,
+            saveState: () => { },
+            acerWriteMinInterval: TimeSpan.Zero,
+            acerSaveDelay: TimeSpan.Zero,
+            resumeInitialDelayMs: 0,
+            resumeRetryDelayMs: 0);
+
+        await vm.RefreshAsync();
+
+        Assert.False(vm.IsAvailable);
+        Assert.Equal(Tsume.App.Language.Strings.ControllerNotFound, vm.Status);
+    }
+
+    private sealed class FakeAcerLightingDevice(
+        bool hasSticks,
+        bool hasLogo,
+        Func<StickLighting, bool, bool> onApply) : IAcerLightingDevice
+    {
+        public bool HasSticks => hasSticks;
+        public bool HasLogo => hasLogo;
+        public int ZoneCount => (hasSticks ? 1 : 0) + (hasLogo ? 1 : 0);
+        public bool Disposed { get; private set; }
+
+        public bool Apply(StickLighting lighting, bool force = false) =>
+            !Disposed && onApply(lighting, force);
+
+        public void Dispose() => Disposed = true;
+    }
+
     private sealed class FakeAcerEcHid : IAcerEcHid
     {
         public byte UsageMode { get; set; } = AcerDevice.ModeBalanced;

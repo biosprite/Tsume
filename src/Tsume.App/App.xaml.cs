@@ -56,6 +56,7 @@ public partial class App
     private PadIsolation? _padIsolation;
     private ClawButtons? _buttons;
     private AcerButtons? _acerButtons;
+    private DisplayWakeWatcher? _displayWake;
     private GameBarButtonHook? _gameBarHook;
     private DedicatedActionHook? _dedicatedActions;
     private PanelViewModel? _panel;
@@ -176,6 +177,14 @@ public partial class App
             quit: Shutdown,
             padIsolation: _padIsolation);
         panel.StartBackgroundServices();
+
+        // Modern Standby (S0ix) does not raise PowerModes.Resume; watch display Off -> On so Acer 0xFF5A USB stick
+        // lighting re-applies cleanly after normal sleep/wake too.
+        _displayWake = new DisplayWakeWatcher(Dispatcher);
+        _displayWake.DisplayWoke += () =>
+        {
+            if (_panel is { } current) _ = current.Lighting.ReapplyAfterResumeAsync();
+        };
 
         _window = new OverlayWindow(panel, stayOpen: e.Args.Contains(StayOpenSwitch));
         _rtssDrag = new RtssOverlayDragController(panel.RtssService, Dispatcher);
@@ -647,6 +656,7 @@ public partial class App
         _panel?.Dispose();
         _dedicatedActions?.Dispose();
         _gameBarHook?.Dispose();
+        _displayWake?.Dispose();
         _acerButtons?.Dispose();
         _buttons?.Dispose();
         _gamepad?.Dispose();

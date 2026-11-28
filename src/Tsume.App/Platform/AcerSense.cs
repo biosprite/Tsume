@@ -11,7 +11,7 @@ namespace Tsume.App.Platform;
 public static class AcerSense
 {
     private static readonly string[] ControlProcesses = ["Handheld.Desktop", "AcerAgentService"];
-    private static readonly string[] LightingProcesses = ["AcerLightingService", "OpenRGB"];
+    private static readonly string[] LightingProcesses = ["AcerLightingService", "AcerLightingServiceHH", "ALSSvc", "OpenRGB"];
 
     public static bool IsRunning => AnyRunning(ControlProcesses);
 

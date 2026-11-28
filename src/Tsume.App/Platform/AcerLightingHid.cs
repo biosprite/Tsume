@@ -5,6 +5,15 @@ using Tsume.Core.Lighting;
 
 namespace Tsume.App.Platform;
 
+/// <summary>Abstraction over <see cref="AcerLightingHid"/> so <see cref="ViewModels.LightingViewModel"/> can be tested without hardware.</summary>
+public interface IAcerLightingDevice : IDisposable
+{
+    bool HasSticks { get; }
+    bool HasLogo { get; }
+    int ZoneCount { get; }
+    bool Apply(StickLighting lighting, bool force = false);
+}
+
 /// <summary>
 /// Direct Acer HID lighting driver for vendor usage page <c>0xFF5A</c>, usage <c>0x01</c> (feature reports
 /// <c>0xA1</c>–<c>0xA4</c>). On the Predator Atlas 8 this discovers both:
@@ -13,7 +22,7 @@ namespace Tsume.App.Platform;
 ///   <item>Rear Predator Logo LED: I2C-HID <c>0CF2:5130</c> (<c>ENEK5130</c>), <c>devId = 0x80</c> (1 LED, cap mask <c>0x3B</c>).</item>
 /// </list>
 /// </summary>
-public sealed class AcerLightingHid : IDisposable
+public sealed class AcerLightingHid : IAcerLightingDevice
 {
     public const ushort UsagePage = 0xFF5A;
     public const ushort Usage = 0x01;
@@ -54,25 +63,102 @@ public sealed class AcerLightingHid : IDisposable
     private const int MaxRetries = 5;
     private const int RetryDelayMs = 20;
 
+    /// <summary>
+    /// Process-wide serialization for all <c>0xFF5A</c> HID exchanges across discovery (<c>0xA1</c>–<c>0xA3</c>),
+    /// mode writes (<c>0xA4</c>), handle reopens, and disposal so concurrent probes never interleave the stateful
+    /// <c>0xA2</c> SelectDevice -> <c>0xA3</c> DeviceInfo sequence on the same device.
+    /// </summary>
+    private static readonly Lock HidBusGate = new();
+
     public sealed record Zone(byte DeviceId, int LedCount, uint Capabilities);
 
-    private sealed class Endpoint(SafeFileHandle handle, int featureLength, List<Zone> zones) : IDisposable
+    private interface IEndpointTransport : IDisposable
     {
-        public SafeFileHandle Handle { get; } = handle;
+        bool SendFeature(byte[] report);
+        bool TryReopen();
+    }
+
+    private sealed class HidEndpointTransport(string path, SafeFileHandle handle) : IEndpointTransport
+    {
+        private SafeFileHandle? _handle = handle;
+
+        public bool SendFeature(byte[] report) =>
+            _handle is { IsInvalid: false, IsClosed: false } h && SendWithRetry(h, report);
+
+        public bool TryReopen()
+        {
+            _handle?.Dispose();
+            _handle = Hid.OpenForFeature(path);
+            return _handle is { IsInvalid: false, IsClosed: false };
+        }
+
+        public void Dispose()
+        {
+            _handle?.Dispose();
+            _handle = null;
+        }
+    }
+
+    private sealed class DelegateEndpointTransport(Func<byte[], bool> send, Func<bool>? reopen) : IEndpointTransport
+    {
+        public bool SendFeature(byte[] report) => send(report);
+        public bool TryReopen() => reopen?.Invoke() ?? false;
+        public void Dispose() { }
+    }
+
+    private sealed class Endpoint(IEndpointTransport transport, int featureLength, List<Zone> zones) : IDisposable
+    {
+        public IEndpointTransport Transport { get; } = transport;
         public int FeatureLength { get; } = featureLength;
         public List<Zone> Zones { get; } = zones;
-        public void Dispose() => Handle.Dispose();
+        public void Dispose() => Transport.Dispose();
     }
 
     private readonly List<Endpoint> _endpoints;
-    private readonly Lock _gate = new();
+    private readonly Dictionary<byte, byte[]> _lastSentReports = [];
     private bool _disposed;
 
     private AcerLightingHid(List<Endpoint> endpoints) => _endpoints = endpoints;
 
-    public bool HasSticks => _endpoints.Any(e => e.Zones.Any(z => z.DeviceId == DeviceIdSticks));
-    public bool HasLogo => _endpoints.Any(e => e.Zones.Any(z => IsLogoDevice(z.DeviceId)));
-    public int ZoneCount => _endpoints.Sum(e => e.Zones.Count);
+    /// <summary>Creates an in-memory instance backed by custom feature-report delegates for unit testing.</summary>
+    public static AcerLightingHid CreateForTesting(
+        IEnumerable<(IReadOnlyList<Zone> Zones, int FeatureLength, Func<byte[], bool> Send, Func<bool>? Reopen)> endpoints)
+    {
+        var list = endpoints
+            .Select(e => new Endpoint(
+                new DelegateEndpointTransport(e.Send, e.Reopen),
+                Math.Max(e.FeatureLength, 11),
+                [.. e.Zones]))
+            .ToList();
+        return new AcerLightingHid(list);
+    }
+
+    public bool HasSticks
+    {
+        get
+        {
+            lock (HidBusGate)
+                return !_disposed && _endpoints.Any(e => e.Zones.Any(z => z.DeviceId == DeviceIdSticks));
+        }
+    }
+
+    public bool HasLogo
+    {
+        get
+        {
+            lock (HidBusGate)
+                return !_disposed && _endpoints.Any(e => e.Zones.Any(z => IsLogoDevice(z.DeviceId)));
+        }
+    }
+
+    public int ZoneCount
+    {
+        get
+        {
+            lock (HidBusGate)
+                return _disposed ? 0 : _endpoints.Sum(e => e.Zones.Count);
+        }
+    }
 
     public static bool IsLogoDevice(byte deviceId) =>
         deviceId is DeviceIdLogo or DeviceIdCoverLogo or DeviceIdBaseLogo;
@@ -80,47 +166,64 @@ public sealed class AcerLightingHid : IDisposable
     /// <summary>Enumerates all HID collections on usage page <c>0xFF5A</c> and queries their device IDs and capabilities.</summary>
     public static AcerLightingHid? Find()
     {
-        var endpoints = new List<Endpoint>();
-
-        foreach (var path in Hid.DevicePaths())
+        lock (HidBusGate)
         {
-            var handle = Hid.OpenForFeature(path);
-            if (handle is null) continue;
+            var endpoints = new List<Endpoint>();
 
-            var desc = Hid.DescribeAll(handle);
-            if (desc is not { } d || d.Caps.UsagePage != UsagePage || d.Caps.Usage != Usage)
+            foreach (var path in Hid.DevicePaths())
             {
-                handle.Dispose();
-                continue;
+                int featureLen;
+                Dictionary<(byte ReportId, ushort Usage), int> fieldSizes;
+
+                // Inspect collection metadata with zero access first so unrelated HID devices are never opened R/W.
+                using (var meta = Hid.OpenMetadataOnly(path))
+                {
+                    if (meta is null) continue;
+
+                    var desc = Hid.DescribeAll(meta);
+                    if (desc is not { } d || d.Caps.UsagePage != UsagePage || d.Caps.Usage != Usage)
+                        continue;
+
+                    featureLen = Math.Max((int)d.Caps.FeatureReportByteLength, MinFeatureLength);
+                    fieldSizes = Hid.FeatureValueByteSizes(meta);
+                }
+
+                var handle = Hid.OpenForFeature(path);
+                if (handle is null) continue;
+
+                var zones = DiscoverZones(handle, featureLen, fieldSizes);
+                if (zones.Count == 0)
+                {
+                    handle.Dispose();
+                    continue;
+                }
+
+                endpoints.Add(new Endpoint(new HidEndpointTransport(path, handle), featureLen, zones));
             }
 
-            var featureLen = Math.Max((int)d.Caps.FeatureReportByteLength, MinFeatureLength);
-            var fieldSizes = Hid.FeatureValueByteSizes(handle);
-            var zones = DiscoverZones(handle, featureLen, fieldSizes);
-            if (zones.Count == 0)
-            {
-                handle.Dispose();
-                continue;
-            }
-
-            endpoints.Add(new Endpoint(handle, featureLen, zones));
+            return endpoints.Count > 0 ? new AcerLightingHid(endpoints) : null;
         }
-
-        return endpoints.Count > 0 ? new AcerLightingHid(endpoints) : null;
     }
 
-    /// <summary>Applies <paramref name="lighting"/> to all discovered stick and rear-logo zones.</summary>
-    public bool Apply(StickLighting lighting)
+    /// <summary>
+    /// Applies <paramref name="lighting"/> to all discovered stick and rear-logo zones.
+    /// When <paramref name="force"/> is false, zones whose computed <c>0xA4</c> payload matches the last
+    /// successfully sent report are skipped so adjusting one zone (or a duplicate speed step) never restarts
+    /// or flickers an animation on the untouched zone.
+    /// </summary>
+    public bool Apply(StickLighting lighting, bool force = false)
     {
-        lock (_gate)
+        lock (HidBusGate)
         {
             if (_disposed || _endpoints.Count == 0) return false;
 
-            var anySent = false;
+            var anyHandled = false;
             var allOk = true;
 
             foreach (var endpoint in _endpoints)
             {
+                var reopenedEndpoint = false;
+
                 foreach (var zone in endpoint.Zones)
                 {
                     byte[] report;
@@ -155,13 +258,40 @@ public sealed class AcerLightingHid : IDisposable
                         continue;
                     }
 
-                    anySent = true;
-                    if (!SendWithRetry(endpoint.Handle, report))
+                    anyHandled = true;
+
+                    if (!force
+                        && !reopenedEndpoint
+                        && _lastSentReports.TryGetValue(zone.DeviceId, out var previous)
+                        && previous.AsSpan().SequenceEqual(report))
+                    {
+                        continue;
+                    }
+
+                    var sent = endpoint.Transport.SendFeature(report);
+                    if (!sent && !reopenedEndpoint && endpoint.Transport.TryReopen())
+                    {
+                        // Cached HID handle went stale (e.g. after USB suspend/reset): reopen once and retry.
+                        reopenedEndpoint = true;
+                        foreach (var z in endpoint.Zones)
+                            _lastSentReports.Remove(z.DeviceId);
+
+                        sent = endpoint.Transport.SendFeature(report);
+                    }
+
+                    if (sent)
+                    {
+                        _lastSentReports[zone.DeviceId] = report;
+                    }
+                    else
+                    {
+                        _lastSentReports.Remove(zone.DeviceId);
                         allOk = false;
+                    }
                 }
             }
 
-            return anySent && allOk;
+            return anyHandled && allOk;
         }
     }
 
@@ -325,10 +455,11 @@ public sealed class AcerLightingHid : IDisposable
 
     public void Dispose()
     {
-        lock (_gate)
+        lock (HidBusGate)
         {
             if (_disposed) return;
             _disposed = true;
+            _lastSentReports.Clear();
             foreach (var endpoint in _endpoints) endpoint.Dispose();
             _endpoints.Clear();
         }

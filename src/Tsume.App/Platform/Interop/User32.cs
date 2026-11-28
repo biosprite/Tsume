@@ -613,6 +613,17 @@ internal static partial class User32
     [DllImport("user32.dll", EntryPoint = "GetRawInputDeviceInfoW", CharSet = CharSet.Unicode)]
     public static extern uint GetRawInputDeviceInfo(nint device, uint command, [Out] char[]? data, ref uint size);
 
+    public const uint WM_POWERBROADCAST = 0x0218;
+    public const int PBT_POWERSETTINGCHANGE = 0x8013;
+    public const int DEVICE_NOTIFY_WINDOW_HANDLE = 0;
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial nint RegisterPowerSettingNotification(nint recipient, ref Guid powerSettingGuid, int flags);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool UnregisterPowerSettingNotification(nint handle);
+
     [DllImport("user32.dll", EntryPoint = "GetRawInputDeviceInfoW")]
     public static extern uint GetRawInputDeviceInfo(nint device, uint command, ref RID_DEVICE_INFO data, ref uint size);
 }
