@@ -162,10 +162,13 @@ public sealed class ModeKeeper(IDevice device)
             var expectedHardwareMode = wanted is { } target ? device.HardwareModeFor(chosen.Mode, target) : chosen.Mode;
             var (mode, limits) = device.Performance();
 
-            if (mode == expectedHardwareMode && limits == wanted)
+            if (!device.ReapplyOnResume || onlyIfSourceChanged)
             {
-                if (FollowsPowerSource) _lastOnBattery = onBattery;
-                return true;
+                if (mode == expectedHardwareMode && limits == wanted)
+                {
+                    if (FollowsPowerSource) _lastOnBattery = onBattery;
+                    return true;
+                }
             }
 
             device.SetPerformance(chosen.Mode, manual, chosen.Custom, onBattery, chosen.CustomOnBattery);
@@ -174,7 +177,10 @@ public sealed class ModeKeeper(IDevice device)
             var applied = expectedHardwareMode == chosen.Mode
                 ? $"{chosen.Mode}"
                 : $"{chosen.Mode} (shift {expectedHardwareMode})";
-            Log.Write($"On {occasion} the firmware had {mode}, {limits}. Put back {applied}, {wanted}.");
+            if (mode == expectedHardwareMode && limits == wanted)
+                Log.Write($"On {occasion} re-applied {applied}, {wanted}.");
+            else
+                Log.Write($"On {occasion} the firmware had {mode}, {limits}. Put back {applied}, {wanted}.");
             AfterRestore?.Invoke(occasion);
             return true;
         }

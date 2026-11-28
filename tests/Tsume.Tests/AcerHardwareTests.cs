@@ -56,15 +56,17 @@ public sealed class AcerHardwareTests
     [Fact]
     public void AcerBoards_Atlas8AdoptsExactMsiClawExTdpLimits()
     {
-        // Arc G3 Extreme SKU matches MsiBoards.Claw8 TDP profile.
+        // Arc G3 Extreme SKU matches MsiBoards.Claw8 TDP profile (12/15, 25/28, 32/36 W; 8–35 / 8–45 W, PL2 >= PL1 + 2).
         Assert.Equal(MsiBoards.Claw8.Profile.Modes, AcerBoards.Atlas8.Profile.Modes);
         Assert.Equal(MsiBoards.Claw8.Profile.ManualRange, AcerBoards.Atlas8.Profile.ManualRange);
         Assert.Equal(MsiBoards.Claw8.Profile.ManualDefault, AcerBoards.Atlas8.Profile.ManualDefault);
+        Assert.Equal(2, AcerBoards.Atlas8.Profile.ManualRange!.Value.MinBoostHeadroom);
 
-        // Plain Arc G3 SKU matches MsiBoards.Claw8ArcG3 TDP profile.
+        // Plain Arc G3 SKU matches MsiBoards.Claw8ArcG3 TDP profile (PL1 max 30 W, PL2 >= PL1 + 2).
         Assert.Equal(MsiBoards.Claw8ArcG3.Profile.Modes, AcerBoards.Atlas8ArcG3.Profile.Modes);
         Assert.Equal(MsiBoards.Claw8ArcG3.Profile.ManualRange, AcerBoards.Atlas8ArcG3.Profile.ManualRange);
         Assert.Equal(MsiBoards.Claw8ArcG3.Profile.ManualDefault, AcerBoards.Atlas8ArcG3.Profile.ManualDefault);
+        Assert.Equal(2, AcerBoards.Atlas8ArcG3.Profile.ManualRange!.Value.MinBoostHeadroom);
     }
 
     [Fact]
@@ -73,6 +75,7 @@ public sealed class AcerHardwareTests
         // Retail Atlas 8 units report Win32_BaseBoard.Manufacturer = "PTL" (not "Acer"), Product = "F900_PTG".
         Assert.Same(AcerBoards.Atlas8, AcerBoards.Find(new Board("PTL", "F900_PTG"), "Intel(R) Arc(TM) G3 Extreme"));
         Assert.Same(AcerBoards.Atlas8ArcG3, AcerBoards.Find(new Board("PTL", "F900_PTG"), "Intel(R) Arc(TM) G3"));
+        Assert.True(DeviceCatalog.IsKnownBoard(new Board("PTL", "F900_PTG")));
 
         // Fallback via Win32_ComputerSystem Manufacturer + Model prefix.
         Assert.Same(AcerBoards.Atlas8, AcerBoards.Find(new Board("Other", "Unknown"), "Intel(R) Arc(TM) G3 Extreme", "Acer", "Predator PA08-I51"));
@@ -81,6 +84,7 @@ public sealed class AcerHardwareTests
         // Non-Acer / unrelated boards never match.
         Assert.Null(AcerBoards.Find(new Board("Micro-Star International Co., Ltd.", "MS-1T91"), "Intel(R) Arc(TM) G3 Extreme", "MSI", "Claw 8"));
         Assert.Null(AcerBoards.Find(new Board("Acer", "OtherBoard"), "Intel(R) Arc(TM) G3 Extreme", "Acer", "Nitro AN515"));
+        Assert.False(DeviceCatalog.IsKnownBoard(new Board("Unknown", "NotABoard")));
     }
 
     [Fact]
@@ -93,6 +97,8 @@ public sealed class AcerHardwareTests
 
         var wmi = new FakeAcerWmi();
         using var device = new AcerDevice(ec, wmi, AcerBoards.Atlas8);
+
+        Assert.True(device.ReapplyOnResume);
 
         device.SetPerformance(PerformanceMode.Performance, new PowerLimits(25, 28));
 
@@ -126,6 +132,20 @@ public sealed class AcerHardwareTests
         Assert.Equal(15, BinaryPrimitives.ReadUInt16LittleEndian(ec.OcProfile3.AsSpan(4, 2)));
         Assert.Equal(0, ec.OcProfile3[2]);
         Assert.Equal(0, ec.OcProfile3[18]);
+    }
+
+    [Fact]
+    public void AcerDevice_SetPerformance_ThrowsInsteadOfClobberingWhenGetOcProfileFails()
+    {
+        var ec = new FakeAcerEcHid { UsageMode = AcerDevice.ModeBalanced, FailGetProfile = true };
+        ec.OcProfile3[2] = 0xAA;
+        var wmi = new FakeAcerWmi();
+        using var device = new AcerDevice(ec, wmi, AcerBoards.Atlas8);
+
+        Assert.Throws<FirmwareException>(() => device.SetPerformance(PerformanceMode.Performance, new PowerLimits(25, 28)));
+        Assert.DoesNotContain("SetOcProfile(3)", ec.Log);
+        Assert.DoesNotContain("SetMode(3)", ec.Log);
+        Assert.Equal(0xAA, ec.OcProfile3[2]);
     }
 
     [Fact]
@@ -327,10 +347,21 @@ public sealed class AcerHardwareTests
         Assert.False(ClawController.IsClaw(@"\\?\hid#vid_046d&pid_c52b&mi_00#7&1234#{4d1e55b2}"));
     }
 
+    [Fact]
+    public void SettingsViewModel_PauseToggleSaysPredatorSenseOnlyForAcerDevices()
+    {
+        Assert.Equal("Pause PredatorSense", Tsume.App.ViewModels.SettingsViewModel.OemPauseLabelFor(AcerBoards.Atlas8.Profile));
+        Assert.Equal("Pause PredatorSense", Tsume.App.ViewModels.SettingsViewModel.OemPauseLabelFor(AcerBoards.Atlas8ArcG3.Profile));
+        Assert.Equal("Pause MSI Center M", Tsume.App.ViewModels.SettingsViewModel.OemPauseLabelFor(MsiBoards.Claw8.Profile));
+        Assert.Equal("Pause MSI Center M", Tsume.App.ViewModels.SettingsViewModel.OemPauseLabelFor(MsiBoards.ClawA8.Profile));
+        Assert.Equal("Pause MSI Center M", Tsume.App.ViewModels.SettingsViewModel.OemPauseLabelFor(DeviceProfile.Unknown));
+    }
+
     private sealed class FakeAcerEcHid : IAcerEcHid
     {
         public byte UsageMode { get; set; } = AcerDevice.ModeBalanced;
         public byte[] OcProfile3 { get; } = new byte[AcerEcHid.OcProfileFieldLength];
+        public bool FailGetProfile { get; set; }
         public bool FailSetMode { get; set; }
         public List<string> Log { get; } = [];
 
@@ -351,6 +382,7 @@ public sealed class AcerHardwareTests
         public byte[]? GetOcProfile(byte profile)
         {
             Log.Add($"GetOcProfile({profile})");
+            if (FailGetProfile) return null;
             return profile == AcerDevice.ManualOcProfile ? OcProfile3.ToArray() : null;
         }
 

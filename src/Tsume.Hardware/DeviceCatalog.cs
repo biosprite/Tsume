@@ -15,6 +15,10 @@ public static class DeviceCatalog
         AcerDevice.TryOpen,
     ];
 
+    /// <summary>True when <paramref name="board"/> matches a board Tsume supports, even if its firmware endpoints are not ready yet.</summary>
+    public static bool IsKnownBoard(Board board) =>
+        MsiBoards.Find(board) is not null || AcerBoards.Find(board) is not null;
+
     /// <returns>The board found, and the device that drives it — null on a machine Tsume does not know.</returns>
     public static (Board Board, IDevice? Device) Open()
     {

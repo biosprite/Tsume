@@ -154,11 +154,16 @@ public sealed class SettingsViewModel : LayerViewModel
 
     public ICommand ToggleMsiCenter { get; }
 
-    private bool IsAcerDevice =>
-        _performance.Device.Controls?.EffectiveOemSoftware == OemSoftwareKind.AcerPredatorSense;
+    private bool IsAcerDevice => IsAcer(_performance.Device);
+
+    internal static bool IsAcer(DeviceProfile device) =>
+        device.Controls?.EffectiveOemSoftware == OemSoftwareKind.AcerPredatorSense;
 
     /// <summary>Label for the OEM software pause switch: "Pause MSI Center M" on MSI, "Pause PredatorSense" on Acer.</summary>
-    public string OemPauseLabel => IsAcerDevice ? Strings.PauseAcerSense : Strings.PauseMsiCenter;
+    public string OemPauseLabel => OemPauseLabelFor(_performance.Device);
+
+    public static string OemPauseLabelFor(DeviceProfile device) =>
+        IsAcer(device) ? Strings.PauseAcerSense : Strings.PauseMsiCenter;
 
     /// <summary>True when the device's OEM control suite (MSI Center M or PredatorSense) is not running.</summary>
     public bool IsMsiCenterPaused
@@ -191,6 +196,8 @@ public sealed class SettingsViewModel : LayerViewModel
         IsInStartMenu = StartMenuShortcut.Exists;
         _absorbing = false;
 
+        Notify(nameof(OemPauseLabel));
+        Notify(nameof(MsiCenterDetail));
         IsMsiCenterPaused = IsAcerDevice ? !AcerSense.IsRunning : !MsiCenter.IsRunning;
     }
 }

@@ -30,34 +30,30 @@ public sealed unsafe partial class AcerEcHid : IAcerEcHid
     private const int ReplyDelayMs = 20;
     private const int MutexTimeoutMs = 2000;
 
-    private readonly SafeFileHandle _handle;
-    private readonly int _reportLength;
+    private readonly Lock _handleGate = new();
+    private readonly ushort _vendorId;
+    private readonly ushort _productId;
+    private readonly ushort _usagePage;
     private readonly string _mutexName;
+    private SafeFileHandle? _handle;
+    private int _reportLength;
     private bool _disposed;
 
-    private AcerEcHid(SafeFileHandle handle, int reportLength, ushort vendorId, ushort productId)
+    private AcerEcHid(SafeFileHandle handle, int reportLength, ushort vendorId, ushort productId, ushort usagePage)
     {
         _handle = handle;
         _reportLength = Math.Max(reportLength, DefaultReportLength);
+        _vendorId = vendorId;
+        _productId = productId;
+        _usagePage = usagePage;
         _mutexName = $"Global\\ECHIDFeatureVID_{vendorId:X4}&PID_{productId:X4}";
     }
 
     /// <summary>Finds and opens the Acer EC HID collection matching <paramref name="vendorId"/>, <paramref name="productId"/>, and <paramref name="usagePage"/>.</summary>
-    public static AcerEcHid? TryOpen(ushort vendorId = 0x1025, ushort productId = 0x174B, ushort usagePage = 0xFF05)
-    {
-        foreach (var path in EnumerateHidPaths())
-        {
-            var handle = OpenHid(path);
-            if (handle is null) continue;
-
-            if (MatchesCollection(handle, vendorId, productId, usagePage, out var featureLength))
-                return new AcerEcHid(handle, featureLength, vendorId, productId);
-
-            handle.Dispose();
-        }
-
-        return null;
-    }
+    public static AcerEcHid? TryOpen(ushort vendorId = 0x1025, ushort productId = 0x174B, ushort usagePage = 0xFF05) =>
+        TryOpenHandle(vendorId, productId, usagePage, out var featureLength) is { } handle
+            ? new AcerEcHid(handle, featureLength, vendorId, productId, usagePage)
+            : null;
 
     public byte? GetSystemUsageMode()
     {
@@ -171,52 +167,86 @@ public sealed unsafe partial class AcerEcHid : IAcerEcHid
 
     private byte[]? Exchange(ushort command, byte operation, ReadOnlySpan<byte> payload)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
-        var request = BuildRequest(command, operation, payload, _reportLength);
-        var reply = new byte[_reportLength];
-        reply[0] = ReportId;
-
-        using var mutex = new Mutex(initiallyOwned: false, _mutexName);
-        var acquired = false;
-        try
+        lock (_handleGate)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            using var mutex = new Mutex(initiallyOwned: false, _mutexName);
+            var acquired = false;
             try
             {
-                acquired = mutex.WaitOne(MutexTimeoutMs);
-            }
-            catch (AbandonedMutexException)
-            {
-                acquired = true;
-            }
+                try
+                {
+                    acquired = mutex.WaitOne(MutexTimeoutMs);
+                }
+                catch (AbandonedMutexException)
+                {
+                    acquired = true;
+                }
 
-            if (!acquired) return null;
+                if (!acquired) return null;
 
-            if (!HidD_SetFeature(_handle, request, (uint)request.Length))
+                // Retry once with a freshly re-opened HID handle if the cached handle went stale (e.g. after sleep or I2C-HID reset),
+                // matching AcerHardwareService's close-and-reopen error recovery.
+                for (var attempt = 0; attempt < 2; attempt++)
+                {
+                    if (!EnsureOpenLocked()) return null;
+
+                    var request = BuildRequest(command, operation, payload, _reportLength);
+                    var reply = new byte[_reportLength];
+                    reply[0] = ReportId;
+
+                    if (HidD_SetFeature(_handle!, request, (uint)request.Length))
+                    {
+                        Thread.Sleep(ReplyDelayMs);
+
+                        if (HidD_GetFeature(_handle!, reply, (uint)reply.Length))
+                            return IsValidReply(reply, command) ? reply : null;
+                    }
+
+                    ResetHandleLocked();
+                }
+
                 return null;
-
-            Thread.Sleep(ReplyDelayMs);
-
-            if (!HidD_GetFeature(_handle, reply, (uint)reply.Length))
-                return null;
-
-            return IsValidReply(reply, command) ? reply : null;
-        }
-        finally
-        {
-            if (acquired)
+            }
+            finally
             {
-                try { mutex.ReleaseMutex(); }
-                catch (ApplicationException) { }
+                if (acquired)
+                {
+                    try { mutex.ReleaseMutex(); }
+                    catch (ApplicationException) { }
+                }
             }
         }
     }
 
+    private bool EnsureOpenLocked()
+    {
+        if (_handle is { IsInvalid: false, IsClosed: false }) return true;
+
+        ResetHandleLocked();
+        var reopened = TryOpenHandle(_vendorId, _productId, _usagePage, out var featureLength);
+        if (reopened is null) return false;
+
+        _handle = reopened;
+        _reportLength = Math.Max(featureLength, DefaultReportLength);
+        return true;
+    }
+
+    private void ResetHandleLocked()
+    {
+        _handle?.Dispose();
+        _handle = null;
+    }
+
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        _handle.Dispose();
+        lock (_handleGate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            ResetHandleLocked();
+        }
     }
 
     // --- Minimal Win32 HID P/Invoke (self-contained inside Tsume.Hardware) ---
@@ -317,6 +347,23 @@ public sealed unsafe partial class AcerEcHid : IAcerEcHid
         }
 
         return [];
+    }
+
+    private static SafeFileHandle? TryOpenHandle(ushort vendorId, ushort productId, ushort usagePage, out int featureLength)
+    {
+        featureLength = 0;
+        foreach (var path in EnumerateHidPaths())
+        {
+            var handle = OpenHid(path);
+            if (handle is null) continue;
+
+            if (MatchesCollection(handle, vendorId, productId, usagePage, out featureLength))
+                return handle;
+
+            handle.Dispose();
+        }
+
+        return null;
     }
 
     private static SafeFileHandle? OpenHid(string path)

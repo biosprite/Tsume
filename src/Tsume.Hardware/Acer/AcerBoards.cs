@@ -8,7 +8,8 @@ namespace Tsume.Hardware.Acer;
 /// <summary>
 /// The Acer handheld boards Tsume knows. Predator Atlas 8 (<c>PA08-I51</c>, board <c>F900_PTG</c>, BIOS <c>F7V</c>)
 /// uses the same Intel Panther Lake Arc G3 / Arc G3 Extreme silicon as the MSI Claw 8 EX AI+ (<c>MS-1T91</c>) and
-/// adopts its tuned TDP preset and manual limits, enforced through EC HID OC Profile 3 + Usage Mode 3.
+/// adopts its tuned TDP preset and manual limits (including the PL2 &gt;= PL1 + 2 W rule), enforced through EC HID
+/// OC Profile 3 + Usage Mode 3.
 /// </summary>
 public static class AcerBoards
 {
@@ -76,7 +77,8 @@ public static class AcerBoards
 
     /// <summary>
     /// Predator Atlas 8 with the plain Arc G3 (10 Xe cores, 60 Wh SKU) instead of the Arc G3 Extreme.
-    /// Mirrors <c>MsiBoards.Claw8ArcG3</c>: Performance <c>30/37 W</c> and Manual sustained ceiling <c>30 W</c>.
+    /// Mirrors <c>MsiBoards.Claw8ArcG3</c>: Performance <c>30/37 W</c> and Manual sustained ceiling <c>30 W</c>
+    /// (PL2 &gt;= PL1 + 2 W).
     /// </summary>
     public static readonly AcerBoard Atlas8ArcG3 = Atlas8 with
     {

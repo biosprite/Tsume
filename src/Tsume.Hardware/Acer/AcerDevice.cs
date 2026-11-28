@@ -83,11 +83,17 @@ public sealed class AcerDevice(IAcerEcHid ecHid, IAcerWmi wmi, AcerBoard board) 
     }
 
     /// <summary>
-    /// All modes apply through EC Usage Mode 3 (Manual) + OC Profile 3 so Tsume's Claw EX watt presets
-    /// (<c>12/15</c>, <c>25/28</c>, <c>32/36 W</c>) are enforced directly via EC PECI rather than Acer's
-    /// hard-coded native ceilings (<c>30/45</c>, <c>35/65</c>, <c>40/65 W</c>).
+    /// All modes apply through EC Usage Mode 3 (Manual) + OC Profile 3 so Tsume's MSI Claw EX watt presets
+    /// (<c>12/15</c>, <c>25/28</c>, <c>32/36 W</c>) and custom limits (with PL2 &gt;= PL1 + 2 W) are enforced
+    /// directly via EC PECI rather than Acer's hard-coded native ceilings (<c>30/45</c>, <c>35/65</c>, <c>40/65 W</c>).
     /// </summary>
     public PerformanceMode HardwareModeFor(PerformanceMode mode, PowerLimits limits) => PerformanceMode.Manual;
+
+    /// <summary>
+    /// The EC preserves its mode byte across Modern Standby (<c>0xE4</c>/<c>0xE5</c>) without re-triggering PECI,
+    /// and cold boot leaves <c>0x554 = 1</c> without raising <c>_Q30</c>; always re-apply on wake and start-up.
+    /// </summary>
+    public bool ReapplyOnResume => true;
 
     public void SetPerformance(PerformanceMode mode, PowerLimits manual, PowerLimits? custom = null, bool? onBattery = null,
         PowerLimits? customOnBattery = null)
@@ -99,11 +105,13 @@ public sealed class AcerDevice(IAcerEcHid ecHid, IAcerWmi wmi, AcerBoard board) 
         {
             var beforeMode = ecHid.GetSystemUsageMode();
             var beforeProfile = ecHid.GetOcProfile(ManualOcProfile);
+            if (beforeProfile is not { Length: AcerEcHid.OcProfileFieldLength })
+                throw new FirmwareException("The EC did not answer GetOCProfile(3).");
 
             // After an EC power loss, OC Profile 3 reads back all 0xFF; start from zeros rather than preserving 0xFFFF.
-            var nextProfile = beforeProfile is { Length: AcerEcHid.OcProfileFieldLength } existing && !IsAllFf(existing)
-                ? existing.ToArray()
-                : new byte[AcerEcHid.OcProfileFieldLength];
+            var nextProfile = IsAllFf(beforeProfile)
+                ? new byte[AcerEcHid.OcProfileFieldLength]
+                : beforeProfile.ToArray();
 
             BinaryPrimitives.WriteUInt16LittleEndian(nextProfile.AsSpan(Pl1Offset, 2), (ushort)limits.Sustained);
             BinaryPrimitives.WriteUInt16LittleEndian(nextProfile.AsSpan(Pl2Offset, 2), (ushort)limits.Boost);
@@ -115,8 +123,8 @@ public sealed class AcerDevice(IAcerEcHid ecHid, IAcerWmi wmi, AcerBoard board) 
             if (!ecHid.SetSystemUsageMode(ModeManual))
             {
                 // Best-effort rollback of profile and mode before surfacing the failure.
-                if (beforeProfile is { Length: AcerEcHid.OcProfileFieldLength } original && !IsAllFf(original))
-                    ecHid.SetOcProfile(ManualOcProfile, original);
+                if (!IsAllFf(beforeProfile))
+                    ecHid.SetOcProfile(ManualOcProfile, beforeProfile);
                 if (beforeMode is <= AcerEcHid.MaxUsageMode)
                     ecHid.SetSystemUsageMode(beforeMode.Value);
 
@@ -235,8 +243,7 @@ public sealed class AcerDevice(IAcerEcHid ecHid, IAcerWmi wmi, AcerBoard board) 
             return (PerformanceMode.Manual, default);
         }
 
-        // Native EC modes (e.g. after sleep/reboot reset to Balanced = 1). Reporting their factory DTT/EC
-        // limits guarantees ModeKeeper detects the reset and re-applies the user's chosen Claw EX preset.
+        // Native EC modes: Quiet (2) = 25/45 W, Balanced (1) = 30/65 W, Turbo (0) = 35/65 W.
         return rawMode switch
         {
             ModeQuiet    => (PerformanceMode.Endurance,   new PowerLimits(Sustained: 25, Boost: 45)),

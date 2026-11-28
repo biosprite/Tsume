@@ -211,13 +211,17 @@ public sealed class HelperService : ServiceBase
         }
     }
 
-    /// <summary>Early in a boot WMI may not answer yet; an unnamed board is asked for again before it is believed.</summary>
+    /// <summary>
+    /// Early in a boot WMI or I2C-HID endpoints may not answer yet; keep retrying while the board is still
+    /// unnamed or matches a known board whose firmware interface has not finished initializing.
+    /// </summary>
     private static async Task<(Board, IDevice?)> OpenDeviceAsync(CancellationToken stop)
     {
         for (var attempt = 1; ; attempt++)
         {
             var (machine, device) = DeviceCatalog.Open();
-            if (machine.IsNamed || attempt == BoardAttempts) return (machine, device);
+            if (device is not null || attempt == BoardAttempts) return (machine, device);
+            if (machine.IsNamed && !DeviceCatalog.IsKnownBoard(machine)) return (machine, device);
 
             await Task.Delay(BoardPause, stop);
         }

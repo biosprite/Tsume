@@ -55,6 +55,12 @@ public interface IDevice : IDisposable
     PerformanceMode HardwareModeFor(PerformanceMode mode, PowerLimits limits) => mode;
 
     /// <summary>
+    /// True when the firmware may retain its reported mode byte across boot or Modern Standby while
+    /// needing an explicit mode write to re-trigger ACPI/PECI limit application.
+    /// </summary>
+    bool ReapplyOnResume => false;
+
+    /// <summary>
     /// Switches the fans to Auto (the firmware's own curve) or Max. Custom is refused here: a curve is needed, and
     /// it comes through <see cref="SetFanCurve"/>.
     /// </summary>
