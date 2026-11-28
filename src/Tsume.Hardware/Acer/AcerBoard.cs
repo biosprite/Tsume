@@ -31,6 +31,12 @@ public sealed record AcerBoard
     /// </summary>
     public IReadOnlyList<byte> FanIds { get; init; } = [2, 3];
 
+    /// <summary>
+    /// Reference fan speeds (0–100 %) on <see cref="DeviceProfile.FanCurve"/>'s temperature points, used as the
+    /// starting baseline for unedited custom profiles and Reset when the EC exposes no readable curve table.
+    /// </summary>
+    public IReadOnlyList<int>? StockFanSpeeds { get; init; }
+
     /// <summary>True only once verified end-to-end on a physical unit.</summary>
     public bool CheckedOnDevice { get; init; }
 }

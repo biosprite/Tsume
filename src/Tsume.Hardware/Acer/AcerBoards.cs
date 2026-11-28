@@ -28,6 +28,7 @@ public static class AcerBoards
         EcHidProductId = 0x174B,
         EcHidUsagePage = 0xFF05,
         FanIds = [2, 3],
+        StockFanSpeeds = [25, 40, 55, 70, 85, 100],
 
         Profile = new()
         {
@@ -41,7 +42,19 @@ public static class AcerBoards
             ],
             ManualRange = new PowerRange(Min: 8, MaxSustained: 35, MaxBoost: 45, MinBoostHeadroom: 2),
             ManualDefault = new PowerLimits(Sustained: 25, Boost: 28),
-            FanModes = [FanMode.Auto, FanMode.Max],
+            FanModes = [FanMode.Auto, FanMode.Custom, FanMode.Max],
+            FanCurve = new()
+            {
+                MaxSpeed = 100,
+                CustomTemperatures = [50, 60, 70, 80, 90, 100],
+                Floors =
+                [
+                    new FanFloor(FromCelsius: 70, MinSpeed: 20),
+                    new FanFloor(FromCelsius: 80, MinSpeed: 35),
+                    new FanFloor(FromCelsius: 90, MinSpeed: 50),
+                    new FanFloor(FromCelsius: 100, MinSpeed: 65),
+                ],
+            },
             ChargeLimits = [80, 100],
             TempWarnC = 85,
             TempHotC = 95,

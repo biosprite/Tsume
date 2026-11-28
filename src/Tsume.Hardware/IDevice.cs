@@ -96,6 +96,12 @@ public interface IDevice : IDisposable
     /// </summary>
     void NoteChosenFanCurve(IReadOnlyList<int>? speeds) { }
 
+    /// <summary>
+    /// Notifies devices with background hardware loops (such as software-driven fan curves) when the system
+    /// suspends or resumes so they pause polling during sleep and re-apply cleanly on wake.
+    /// </summary>
+    void OnSystemPowerState(bool suspended) { }
+
     /// <summary>Stops charging at this level, which must be one of the profile's <see cref="DeviceProfile.ChargeLimits"/>.</summary>
     void SetChargeLimit(int percent);
 

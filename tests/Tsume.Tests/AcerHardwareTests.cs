@@ -35,8 +35,12 @@ public sealed class AcerHardwareTests
         Assert.Equal(4, board.Profile.Modes.Count);
         Assert.NotNull(board.Profile.ManualRange);
         Assert.NotNull(board.Profile.ManualDefault);
-        Assert.Equal([FanMode.Auto, FanMode.Max], board.Profile.FanModes);
-        Assert.Null(board.Profile.FanCurve);
+        Assert.Equal([FanMode.Auto, FanMode.Custom, FanMode.Max], board.Profile.FanModes);
+        Assert.NotNull(board.Profile.FanCurve);
+        Assert.Equal(100, board.Profile.FanCurve.MaxSpeed);
+        Assert.Equal([50, 60, 70, 80, 90, 100], board.Profile.FanCurve.CustomTemperatures);
+        Assert.NotNull(board.StockFanSpeeds);
+        Assert.Equal(6, board.StockFanSpeeds.Count);
         Assert.Equal([80, 100], board.Profile.ChargeLimits);
 
         var controls = board.Profile.Controls;
@@ -201,6 +205,205 @@ public sealed class AcerHardwareTests
         var readings = device.Readings();
         Assert.Equal(64, readings.CpuTemperature);
         Assert.Equal(3450, readings.FanRpm);
+        Assert.Null(readings.FanSpeed);
+    }
+
+    [Fact]
+    public void AcerDevice_CustomFanCurve_DrivesDirectPwmInAutoModeAndSupportsBelowAutoSpeeds()
+    {
+        var ec = new FakeAcerEcHid();
+        var wmi = new FakeAcerWmi
+        {
+            CpuTempC = 55,
+            Fan1Rpm = 2800,
+            Fan2Rpm = 2800,
+        };
+        using var device = new AcerDevice(ec, wmi, AcerBoards.Atlas8, enableFanLoop: false);
+
+        // Initial Auto state reports stock reference curve.
+        var initial = device.FanCurve();
+        Assert.NotNull(initial);
+        Assert.True(initial.StockKnown);
+        Assert.Equal([50, 60, 70, 80, 90, 100], initial.Temperatures);
+        Assert.Equal(AcerBoards.Atlas8.StockFanSpeeds, initial.Stock);
+        Assert.Equal(AcerBoards.Atlas8.StockFanSpeeds, initial.Speeds);
+
+        // Set a quiet below-auto curve: 10% at 50-60 °C, clamped to floors above 70 °C.
+        var written = device.SetFanCurve([10, 10, 15, 30, 40, 60]);
+        Assert.Equal([10, 10, 20, 35, 50, 65], written);
+
+        // Must stay in WMI Auto (0x00140006) so EC 0x7D/0xCD writes directly to hardware PWM 0..255!
+        Assert.Equal(AcerDevice.FanBehaviorAuto, wmi.LastFanBehavior);
+        var expectedDuty = AcerDevice.PercentToPwmDuty(10);   // 26 / 255
+        Assert.Equal(26, expectedDuty);
+        Assert.Equal(
+            [AcerDevice.FanSpeedInput(2, expectedDuty), AcerDevice.FanSpeedInput(3, expectedDuty)],
+            wmi.FanSpeedWrites);
+
+        Assert.Equal(FanMode.Custom, device.Fan());
+        Assert.True(device.HoldsFanCurve(written));
+        Assert.Equal(10, device.Readings().FanSpeed);
+        Assert.Equal(10, device.Snapshot().FanSpeed);
+
+        var active = device.FanCurve();
+        Assert.NotNull(active);
+        Assert.Equal(written, active.Speeds);
+        Assert.Equal(AcerBoards.Atlas8.StockFanSpeeds, active.Stock);
+
+        // Returning to Auto stops the custom curve and clears reported FanSpeed.
+        device.SetFan(FanMode.Auto);
+        Assert.Equal(FanMode.Auto, device.Fan());
+        Assert.False(device.HoldsFanCurve(written));
+        Assert.Null(device.Readings().FanSpeed);
+    }
+
+    [Fact]
+    public void AcerDevice_CustomFanCurve_InterpolatesRisingImmediatelyAndAppliesCoolingHysteresis()
+    {
+        var ec = new FakeAcerEcHid();
+        var wmi = new FakeAcerWmi { CpuTempC = 65 };
+        using var device = new AcerDevice(ec, wmi, AcerBoards.Atlas8, enableFanLoop: false);
+
+        // 50°C->20%, 60°C->20%, 70°C->40%, 80°C->60%, 90°C->80%, 100°C->100%
+        device.SetFanCurve([20, 20, 40, 60, 80, 100]);
+        // At 65°C -> 30% -> duty 77
+        Assert.Equal(30, device.Readings().FanSpeed);
+        Assert.Equal(AcerDevice.FanSpeedInput(2, AcerDevice.PercentToPwmDuty(30)), wmi.FanSpeedWrites[^2]);
+
+        // Rising 1°C takes effect immediately (66°C -> 32%).
+        wmi.CpuTempC = 66;
+        wmi.FanSpeedWrites.Clear();
+        Assert.True(device.TickFanCurve());
+        Assert.Equal(32, device.Readings().FanSpeed);
+        Assert.Equal(AcerDevice.FanSpeedInput(2, AcerDevice.PercentToPwmDuty(32)), wmi.FanSpeedWrites[0]);
+
+        // Falling 1°C (within 2°C hysteresis) keeps the 66°C duty (32%) to avoid hunting.
+        wmi.CpuTempC = 65;
+        wmi.FanSpeedWrites.Clear();
+        Assert.True(device.TickFanCurve());
+        Assert.Equal(32, device.Readings().FanSpeed);
+        Assert.Equal(AcerDevice.FanSpeedInput(2, AcerDevice.PercentToPwmDuty(32)), wmi.FanSpeedWrites[0]);
+
+        // Falling 2°C (66 -> 64°C) steps down smoothly to 28%.
+        wmi.CpuTempC = 64;
+        wmi.FanSpeedWrites.Clear();
+        Assert.True(device.TickFanCurve());
+        Assert.Equal(28, device.Readings().FanSpeed);
+        Assert.Equal(AcerDevice.FanSpeedInput(2, AcerDevice.PercentToPwmDuty(28)), wmi.FanSpeedWrites[0]);
+    }
+
+    [Fact]
+    public void AcerDevice_CustomFanCurve_SkipsRedundantSmisAtZeroRpmIdleAndDuringStandbyOrMakerTool()
+    {
+        var makerRunning = false;
+        var ec = new FakeAcerEcHid();
+        var wmi = new FakeAcerWmi { CpuTempC = 45, Fan1Rpm = 0, Fan2Rpm = 0 };
+        using var device = new AcerDevice(ec, wmi, AcerBoards.Atlas8, enableFanLoop: false, isMakerToolRunning: () => makerRunning);
+
+        // 0% at 50-60°C; initial SetFanCurve writes 0 once to verify WMI accepts it.
+        device.SetFanCurve([0, 0, 20, 35, 50, 65]);
+        Assert.Equal(2, wmi.FanSpeedWrites.Count);
+        Assert.Equal(0, device.Readings().FanSpeed);
+
+        // Subsequent tick at 0% target & 0 RPM skips SMIs completely.
+        wmi.FanSpeedWrites.Clear();
+        Assert.True(device.TickFanCurve());
+        Assert.Empty(wmi.FanSpeedWrites);
+
+        // If the EC spins a fan up while target is still 0%, the next tick writes duty 0 again.
+        wmi.Fan1Rpm = 2800;
+        Assert.True(device.TickFanCurve());
+        Assert.Equal(2, wmi.FanSpeedWrites.Count);
+        Assert.Equal(AcerDevice.FanSpeedInput(2, 0), wmi.FanSpeedWrites[0]);
+
+        // During Modern Standby (EC zeroes CTMP = 0), skip SMIs completely.
+        wmi.CpuTempC = 0;
+        wmi.FanSpeedWrites.Clear();
+        Assert.True(device.TickFanCurve());
+        Assert.Empty(wmi.FanSpeedWrites);
+
+        // Restore valid temp, then pause via OS Suspend notification.
+        wmi.CpuTempC = 75;
+        device.OnSystemPowerState(suspended: true);
+        Assert.False(device.TickFanCurve());
+        Assert.Empty(wmi.FanSpeedWrites);
+
+        // Wake resumes and immediately writes the 75°C duty (28%).
+        device.OnSystemPowerState(suspended: false);
+        Assert.Equal(2, wmi.FanSpeedWrites.Count);
+
+        // While PredatorSense is running, ticks stand back and emit zero SMIs.
+        makerRunning = true;
+        wmi.FanSpeedWrites.Clear();
+        Assert.False(device.TickFanCurve());
+        Assert.Empty(wmi.FanSpeedWrites);
+    }
+
+    [Fact]
+    public void AcerDevice_CustomFanCurve_DetectsExternalOverrideAndRollsBackOnWriteFailure()
+    {
+        var ec = new FakeAcerEcHid();
+        var wmi = new FakeAcerWmi { CpuTempC = 70 };
+        using var device = new AcerDevice(ec, wmi, AcerBoards.Atlas8, enableFanLoop: false);
+
+        var written = device.SetFanCurve([25, 40, 55, 70, 85, 100]);
+        Assert.True(device.HoldsFanCurve(written));
+
+        // If WMI refuses a new curve write, the previous curve stays intact.
+        wmi.FailSetFanSpeed = true;
+        Assert.Throws<FirmwareException>(() => device.SetFanCurve([10, 20, 30, 40, 55, 70]));
+        Assert.True(device.HoldsFanCurve(written));
+        wmi.FailSetFanSpeed = false;
+
+        // If PredatorSense or BIOS switches hardware behavior to WMI Custom (mode 3) or Max (mode 2),
+        // HoldsFanCurve detects the drift so FanCurveKeeper knows to restore it.
+        wmi.SetGamingFanBehavior(0x003C_0006);
+        Assert.False(device.HoldsFanCurve(written));
+
+        // Re-applying restores custom mode; Max clears the active loop while keeping Max reported.
+        device.SetFanCurve(written);
+        device.SetFan(FanMode.Max);
+        Assert.Equal(FanMode.Max, device.Fan());
+        Assert.False(device.HoldsFanCurve(written));
+        Assert.Equal(100, device.Snapshot().FanSpeed);
+    }
+
+    [Fact]
+    public void AcerDevice_CustomFanCurve_BackgroundTimerRefreshesAndStopsCleanlyOnDispose()
+    {
+        var ec = new FakeAcerEcHid();
+        var wmi = new FakeAcerWmi { CpuTempC = 70, Fan1Rpm = 3200, Fan2Rpm = 3200 };
+        using var device = new AcerDevice(ec, wmi, AcerBoards.Atlas8, enableFanLoop: true, fanLoopInterval: TimeSpan.FromMilliseconds(25));
+
+        device.SetFanCurve([25, 40, 55, 70, 85, 100]);
+        var deadline = DateTime.UtcNow.AddSeconds(2);
+        while (wmi.FanSpeedWrites.Count < 4 && DateTime.UtcNow < deadline)
+            Thread.Sleep(15);
+
+        Assert.True(wmi.FanSpeedWrites.Count >= 4, $"Expected background loop refreshes, got {wmi.FanSpeedWrites.Count} writes.");
+        device.Dispose();
+
+        var writesAfterDispose = wmi.FanSpeedWrites.Count;
+        Thread.Sleep(80);
+        Assert.Equal(writesAfterDispose, wmi.FanSpeedWrites.Count);
+    }
+
+    [Fact]
+    public void AcerDevice_SetPerformance_ImmediatelyReappliesActiveCustomFanDuty()
+    {
+        var ec = new FakeAcerEcHid { UsageMode = AcerDevice.ModeBalanced };
+        var wmi = new FakeAcerWmi { CpuTempC = 60, Fan1Rpm = 3000, Fan2Rpm = 3000 };
+        using var device = new AcerDevice(ec, wmi, AcerBoards.Atlas8, enableFanLoop: false);
+
+        device.SetFanCurve([15, 15, 25, 40, 55, 70]);
+        wmi.FanSpeedWrites.Clear();
+
+        device.SetPerformance(PerformanceMode.Balanced, new PowerLimits(25, 28));
+
+        var expectedDuty = AcerDevice.PercentToPwmDuty(15);
+        Assert.Equal(
+            [AcerDevice.FanSpeedInput(2, expectedDuty), AcerDevice.FanSpeedInput(3, expectedDuty)],
+            wmi.FanSpeedWrites);
     }
 
     [Fact]
@@ -509,6 +712,8 @@ public sealed class AcerHardwareTests
         public int Fan2Rpm { get; set; } = 2800;
         public ulong LastFanBehavior { get; private set; } = AcerDevice.FanBehaviorAuto;
         public bool BatteryHealthEnabled { get; private set; }
+        public bool FailSetFanSpeed { get; set; }
+        public List<ulong> FanSpeedWrites { get; } = [];
 
         public ulong? GetGamingSysInfo(uint input) => input switch
         {
@@ -532,7 +737,12 @@ public sealed class AcerHardwareTests
             return (f1 << 10) | (f2 << 12);
         }
 
-        public bool SetGamingFanSpeed(ulong input) => true;
+        public bool SetGamingFanSpeed(ulong input)
+        {
+            if (FailSetFanSpeed) return false;
+            lock (FanSpeedWrites) FanSpeedWrites.Add(input);
+            return true;
+        }
         public ulong? GetGamingFanSpeed(uint fanId) => 50UL << 8;
         public bool? GetBatteryHealthControl() => BatteryHealthEnabled;
 

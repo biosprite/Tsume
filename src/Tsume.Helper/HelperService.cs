@@ -20,8 +20,9 @@ public sealed class HelperService : ServiceBase
     private const int BoardAttempts = 30;
     private static readonly TimeSpan BoardPause = TimeSpan.FromSeconds(2);
 
-    private sealed class DeviceSession(ModeKeeper keeper, ChargeKeeper charge, FanCurveKeeper fan)
+    private sealed class DeviceSession(IDevice device, ModeKeeper keeper, ChargeKeeper charge, FanCurveKeeper fan)
     {
+        public IDevice Device { get; } = device;
         public ModeKeeper Keeper { get; } = keeper;
         public ChargeKeeper Charge { get; } = charge;
         public FanCurveKeeper Fan { get; } = fan;
@@ -95,6 +96,15 @@ public sealed class HelperService : ServiceBase
     /// </summary>
     protected override bool OnPowerEvent(PowerBroadcastStatus powerStatus)
     {
+        if (powerStatus == PowerBroadcastStatus.Suspend)
+        {
+            RunDeviceBackground((device, _, _, _, stop) =>
+            {
+                if (!stop.IsCancellationRequested) device.OnSystemPowerState(suspended: true);
+            });
+            return true;
+        }
+
         var isWake = powerStatus is PowerBroadcastStatus.ResumeAutomatic
             or PowerBroadcastStatus.ResumeSuspend
             or PowerBroadcastStatus.ResumeCritical;
@@ -107,8 +117,10 @@ public sealed class HelperService : ServiceBase
 
         // Answer Windows at once; the firmware is talked to on another thread.
         if (occasion is not null)
-            RunDeviceBackground((keeper, charge, fan, stop) =>
+            RunDeviceBackground((device, keeper, charge, fan, stop) =>
             {
+                if (stop.IsCancellationRequested) return;
+                device.OnSystemPowerState(suspended: false);
                 if (stop.IsCancellationRequested) return;
                 keeper.RestoreIfForgotten(occasion);
                 if (stop.IsCancellationRequested) return;
@@ -121,7 +133,7 @@ public sealed class HelperService : ServiceBase
         // whose limits differ on battery act on it; on any other board nothing is done here.
         if (powerStatus == PowerBroadcastStatus.PowerStatusChange)
             RunDeviceBackground(
-                (keeper, _, _, stop) =>
+                (_, keeper, _, _, stop) =>
                 {
                     if (!stop.IsCancellationRequested) keeper.OnPowerStatusChange();
                 },
@@ -143,7 +155,7 @@ public sealed class HelperService : ServiceBase
     }
 
     private void RunDeviceBackground(
-        Action<ModeKeeper, ChargeKeeper, FanCurveKeeper, CancellationToken> work,
+        Action<IDevice, ModeKeeper, ChargeKeeper, FanCurveKeeper, CancellationToken> work,
         bool requirePowerSourceTracking = false)
     {
         lock (_taskGate)
@@ -154,7 +166,7 @@ public sealed class HelperService : ServiceBase
             if (requirePowerSourceTracking && !session.Keeper.FollowsPowerSource)
                 return;
 
-            QueueBackgroundLocked(stop => work(session.Keeper, session.Charge, session.Fan, stop), session);
+            QueueBackgroundLocked(stop => work(session.Device, session.Keeper, session.Charge, session.Fan, stop), session);
         }
     }
 
@@ -265,7 +277,7 @@ public sealed class HelperService : ServiceBase
                     lock (_taskGate)
                     {
                         if (!stop.IsCancellationRequested)
-                            _deviceSession = session = new DeviceSession(keeper, charge, fan);
+                            _deviceSession = session = new DeviceSession(found, keeper, charge, fan);
                     }
                 }
                 handler.SetHardware(machine, found, keeper, charge, fan);

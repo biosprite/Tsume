@@ -12,10 +12,33 @@ namespace Tsume.Hardware.Acer;
 /// <c>0xFF05</c>, report <c>0xA0</c>) for performance modes and PL1/PL2 limits, and BIOS WMI (<c>AcerGamingFunction</c>
 /// + <c>BatteryControl</c>) for fans, telemetry, and battery health charging.
 /// </summary>
-public sealed class AcerDevice(IAcerEcHid ecHid, IAcerWmi wmi, AcerBoard board) : IDevice
+/// <remarks>
+/// Custom fan curves use an EC firmware behavior verified in the F7V ITE EC image (<c>FUN_ram_0000f560</c> /
+/// <c>FUN_ram_0000fa62</c>): while the fans remain in WMI Auto mode (<c>0x564</c> bits 4 &amp; 5 clear), WMI
+/// <c>SetGamingFanSpeed</c> (<c>0x7D</c>/<c>0xCD</c>) writes an unclamped <c>0..255</c> duty straight into the ITE
+/// PWM registers (<c>0xF01808</c>/<c>0xF01807</c>, period <c>0xFF</c>), allowing speeds both above and below the EC's
+/// built-in auto tables. Because the EC's Auto PID loop drifts PWM by only <c>±1/255</c> every 300 ms (~1.3 %/s),
+/// refreshing every 1.5 s holds the curve closely while remaining fail-safe if the helper stops.
+/// </remarks>
+public sealed class AcerDevice(
+    IAcerEcHid ecHid,
+    IAcerWmi wmi,
+    AcerBoard board,
+    bool enableFanLoop = true,
+    TimeSpan? fanLoopInterval = null,
+    Func<bool>? isMakerToolRunning = null) : IDevice
 {
     /// <summary>PredatorSense processes that fight Tsume for modes and settings while active.</summary>
     private static readonly string[] PredatorSenseProcesses = ["Handheld.Desktop", "AcerAgentService"];
+
+    /// <summary>
+    /// Refresh cadence for the Auto-mode direct-PWM custom fan loop. At 1.5 s, the EC's 300 ms Auto PID loop drifts
+    /// PWM by at most 5/255 (~2 %) between refreshes.
+    /// </summary>
+    public static readonly TimeSpan DefaultFanLoopInterval = TimeSpan.FromMilliseconds(1500);
+
+    /// <summary>Cooling hysteresis (°C) before stepping down the target fan speed as CPU temperature falls.</summary>
+    public const int CoolingHysteresisC = 2;
 
     // EC usage modes (TUGM / applied mode 0x554).
     public const byte ModeTurbo = 0;
@@ -38,9 +61,19 @@ public sealed class AcerDevice(IAcerEcHid ecHid, IAcerWmi wmi, AcerBoard board) 
     public const uint SensorFan1Rpm = 0x0401;
     public const uint SensorFan2Rpm = 0x0801;
 
+    private readonly TimeSpan _fanLoopInterval = fanLoopInterval ?? DefaultFanLoopInterval;
     private readonly Lock _oneIntentionAtATime = new();
     private string? _biosVersion;
     private bool _biosVersionRead;
+    private bool _disposed;
+
+    // Software-driven custom fan curve state (guarded by _oneIntentionAtATime).
+    private int[]? _activeCurve;
+    private int[]? _chosenCurve;
+    private int? _effectiveCelsius;
+    private int? _lastAppliedPercent;
+    private bool _standbyPaused;
+    private Timer? _fanLoopTimer;
 
     /// <summary>
     /// Opens an Acer handheld when the board/system matches <see cref="AcerBoards"/> AND both the required
@@ -70,6 +103,8 @@ public sealed class AcerDevice(IAcerEcHid ecHid, IAcerWmi wmi, AcerBoard board) 
     {
         get
         {
+            if (isMakerToolRunning is not null) return isMakerToolRunning();
+
             foreach (var name in PredatorSenseProcesses)
             {
                 var found = Process.GetProcessesByName(name);
@@ -130,6 +165,10 @@ public sealed class AcerDevice(IAcerEcHid ecHid, IAcerWmi wmi, AcerBoard board) 
 
                 throw new FirmwareException("The EC refused to switch to Manual operating mode (mode 3).");
             }
+
+            // EC command 0x83 (from _Q30) reloads the auto fan table and may pulse PWM; immediately re-apply our custom duty.
+            if (_activeCurve is { } active && !_standbyPaused && !MakerToolIsRunning)
+                ApplyFanCurveStepLocked(active, forceWrite: true, resetHysteresis: true);
         }
     }
 
@@ -148,17 +187,19 @@ public sealed class AcerDevice(IAcerEcHid ecHid, IAcerWmi wmi, AcerBoard board) 
             switch (mode)
             {
                 case FanMode.Auto:
+                    ClearActiveCurveLocked();
                     if (!wmi.SetGamingFanBehavior(FanBehaviorAuto))
                         throw new FirmwareException("The BIOS refused to switch fans to Auto.");
                     break;
 
                 case FanMode.Max:
+                    ClearActiveCurveLocked();
                     if (!wmi.SetGamingFanBehavior(FanBehaviorMax))
                         throw new FirmwareException("The BIOS refused to switch fans to Max.");
                     break;
 
                 case FanMode.Custom:
-                    throw new NotSupportedException("Acer Predator Atlas 8 does not expose a writable firmware fan curve.");
+                    throw new NotSupportedException("Custom fans need a curve: set one with SetFanCurve.");
 
                 default:
                     throw new ArgumentOutOfRangeException(nameof(mode), mode, null);
@@ -170,9 +211,144 @@ public sealed class AcerDevice(IAcerEcHid ecHid, IAcerWmi wmi, AcerBoard board) 
     {
         lock (_oneIntentionAtATime)
         {
-            return ReadFanMode();
+            return ReadFanModeLocked();
         }
     }
+
+    public FanCurveState? FanCurve()
+    {
+        if (Profile.FanCurve is not { CustomTemperatures: { Count: > 0 } temps } limits) return null;
+
+        lock (_oneIntentionAtATime)
+        {
+            var stock = StockCurveFor(limits, temps);
+            IReadOnlyList<int> speeds = _activeCurve is { Length: var n } && n == temps.Count
+                ? [.. _activeCurve]
+                : _chosenCurve is { Length: var m } && m == temps.Count && ReadFanModeLocked() == FanMode.Max
+                    ? [.. _chosenCurve]
+                    : stock;
+
+            return new()
+            {
+                Temperatures = temps,
+                Speeds = speeds,
+                Stock = stock,
+                StockKnown = true,
+            };
+        }
+    }
+
+    public IReadOnlyList<int> SetFanCurve(IReadOnlyList<int> speeds)
+    {
+        if (Profile.FanCurve is not { CustomTemperatures: { Count: > 0 } temps } limits)
+            throw new NotSupportedException("This device takes no custom fan curve.");
+
+        var stock = StockCurveFor(limits, temps);
+        var clamped = limits.Clamp(temps, speeds, stock);
+
+        lock (_oneIntentionAtATime)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            var previousCurve = _activeCurve;
+            var previousEffectiveTemp = _effectiveCelsius;
+            var previousApplied = _lastAppliedPercent;
+
+            // Keep the EC in WMI Auto mode (0x564 bits 4 & 5 == 0) so SetGamingFanSpeed (0x7D/0xCD) writes
+            // directly to the hardware PWM registers (0xF01808/0xF01807) instead of acting as an additive boost.
+            if (!wmi.SetGamingFanBehavior(FanBehaviorAuto))
+                throw new FirmwareException("The BIOS refused to prepare fans for custom curve control.");
+
+            if (!ApplyFanCurveStepLocked(clamped, forceWrite: true, resetHysteresis: true))
+            {
+                _activeCurve = previousCurve;
+                _effectiveCelsius = previousEffectiveTemp;
+                _lastAppliedPercent = previousApplied;
+                if (_activeCurve is not null) ArmTimerLocked();
+                throw new FirmwareException("The BIOS refused to write the custom fan speed.");
+            }
+
+            _activeCurve = [.. clamped];
+            ArmTimerLocked();
+            return clamped;
+        }
+    }
+
+    public bool HoldsFanCurve(IReadOnlyList<int> speeds)
+    {
+        if (Profile.FanCurve is not { CustomTemperatures: { Count: > 0 } temps } || speeds.Count != temps.Count)
+            return false;
+
+        lock (_oneIntentionAtATime)
+        {
+            if (_activeCurve is null || !_activeCurve.SequenceEqual(speeds))
+                return false;
+
+            if (ReadHardwareFanBehavior() is { } hw && (hw.Fan1 != 1 || hw.Fan2 != 1))
+            {
+                ClearActiveCurveLocked();
+                return false;
+            }
+
+            return true;
+        }
+    }
+
+    public void NoteChosenFanCurve(IReadOnlyList<int>? speeds)
+    {
+        lock (_oneIntentionAtATime)
+        {
+            _chosenCurve = speeds?.ToArray();
+        }
+    }
+
+    public void OnSystemPowerState(bool suspended)
+    {
+        lock (_oneIntentionAtATime)
+        {
+            if (_disposed || _standbyPaused == suspended) return;
+
+            _standbyPaused = suspended;
+            if (suspended)
+            {
+                StopTimerLocked();
+                _effectiveCelsius = null;
+                return;
+            }
+
+            if (_activeCurve is { } active)
+            {
+                if (!MakerToolIsRunning)
+                    ApplyFanCurveStepLocked(active, forceWrite: true, resetHysteresis: true);
+                ArmTimerLocked();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Executes one custom-fan-curve evaluation and PWM refresh step synchronously. Used by unit tests to verify
+    /// interpolation, hysteresis, idle skipping, and standby behavior without relying on wall-clock timers.
+    /// </summary>
+    internal bool TickFanCurve()
+    {
+        lock (_oneIntentionAtATime)
+        {
+            if (_disposed || _standbyPaused || _activeCurve is not { } curve)
+                return false;
+
+            if (MakerToolIsRunning)
+                return false;
+
+            return ApplyFanCurveStepLocked(curve, forceWrite: false, resetHysteresis: false);
+        }
+    }
+
+    /// <summary>Converts a 0–100 % curve speed to the 0–255 ITE hardware PWM duty byte (CTR = 0xFF).</summary>
+    public static byte PercentToPwmDuty(int percent) =>
+        (byte)Math.Clamp((int)Math.Round(percent * 255.0 / 100.0, MidpointRounding.AwayFromZero), 0, 255);
+
+    /// <summary>Builds the <c>SetGamingFanSpeed</c> <c>gmInput</c> payload: <c>(duty &lt;&lt; 8) | fanId</c>.</summary>
+    public static ulong FanSpeedInput(byte fanId, byte duty) => ((ulong)duty << 8) | fanId;
 
     public void SetChargeLimit(int percent)
     {
@@ -203,14 +379,16 @@ public sealed class AcerDevice(IAcerEcHid ecHid, IAcerWmi wmi, AcerBoard board) 
         lock (_oneIntentionAtATime)
         {
             var (mode, limits) = ReadPerformance();
+            var fanMode = ReadFanModeLocked();
             return new()
             {
                 Mode = mode,
                 Limits = limits,
-                Fan = ReadFanMode(),
+                Fan = fanMode,
                 ChargeLimit = Profile.ChargeLimits.Count > 0 ? ReadChargeLimit() : null,
                 CpuTemperature = ReadCpuTemperature(),
                 FanRpm = ReadFanRpm(),
+                FanSpeed = ReportedFanSpeedLocked(fanMode),
                 FirmwareVersion = ReadBiosVersionCached(),
             };
         }
@@ -220,7 +398,8 @@ public sealed class AcerDevice(IAcerEcHid ecHid, IAcerWmi wmi, AcerBoard board) 
     {
         lock (_oneIntentionAtATime)
         {
-            return new(ReadCpuTemperature(), ReadFanRpm());
+            int? fanSpeed = _activeCurve is not null ? _lastAppliedPercent : null;
+            return new(ReadCpuTemperature(), ReadFanRpm(), fanSpeed);
         }
     }
 
@@ -253,18 +432,118 @@ public sealed class AcerDevice(IAcerEcHid ecHid, IAcerWmi wmi, AcerBoard board) 
         };
     }
 
-    private FanMode ReadFanMode()
+    private (int Fan1, int Fan2)? ReadHardwareFanBehavior()
     {
         if (wmi.GetGamingFanBehavior(FanMaskBoth) is not { } raw)
-            return FanMode.Auto;
+            return null;
 
         // Fan bit n occupies bits (8 + 2n)..(9 + 2n): System Fan 1 = bits 10..11, System Fan 2 = bits 12..13.
-        var fan1 = (int)((raw >> 10) & 0x3);
-        var fan2 = (int)((raw >> 12) & 0x3);
+        return ((int)((raw >> 10) & 0x3), (int)((raw >> 12) & 0x3));
+    }
 
-        if (fan1 == 2 || fan2 == 2) return FanMode.Max;
-        if (fan1 == 3 || fan2 == 3) return FanMode.Custom;
-        return FanMode.Auto;
+    private FanMode ReadFanModeLocked()
+    {
+        if (ReadHardwareFanBehavior() is { } hw)
+        {
+            if (hw.Fan1 == 2 || hw.Fan2 == 2)
+            {
+                ClearActiveCurveLocked();
+                return FanMode.Max;
+            }
+
+            if (hw.Fan1 == 3 || hw.Fan2 == 3)
+            {
+                ClearActiveCurveLocked();
+                return FanMode.Custom;
+            }
+        }
+
+        return _activeCurve is not null ? FanMode.Custom : FanMode.Auto;
+    }
+
+    private int? ReportedFanSpeedLocked(FanMode fanMode) => fanMode switch
+    {
+        FanMode.Custom when _activeCurve is not null => _lastAppliedPercent,
+        FanMode.Max => Profile.FanCurve?.MaxSpeed,
+        _ => null,
+    };
+
+    private bool ApplyFanCurveStepLocked(IReadOnlyList<int> curve, bool forceWrite, bool resetHysteresis)
+    {
+        if (Profile.FanCurve is not { CustomTemperatures: { Count: > 0 } temps } || temps.Count != curve.Count)
+            return false;
+
+        var celsius = ReadCpuTemperature();
+        if (celsius is not { } temp)
+        {
+            // During Modern Standby (EC 0xE4), CTMP (0x558) is zeroed and fans are shut off by the EC.
+            // Skip writing so Modern Standby emits zero SMIs and transient sensor errors leave EC Auto safely active.
+            _effectiveCelsius = null;
+            return true;
+        }
+
+        if (resetHysteresis || _effectiveCelsius is not { } prev || temp >= prev || temp <= prev - CoolingHysteresisC)
+            _effectiveCelsius = temp;
+
+        var sampled = FanCurveLimits.Sample(temps, curve, [_effectiveCelsius.Value])[0];
+        var targetPercent = Math.Clamp(sampled, 0, Profile.FanCurve.MaxSpeed);
+
+        // When cool and already stopped at 0 RPM, the EC's auto level is 0 (0 RPM target) with zero drift to fight.
+        // Skip periodic SMIs until either the target rises above 0 or the EC begins spinning a fan.
+        if (!forceWrite && targetPercent == 0 && _lastAppliedPercent == 0 && ReadFanRpm() is 0)
+            return true;
+
+        var duty = PercentToPwmDuty(targetPercent);
+        foreach (var fanId in board.FanIds)
+        {
+            if (!wmi.SetGamingFanSpeed(FanSpeedInput(fanId, duty)))
+                return false;
+        }
+
+        _lastAppliedPercent = targetPercent;
+        return true;
+    }
+
+    private void OnFanLoopTick(object? state)
+    {
+        lock (_oneIntentionAtATime)
+        {
+            if (_disposed || _standbyPaused || _activeCurve is not { } curve)
+                return;
+
+            if (!MakerToolIsRunning)
+                ApplyFanCurveStepLocked(curve, forceWrite: false, resetHysteresis: false);
+
+            ArmTimerLocked();
+        }
+    }
+
+    private void ArmTimerLocked()
+    {
+        if (!enableFanLoop || _disposed || _standbyPaused || _activeCurve is null)
+            return;
+
+        _fanLoopTimer ??= new Timer(OnFanLoopTick, state: null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        _fanLoopTimer.Change(_fanLoopInterval, Timeout.InfiniteTimeSpan);
+    }
+
+    private void StopTimerLocked() =>
+        _fanLoopTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+
+    private void ClearActiveCurveLocked()
+    {
+        _activeCurve = null;
+        _effectiveCelsius = null;
+        _lastAppliedPercent = null;
+        StopTimerLocked();
+    }
+
+    private int[] StockCurveFor(FanCurveLimits limits, IReadOnlyList<int> temps)
+    {
+        if (board.StockFanSpeeds is { Count: var count } stock && count == temps.Count)
+            return [.. limits.Clamp(temps, stock)];
+
+        return [.. limits.Clamp(temps, new int[temps.Count])];
     }
 
     private int? ReadChargeLimit() => wmi.GetBatteryHealthControl() switch
@@ -306,6 +585,17 @@ public sealed class AcerDevice(IAcerEcHid ecHid, IAcerWmi wmi, AcerBoard board) 
 
     public void Dispose()
     {
+        Timer? timer;
+        lock (_oneIntentionAtATime)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _activeCurve = null;
+            timer = _fanLoopTimer;
+            _fanLoopTimer = null;
+        }
+
+        timer?.Dispose();
         ecHid.Dispose();
         wmi.Dispose();
     }
