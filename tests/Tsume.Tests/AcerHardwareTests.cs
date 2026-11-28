@@ -783,6 +783,55 @@ public sealed class AcerHardwareTests
         Assert.Equal(AcerDevice.ModeManual, ec.UsageMode);
     }
 
+    [Fact]
+    public void AcerDevice_Telemetry_ReadsCpuTempAndDualFanRpmWithSanityChecksAndMaxFanSpeedParity()
+    {
+        var ec = new FakeAcerEcHid();
+        var wmi = new FakeAcerWmi
+        {
+            CpuTempC = 68,
+            Fan1Rpm = 2900,
+            Fan2Rpm = 3350,
+        };
+        using var device = new AcerDevice(ec, wmi, AcerBoards.Atlas8, enableFanLoop: false);
+
+        // Snapshot (panel open) and Readings (1 Hz poll) report the same CPU temp and max of both system fans.
+        var snap = device.Snapshot();
+        Assert.Equal(68, snap.CpuTemperature);
+        Assert.Equal(3350, snap.FanRpm);
+        Assert.Null(snap.FanSpeed);
+
+        var readings = device.Readings();
+        Assert.Equal(68, readings.CpuTemperature);
+        Assert.Equal(3350, readings.FanRpm);
+        Assert.Null(readings.FanSpeed);
+
+        // Max fan mode keeps FanSpeed = 100 consistent between Snapshot() and Readings().
+        device.SetFan(FanMode.Max);
+        Assert.Equal(100, device.Snapshot().FanSpeed);
+        Assert.Equal(100, device.Readings().FanSpeed);
+
+        // Stopped fans (0 RPM) are valid and reported as 0.
+        wmi.Fan1Rpm = 0;
+        wmi.Fan2Rpm = 0;
+        Assert.Equal(0, device.Readings().FanRpm);
+
+        // A transient EC tach divide-by-1 glitch (0xE6DA = 59,098 RPM) or 0xFFFF on one fan falls back to the other fan.
+        wmi.Fan1Rpm = 0xE6DA;
+        wmi.Fan2Rpm = 3100;
+        Assert.Equal(3100, device.Readings().FanRpm);
+
+        wmi.Fan1Rpm = 0xFFFF;
+        wmi.Fan2Rpm = 0xFFFF;
+        Assert.Null(device.Readings().FanRpm);
+
+        // Out-of-range CPU temps (0 °C in Modern Standby, >= 120 °C) return null instead of bogus readings.
+        wmi.CpuTempC = 0;
+        Assert.Null(device.Readings().CpuTemperature);
+        wmi.CpuTempC = 120;
+        Assert.Null(device.Readings().CpuTemperature);
+    }
+
     private sealed class FakeAcerEcHid : IAcerEcHid
     {
         public byte UsageMode { get; set; } = AcerDevice.ModeBalanced;
@@ -851,7 +900,8 @@ public sealed class AcerHardwareTests
 
         public ulong? GetGamingSysInfo(uint input) => input switch
         {
-            0x0000 => 0x0000_008D_0000_0000UL,
+            // Real F7V WMBH/GGSI places sensor bitmap 0x008D in BHGK bytes 3..4 (bits 24..39).
+            0x0000 => 0x0000_0000_8D00_0000UL,
             AcerDevice.SensorCpuTemp => ((ulong)CpuTempC << 8),
             AcerDevice.SensorFan1Rpm => ((ulong)Fan1Rpm << 8),
             AcerDevice.SensorFan2Rpm => ((ulong)Fan2Rpm << 8),

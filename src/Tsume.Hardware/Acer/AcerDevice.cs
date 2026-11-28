@@ -71,6 +71,9 @@ public sealed class AcerDevice(
     public const uint SensorFan1Rpm = 0x0401;
     public const uint SensorFan2Rpm = 0x0801;
 
+    /// <summary>Upper bound for sane fan tachometer readings; rejects transient divide-by-1 / 0xFFFF EC glitches.</summary>
+    public const int MaxPlausibleFanRpm = 15_000;
+
     private readonly TimeSpan _fanLoopInterval = fanLoopInterval ?? DefaultFanLoopInterval;
     private readonly Lock _oneIntentionAtATime = new();
     private string? _biosVersion;
@@ -82,6 +85,7 @@ public sealed class AcerDevice(
     private int[]? _chosenCurve;
     private int? _effectiveCelsius;
     private int? _lastAppliedPercent;
+    private FanMode _lastFanMode = FanMode.Auto;
     private bool _standbyPaused;
     private Timer? _fanLoopTimer;
 
@@ -265,12 +269,14 @@ public sealed class AcerDevice(
                     ClearActiveCurveLocked();
                     if (!wmi.SetGamingFanBehavior(FanBehaviorAuto))
                         throw new FirmwareException("The BIOS refused to switch fans to Auto.");
+                    _lastFanMode = FanMode.Auto;
                     break;
 
                 case FanMode.Max:
                     ClearActiveCurveLocked();
                     if (!wmi.SetGamingFanBehavior(FanBehaviorMax))
                         throw new FirmwareException("The BIOS refused to switch fans to Max.");
+                    _lastFanMode = FanMode.Max;
                     break;
 
                 case FanMode.Custom:
@@ -344,6 +350,7 @@ public sealed class AcerDevice(
             }
 
             _activeCurve = [.. clamped];
+            _lastFanMode = FanMode.Custom;
             ArmTimerLocked();
             return clamped;
         }
@@ -362,6 +369,7 @@ public sealed class AcerDevice(
             if (ReadHardwareFanBehavior() is { } hw && (hw.Fan1 != 1 || hw.Fan2 != 1))
             {
                 ClearActiveCurveLocked();
+                _lastFanMode = hw.Fan1 == 2 || hw.Fan2 == 2 ? FanMode.Max : FanMode.Custom;
                 return false;
             }
 
@@ -473,8 +481,7 @@ public sealed class AcerDevice(
     {
         lock (_oneIntentionAtATime)
         {
-            int? fanSpeed = _activeCurve is not null ? _lastAppliedPercent : null;
-            return new(ReadCpuTemperature(), ReadFanRpm(), fanSpeed);
+            return new(ReadCpuTemperature(), ReadFanRpm(), ReportedFanSpeedLocked(_lastFanMode));
         }
     }
 
@@ -527,17 +534,17 @@ public sealed class AcerDevice(
             if (hw.Fan1 == 2 || hw.Fan2 == 2)
             {
                 ClearActiveCurveLocked();
-                return FanMode.Max;
+                return _lastFanMode = FanMode.Max;
             }
 
             if (hw.Fan1 == 3 || hw.Fan2 == 3)
             {
                 ClearActiveCurveLocked();
-                return FanMode.Custom;
+                return _lastFanMode = FanMode.Custom;
             }
         }
 
-        return _activeCurve is not null ? FanMode.Custom : FanMode.Auto;
+        return _lastFanMode = _activeCurve is not null ? FanMode.Custom : FanMode.Auto;
     }
 
     private int? ReportedFanSpeedLocked(FanMode fanMode) => fanMode switch
@@ -641,11 +648,18 @@ public sealed class AcerDevice(
 
     private int? ReadFanRpm()
     {
-        int? fan1 = wmi.GetGamingSysInfo(SensorFan1Rpm) is { } r1 ? (int)((r1 >> 8) & 0xFFFF) : null;
-        int? fan2 = wmi.GetGamingSysInfo(SensorFan2Rpm) is { } r2 ? (int)((r2 >> 8) & 0xFFFF) : null;
+        int? fan1 = ReadSingleFanRpm(SensorFan1Rpm);
+        int? fan2 = ReadSingleFanRpm(SensorFan2Rpm);
 
         if (fan1 is { } a && fan2 is { } b) return Math.Max(a, b);
         return fan1 ?? fan2;
+    }
+
+    private int? ReadSingleFanRpm(uint sensor)
+    {
+        if (wmi.GetGamingSysInfo(sensor) is not { } raw) return null;
+        var rpm = (int)((raw >> 8) & 0xFFFF);
+        return rpm is >= 0 and <= MaxPlausibleFanRpm ? rpm : null;
     }
 
     private string? ReadBiosVersionCached()

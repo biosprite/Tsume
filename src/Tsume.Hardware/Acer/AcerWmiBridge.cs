@@ -19,8 +19,8 @@ public sealed class AcerWmiBridge : IAcerWmi
 
     private static long _lastSmmCallTicks;
 
-    private readonly ManagementObject _gaming;
-    private readonly ManagementObject? _battery;
+    private ManagementObject? _gaming;
+    private ManagementObject? _battery;
     private bool _disposed;
 
     private AcerWmiBridge(ManagementObject gaming, ManagementObject? battery)
@@ -35,10 +35,10 @@ public sealed class AcerWmiBridge : IAcerWmi
     /// </summary>
     public static AcerWmiBridge? TryOpen()
     {
-        var gaming = FirstInstance("AcerGamingFunction");
+        var gaming = Connect("AcerGamingFunction");
         if (gaming is null) return null;
 
-        var battery = FirstInstance("BatteryControl");
+        var battery = Connect("BatteryControl");
         var bridge = new AcerWmiBridge(gaming, battery);
 
         if (bridge.GetGamingSysInfo(0x0000) is null)
@@ -62,63 +62,86 @@ public sealed class AcerWmiBridge : IAcerWmi
 
     public bool? GetBatteryHealthControl()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_battery is null) return null;
-
-        try
+        lock (WmiCallGate)
         {
-            lock (WmiCallGate)
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            // WMI proxies can go stale after hibernation or a Winmgmt restart; reconnect once before giving up.
+            for (var attempt = 0; attempt < 2; attempt++)
             {
-                ThrottleSmmLocked();
-                using var inParams = _battery.GetMethodParameters("GetBatteryHealthControlStatus");
-                inParams["uBatteryNo"] = (byte)1;
-                inParams["uFunctionQuery"] = (byte)1;
-                inParams["uReserved"] = new byte[2];
+                var battery = _battery ??= Connect("BatteryControl");
+                if (battery is null) return null;
 
-                using var outParams = _battery.InvokeMethod("GetBatteryHealthControlStatus", inParams, null);
-                MarkSmmCallLocked();
-                if (outParams is null) return null;
+                try
+                {
+                    ThrottleSmmLocked();
+                    using var inParams = battery.GetMethodParameters("GetBatteryHealthControlStatus");
+                    inParams["uBatteryNo"] = (byte)1;
+                    inParams["uFunctionQuery"] = (byte)1;
+                    inParams["uReserved"] = new byte[2];
 
-                if (outParams["uReturn"] is byte[] { Length: > 0 } ret && ret[0] != 0)
+                    using var outParams = battery.InvokeMethod("GetBatteryHealthControlStatus", inParams, null);
+                    MarkSmmCallLocked();
+                    if (outParams is null) return null;
+
+                    if (outParams["uReturn"] is byte[] { Length: > 0 } ret && ret[0] != 0)
+                        return null;
+
+                    if (outParams["uFunctionStatus"] is byte[] { Length: > 0 } status)
+                        return (status[0] & 0x01) != 0;
+
                     return null;
-
-                if (outParams["uFunctionStatus"] is byte[] { Length: > 0 } status)
-                    return (status[0] & 0x01) != 0;
-
-                return null;
+                }
+                catch (Exception error) when (error is ManagementException or COMException)
+                {
+                    ResetBatteryLocked();
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    return null;
+                }
             }
-        }
-        catch (Exception error) when (error is ManagementException or COMException or UnauthorizedAccessException)
-        {
+
             return null;
         }
     }
 
     public bool SetBatteryHealthControl(bool enabled)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_battery is null) return false;
-
-        try
+        lock (WmiCallGate)
         {
-            lock (WmiCallGate)
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            for (var attempt = 0; attempt < 2; attempt++)
             {
-                ThrottleSmmLocked();
-                using var inParams = _battery.GetMethodParameters("SetBatteryHealthControl");
-                inParams["uBatteryNo"] = (byte)1;
-                inParams["uFunctionMask"] = (byte)1;
-                inParams["uFunctionStatus"] = enabled ? (byte)1 : (byte)0;
-                inParams["uReservedIn"] = new byte[5];
+                var battery = _battery ??= Connect("BatteryControl");
+                if (battery is null) return false;
 
-                using var outParams = _battery.InvokeMethod("SetBatteryHealthControl", inParams, null);
-                MarkSmmCallLocked();
-                if (outParams is null) return false;
+                try
+                {
+                    ThrottleSmmLocked();
+                    using var inParams = battery.GetMethodParameters("SetBatteryHealthControl");
+                    inParams["uBatteryNo"] = (byte)1;
+                    inParams["uFunctionMask"] = (byte)1;
+                    inParams["uFunctionStatus"] = enabled ? (byte)1 : (byte)0;
+                    inParams["uReservedIn"] = new byte[5];
 
-                return Convert.ToUInt16(outParams["uReturn"]) == 0;
+                    using var outParams = battery.InvokeMethod("SetBatteryHealthControl", inParams, null);
+                    MarkSmmCallLocked();
+                    if (outParams is null) return false;
+
+                    return Convert.ToUInt16(outParams["uReturn"]) == 0;
+                }
+                catch (Exception error) when (error is ManagementException or COMException)
+                {
+                    ResetBatteryLocked();
+                }
+                catch (Exception error) when (error is UnauthorizedAccessException or InvalidCastException)
+                {
+                    return false;
+                }
             }
-        }
-        catch (Exception error) when (error is ManagementException or COMException or UnauthorizedAccessException or InvalidCastException)
-        {
+
             return false;
         }
     }
@@ -147,52 +170,90 @@ public sealed class AcerWmiBridge : IAcerWmi
 
     private ulong? InvokeGamingGet(string method, uint input, bool entersSmm)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
-        try
+        lock (WmiCallGate)
         {
-            lock (WmiCallGate)
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            for (var attempt = 0; attempt < 2; attempt++)
             {
-                if (entersSmm) ThrottleSmmLocked();
-                using var inParams = _gaming.GetMethodParameters(method);
-                inParams["gmInput"] = input;
-                using var outParams = _gaming.InvokeMethod(method, inParams, null);
-                if (entersSmm) MarkSmmCallLocked();
-                if (outParams is null) return null;
+                var gaming = _gaming ??= Connect("AcerGamingFunction");
+                if (gaming is null) return null;
 
-                var raw = Convert.ToUInt64(outParams["gmOutput"]);
-                return (raw & 0xFF) == 0 ? raw : null;
+                try
+                {
+                    if (entersSmm) ThrottleSmmLocked();
+                    using var inParams = gaming.GetMethodParameters(method);
+                    inParams["gmInput"] = input;
+                    using var outParams = gaming.InvokeMethod(method, inParams, null);
+                    if (entersSmm) MarkSmmCallLocked();
+                    if (outParams is null) return null;
+
+                    var raw = Convert.ToUInt64(outParams["gmOutput"]);
+                    return (raw & 0xFF) == 0 ? raw : null;
+                }
+                catch (Exception error) when (error is ManagementException or COMException)
+                {
+                    ResetGamingLocked();
+                }
+                catch (Exception error) when (error is UnauthorizedAccessException or InvalidCastException)
+                {
+                    return null;
+                }
             }
-        }
-        catch (Exception error) when (error is ManagementException or COMException or UnauthorizedAccessException or InvalidCastException)
-        {
+
             return null;
         }
     }
 
     private bool InvokeGamingSet(string method, ulong input)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
-        try
+        lock (WmiCallGate)
         {
-            lock (WmiCallGate)
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            for (var attempt = 0; attempt < 2; attempt++)
             {
-                ThrottleSmmLocked();
-                using var inParams = _gaming.GetMethodParameters(method);
-                inParams["gmInput"] = input;
-                using var outParams = _gaming.InvokeMethod(method, inParams, null);
-                MarkSmmCallLocked();
-                if (outParams is null) return false;
+                var gaming = _gaming ??= Connect("AcerGamingFunction");
+                if (gaming is null) return false;
 
-                var raw = Convert.ToUInt64(outParams["gmOutput"]);
-                return (raw & 0xFF) == 0;
+                try
+                {
+                    ThrottleSmmLocked();
+                    using var inParams = gaming.GetMethodParameters(method);
+                    inParams["gmInput"] = input;
+                    using var outParams = gaming.InvokeMethod(method, inParams, null);
+                    MarkSmmCallLocked();
+                    if (outParams is null) return false;
+
+                    var raw = Convert.ToUInt64(outParams["gmOutput"]);
+                    return (raw & 0xFF) == 0;
+                }
+                catch (Exception error) when (error is ManagementException or COMException)
+                {
+                    ResetGamingLocked();
+                }
+                catch (Exception error) when (error is UnauthorizedAccessException or InvalidCastException)
+                {
+                    return false;
+                }
             }
-        }
-        catch (Exception error) when (error is ManagementException or COMException or UnauthorizedAccessException or InvalidCastException)
-        {
+
             return false;
         }
+    }
+
+    private void ResetGamingLocked()
+    {
+        try { _gaming?.Dispose(); }
+        catch (Exception) { }
+        _gaming = null;
+    }
+
+    private void ResetBatteryLocked()
+    {
+        try { _battery?.Dispose(); }
+        catch (Exception) { }
+        _battery = null;
     }
 
     private static void ThrottleSmmLocked()
@@ -205,13 +266,24 @@ public sealed class AcerWmiBridge : IAcerWmi
 
     private static void MarkSmmCallLocked() => _lastSmmCallTicks = Stopwatch.GetTimestamp();
 
-    private static ManagementObject? FirstInstance(string className)
+    private static ManagementObject? Connect(string className)
     {
         try
         {
             using var search = new ManagementObjectSearcher(Scope, $"SELECT * FROM {className}");
             using var results = search.Get();
-            foreach (ManagementObject obj in results) return obj;
+            string? relativePath = null;
+            foreach (ManagementObject obj in results)
+            {
+                using (obj)
+                {
+                    if (relativePath is null && obj.Path?.RelativePath is { Length: > 0 } path)
+                        relativePath = path;
+                }
+            }
+
+            if (relativePath is not null)
+                return new ManagementObject(Scope, relativePath, null);
         }
         catch (Exception error) when (error is ManagementException or COMException or UnauthorizedAccessException)
         {
@@ -222,9 +294,12 @@ public sealed class AcerWmiBridge : IAcerWmi
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        _gaming.Dispose();
-        _battery?.Dispose();
+        lock (WmiCallGate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            ResetGamingLocked();
+            ResetBatteryLocked();
+        }
     }
 }
