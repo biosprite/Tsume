@@ -656,22 +656,31 @@ public sealed class PerformanceViewModel : Observable
     }
 
     /// <summary>
-    /// Clears <paramref name="profile"/>'s saved curve so it returns to stock (and stops cycling on the main tile
-    /// unless named), sending stock speeds to the firmware when <paramref name="send"/> is true.
+    /// Clears <paramref name="profile"/>'s saved curve and custom name so it returns to default (and stops cycling
+    /// on the main tile), sending stock speeds to the firmware when <paramref name="send"/> is true.
     /// </summary>
-    public void ResetFanCurve(int profile, bool send)
+    public void ResetFanProfile(int profile, bool resetCurve, bool send)
     {
-        if (FanLimits is not { } limits || FanCurve is not { } curve) return;
+        if (profile < 0 || profile >= SavedState.FanProfileCount) return;
 
-        _state.KeepFanCurve(profile, null);
+        var hadName = _state.FanProfileNameIn(profile) is not null;
+        if (hadName) _state.KeepFanProfileName(profile, null);
+
+        var canResetCurve = resetCurve && FanLimits is not null && FanCurve is not null;
+        if (canResetCurve) _state.KeepFanCurve(profile, null);
+
+        if (!hadName && !canResetCurve) return;
+
         _state.Save();
 
-        if (send && IsHelperOnline && StockForCustom(curve) is { } stock)
+        if (send && canResetCurve && IsHelperOnline && StockForCustom(FanCurve!) is { } stock)
         {
-            var legal = limits.Clamp(CustomTemperaturesOf(curve), stock, stock);
+            var legal = FanLimits!.Clamp(CustomTemperaturesOf(FanCurve!), stock, stock);
             Queue(() => SendFanAsync(new SetFanCurve(legal)), FanMode.Custom, profile);
         }
+
         Notify(nameof(FanDetail));
+        if (hadName) FanProfileNamesChanged?.Invoke();
     }
 
     /// <summary>The active custom fan profile, 0-based.</summary>

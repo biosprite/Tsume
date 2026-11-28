@@ -27,7 +27,7 @@ public partial class FanScreen
         InitializeComponent();
         ScreenList.Configure(List);
 
-        // Reset disables itself once the curve matches stock; move focus back onto the curve so the controller is never stranded.
+        // Reset disables itself once the profile is back to default; move focus back onto the curve so the controller is never stranded.
         ResetTile.IsEnabledChanged += (_, e) => { if (e.NewValue is false) RestoreFocus(preferCurve: true); };
         ResetTile.IsVisibleChanged += (_, e) => { if (e.NewValue is false) RestoreFocus(preferCurve: true); };
         CurveEditor.IsVisibleChanged += (_, e) => { if (e.NewValue is false) RestoreFocus(preferCurve: false); };

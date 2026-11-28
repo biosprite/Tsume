@@ -92,6 +92,7 @@ public sealed class FanViewModel : LayerViewModel
 
             case nameof(PerformanceViewModel.FanProfile):
                 Notify(nameof(ProfileIndex));
+                Notify(nameof(CanReset));
                 break;
 
             case nameof(PerformanceViewModel.CpuCelsius):
@@ -252,10 +253,14 @@ public sealed class FanViewModel : LayerViewModel
     /// <summary>The note about the safety floors, on a custom curve that has them.</summary>
     public bool ShowsFloorHint => CurveShown && Mode == FanMode.Custom && Limits?.Floors.Count > 0;
 
-    /// <summary>Puts the custom curve back to the machine's own.</summary>
+    /// <summary>Puts the active custom profile's curve and name back to default.</summary>
     public ICommand Reset { get; }
 
-    public bool CanReset => CurveShown && !IsReadOnly && Stock is { } stock && !stock.SequenceEqual(Speeds);
+    private bool HasCustomProfileName => _performance.CustomFanProfileName(_performance.FanProfile) is not null;
+
+    public bool CanReset =>
+        CurveShown && !IsReadOnly
+        && ((Stock is { } stock && !stock.SequenceEqual(Speeds)) || HasCustomProfileName);
 
     private int IndexOf(FanMode mode)
     {
@@ -389,6 +394,7 @@ public sealed class FanViewModel : LayerViewModel
     {
         Profiles = [.. Enumerable.Range(0, SavedState.FanProfileCount).Select(_performance.FanProfileLabel)];
         Notify(nameof(Note));
+        Notify(nameof(CanReset));
     }
 
     private void BeginRename()
@@ -416,14 +422,29 @@ public sealed class FanViewModel : LayerViewModel
 
     private void BackToStock()
     {
-        if (IsReadOnly || Stock is not { } stock) return;
+        if (IsReadOnly) return;
 
-        _settle.Stop();
-        _changed = false;
+        var profile = _performance.FanProfile;
+        var stock = Stock;
+        var hasCustomName = _performance.CustomFanProfileName(profile) is not null;
+        if (stock is null && !hasCustomName) return;
+
+        var curveChanged = stock is not null && (!stock.SequenceEqual(Speeds) || _changed);
+
         IsEditing = false;
         IsRenamingProfile = false;
-        Show(stock);
-        _performance.ResetFanCurve(_performance.FanProfile, send: _performance.WantedFan == FanMode.Custom);
+
+        if (stock is not null)
+        {
+            _settle.Stop();
+            _changed = false;
+            Show(stock);
+        }
+
+        _performance.ResetFanProfile(
+            profile,
+            resetCurve: stock is not null,
+            send: curveChanged && _performance.WantedFan == FanMode.Custom);
     }
 
     /// <summary>
