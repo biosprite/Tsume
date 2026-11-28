@@ -116,6 +116,11 @@
                    Visibility="{Binding OptiPatcherShown}"
                    Command="{Binding ToggleOptiPatcher}" />
 
+    <TextBlock Style="{StaticResource Text.Caption}" FontStyle="Italic" TextWrapping="Wrap" TextTrimming="None"
+               Text="{x:Static lang:Strings.OptiPatcherNote}"
+               Visibility="{Binding OptiPatcherShown}"
+               Margin="6,6,6,0" />
+
   </StackPanel>
 
 </UserControl>

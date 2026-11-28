@@ -172,7 +172,7 @@
                        VerticalAlignment="Center" Margin="0,0,8,0" />
             <TextBlock Grid.Column="1" Style="{StaticResource Text.Caption}"
                        Foreground="{DynamicResource Text}"
-                       Text="{x:Static lang:Strings.OptiPatcherSupportedOnly}"
+                       Text="{x:Static lang:Strings.OptiPatcherNote}"
                        TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center" />
           </Grid>
         </Border>

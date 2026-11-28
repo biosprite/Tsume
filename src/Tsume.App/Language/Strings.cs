@@ -335,8 +335,8 @@ public static class Strings
     public static string SpoofNvidia => Find();
     public static string SpoofNvidiaDetail => Find();
     public static string OptiPatcher => Find();
-    public static string OptiPatcherDetailOn => Find();
-    public static string OptiPatcherDetailOff => Find();
+    public static string OptiPatcherDetail => Find();
+    public static string OptiPatcherNote => Find();
     public static string OptiPatcherLockedBuild => Find();
     public static string OptiPatcherBadge => Find();
     public static string OptiPatcherBadgeVersion(string tag) => Fill(Find(), tag);
@@ -423,7 +423,6 @@ public static class Strings
     public static string XmxNotInGame => Find();
 
     public static string OptiPatcherHeading => Find();
-    public static string OptiPatcherSupportedOnly => Find();
     public static string OptiPatcherExplained => Find();
     public static string CompatibilityHeading => Find();
     public static string OptiScalerCompatibility => Find();

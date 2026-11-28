@@ -442,8 +442,8 @@
   <data name="SpoofNvidia" xml:space="preserve"><value>Pose as an Nvidia card</value></data>
   <data name="SpoofNvidiaDetail" xml:space="preserve"><value>Lets DirectX and Vulkan games show DLSS options for OptiScaler</value></data>
   <data name="OptiPatcher" xml:space="preserve"><value>OptiPatcher</value></data>
-  <data name="OptiPatcherDetailOn" xml:space="preserve"><value>On, unlocks DLSS without GPU spoofing</value></data>
-  <data name="OptiPatcherDetailOff" xml:space="preserve"><value>Off, unlocks DLSS in supported games without GPU spoofing</value></data>
+  <data name="OptiPatcherDetail" xml:space="preserve"><value>Unlocks DLSS without GPU spoofing</value></data>
+  <data name="OptiPatcherNote" xml:space="preserve"><value>For supported games only. Check the compatibility list.</value></data>
   <data name="OptiPatcherLockedBuild" xml:space="preserve"><value>Download OptiPatcher in Download Build &amp; Addons first.</value></data>
   <data name="OptiPatcherBadge" xml:space="preserve"><value>OptiPatcher on</value></data>
   <data name="OptiPatcherBadgeVersion" xml:space="preserve">
@@ -606,7 +606,6 @@
   <data name="XmxReady" xml:space="preserve"><value>Update to add the XMX upscaler.</value></data>
   <data name="XmxNotInGame" xml:space="preserve"><value>XMX is not in this game yet. Using FSR 4 until updated.</value></data>
   <data name="OptiPatcherHeading" xml:space="preserve"><value>OPTIPATCHER</value></data>
-  <data name="OptiPatcherSupportedOnly" xml:space="preserve"><value>Supported games only. Turn on per game.</value></data>
   <data name="OptiPatcherExplained" xml:space="preserve"><value>Unlocks DLSS and DLSS-FG in supported games without GPU spoofing.</value></data>
   <data name="CompatibilityHeading" xml:space="preserve"><value>COMPATIBILITY</value></data>
   <data name="OptiScalerCompatibility" xml:space="preserve"><value>OptiScaler list</value></data>

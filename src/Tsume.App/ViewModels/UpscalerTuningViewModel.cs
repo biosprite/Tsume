@@ -363,9 +363,7 @@ public sealed class UpscalerTuningViewModel : Observable
 
     public string OptiPatcherDetail => !HasOptiPatcher
         ? Strings.OptiPatcherLockedBuild
-        : Settings.OptiPatcher
-            ? Strings.OptiPatcherDetailOn
-            : Strings.OptiPatcherDetailOff;
+        : Strings.OptiPatcherDetail;
 
     public IReadOnlyList<ProxyOption> ProxyOptions =>
         string.Equals(_lockedProxy, ProxyNames.AsiName, StringComparison.OrdinalIgnoreCase)
