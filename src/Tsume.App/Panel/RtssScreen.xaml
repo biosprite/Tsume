@@ -243,6 +243,19 @@
               <TextBlock Style="{StaticResource Text.Heading}" Text="{x:Static lang:Strings.RtssFrameCapHeading}"
                          Margin="4,22,0,10" />
 
+              <Border Style="{StaticResource Card.Info}"
+                      Background="{x:Static theme:Accent.Tint}"
+                      BorderBrush="{x:Static theme:Accent.Wash}">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Left" Style="{StaticResource Text.Icon}" FontSize="14"
+                             Foreground="{x:Static theme:Accent.Brush}" VerticalAlignment="Center" Margin="0,0,10,0"
+                             Text="{x:Static theme:Glyphs.Info}" />
+                  <TextBlock Style="{StaticResource Text.Caption}" Foreground="{DynamicResource Text}"
+                             TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center"
+                             Text="{x:Static lang:Strings.RtssOptiScalerCapHint}" />
+                </DockPanel>
+              </Border>
+
               <controls:SegmentedControl AutomationProperties.Name="{x:Static lang:Strings.RtssFrameCapHeading}"
                                          Segments="{Binding FrameCapModes}"
                                          DisabledIndices="{Binding DisabledFrameCapModes}"

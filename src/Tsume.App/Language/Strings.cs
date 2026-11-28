@@ -580,6 +580,7 @@ public static class Strings
     public static string RtssShowOwnOsdDetail => Find();
 
     public static string RtssFrameCapHeading => Find();
+    public static string RtssOptiScalerCapHint => Find();
     public static string RtssCapCustom => Find();
     public static string RtssCapSlider => Find();
     public static string RtssCapNote => Find();

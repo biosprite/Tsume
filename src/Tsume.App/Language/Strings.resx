@@ -818,6 +818,7 @@
   <data name="RtssShowOwnOsdDetail" xml:space="preserve"><value>Toggles your own RTSS overlay on or off</value></data>
 
   <data name="RtssFrameCapHeading" xml:space="preserve"><value>FRAME RATE LIMIT</value></data>
+  <data name="RtssOptiScalerCapHint" xml:space="preserve"><value>If you're using OptiScaler, use OptiScaler's frame rate limiter instead.</value></data>
   <data name="RtssCapCustom" xml:space="preserve"><value>Custom</value></data>
   <data name="RtssCapSlider" xml:space="preserve"><value>Limit</value></data>
   <data name="RtssCapNote" xml:space="preserve"><value>Sets RTSS's global frame-rate cap. Works with Tsume's overlay or your own.</value></data>
