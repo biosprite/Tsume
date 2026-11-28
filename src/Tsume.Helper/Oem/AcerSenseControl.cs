@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.ServiceProcess;
 using System.Text.Json;
+using Microsoft.Win32;
 using Tsume.Core;
 
 namespace Tsume.Helper.Oem;
@@ -34,6 +36,8 @@ internal static class AcerSenseControl
         "OpenRGB",
     ];
 
+    private static readonly TimeSpan ServiceStopTimeout = TimeSpan.FromSeconds(5);
+
     private static readonly string SavedStartTypesPath = Path.Combine(DataFolder.Path, "acer-services.json");
 
     public static void Pause()
@@ -43,11 +47,15 @@ internal static class AcerSenseControl
         var saved = LoadStartTypes();
         foreach (var service in ManagedServices)
         {
-            if (!saved.ContainsKey(service) && QueryStartType(service) is { } original)
+            var original = QueryStartType(service);
+            if (original is null) continue;   // service not installed
+
+            if (!saved.ContainsKey(service))
                 saved[service] = original;
 
-            RunTool("sc.exe", $"stop \"{service}\"");
+            // Switch to demand start first so SCM cannot auto-restart while stopping, then stop and wait.
             RunTool("sc.exe", $"config \"{service}\" start= demand");
+            StopServiceAndWait(service);
         }
         SaveStartTypes(saved);
 
@@ -95,21 +103,49 @@ internal static class AcerSenseControl
         Log.Write("PredatorSense resumed.");
     }
 
+    private static void StopServiceAndWait(string service)
+    {
+        try
+        {
+            using var controller = new ServiceController(service);
+            if (controller.Status == ServiceControllerStatus.Stopped)
+                return;
+
+            if (controller.Status != ServiceControllerStatus.StopPending)
+                controller.Stop();
+
+            controller.WaitForStatus(ServiceControllerStatus.Stopped, ServiceStopTimeout);
+        }
+        catch (System.ServiceProcess.TimeoutException)
+        {
+            Log.Write($"Timed out waiting for service {service} to stop.");
+        }
+        catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            Log.Write($"Could not stop service {service}: {error.Message}");
+        }
+    }
+
+    /// <summary>Reads the service's SCM start mode from the registry (locale-independent, no child process).</summary>
     private static string? QueryStartType(string service)
     {
-        var output = RunToolCapture("sc.exe", $"qc \"{service}\"");
-        if (string.IsNullOrEmpty(output)) return null;
-
-        foreach (var line in output.Split('\n'))
+        try
         {
-            if (!line.Contains("START_TYPE", StringComparison.OrdinalIgnoreCase)) continue;
-            if (line.Contains("DELAYED", StringComparison.OrdinalIgnoreCase)) return "delayed-auto";
-            if (line.Contains("AUTO_START", StringComparison.OrdinalIgnoreCase)) return "auto";
-            if (line.Contains("DEMAND_START", StringComparison.OrdinalIgnoreCase)) return "demand";
-            if (line.Contains("DISABLED", StringComparison.OrdinalIgnoreCase)) return "disabled";
-        }
+            using var key = Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Services\{service}");
+            if (key?.GetValue("Start") is not int start) return null;
 
-        return null;
+            return start switch
+            {
+                2 => key.GetValue("DelayedAutostart") is int delayed && delayed != 0 ? "delayed-auto" : "auto",
+                3 => "demand",
+                4 => "disabled",
+                _ => null,
+            };
+        }
+        catch (Exception error) when (error is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+        {
+            return null;
+        }
     }
 
     private static Dictionary<string, string> LoadStartTypes()
@@ -187,34 +223,5 @@ internal static class AcerSenseControl
         }
 
         if (process.ExitCode != 0) Log.Write($"{fileName} {arguments} exited with {process.ExitCode}.");
-    }
-
-    private static string? RunToolCapture(string fileName, string arguments)
-    {
-        try
-        {
-            var exe = Path.Combine(Environment.SystemDirectory, fileName);
-            using var process = Process.Start(new ProcessStartInfo(exe, arguments)
-            {
-                CreateNoWindow = true,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-            });
-            if (process is null) return null;
-
-            var output = process.StandardOutput.ReadToEnd();
-            if (!process.WaitForExit(5_000))
-            {
-                try { process.Kill(entireProcessTree: true); }
-                catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception) { }
-                return null;
-            }
-
-            return process.ExitCode == 0 ? output : null;
-        }
-        catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
-        {
-            return null;
-        }
     }
 }

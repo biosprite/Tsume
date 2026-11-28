@@ -1413,9 +1413,19 @@ public sealed class AcerHardwareTests
         await coordinator.WaitForIdleAsync();
         Assert.Equal(["power(False)", "restore(wake)"], log);
 
-        // 4. A delayed DisplayOn from the same wake (after DisplayOff before Resume, before cooldown expires) is skipped.
+        // 4. DisplayOff pauses background loops (Modern Standby); Resume wakes once, and a delayed DisplayOn
+        //    from the same wake (before cooldown expires) is skipped.
         log.Clear();
         coordinator.OnDisplayStateChanged(Tsume.Helper.PowerEventCoordinator.DisplayOff);
+        await coordinator.WaitForIdleAsync();
+        Assert.Equal(["power(True)"], log);
+
+        // A second DisplayOff or Suspend while already paused must not emit a duplicate power(True).
+        log.Clear();
+        coordinator.OnSuspend();
+        await coordinator.WaitForIdleAsync();
+        Assert.Empty(log);
+
         coordinator.OnWake("wake");
         await coordinator.WaitForIdleAsync();
         Assert.Equal(["power(False)", "restore(wake)"], log);
@@ -1425,13 +1435,18 @@ public sealed class AcerHardwareTests
         await coordinator.WaitForIdleAsync();
         Assert.Empty(log);
 
-        // 5. A genuine new Modern Standby cycle (DisplayOff -> DisplayOn) clears cooldown and runs "screen on" once.
+        // 5. A genuine new Modern Standby cycle (DisplayOff -> DisplayOn) pauses on DisplayOff, clears cooldown,
+        //    and runs "screen on" once when the display comes back on.
         coordinator.OnDisplayStateChanged(Tsume.Helper.PowerEventCoordinator.DisplayOff);
+        await coordinator.WaitForIdleAsync();
+        Assert.Equal(["power(True)"], log);
+
+        log.Clear();
         coordinator.OnDisplayStateChanged(Tsume.Helper.PowerEventCoordinator.DisplayOn);
         await coordinator.WaitForIdleAsync();
         Assert.Equal(["power(False)", "restore(screen on)"], log);
 
-        // 6. Suspend arriving during a pending wake coalesce window cancels the wake restore and ends suspended.
+        // 6. Suspend (or DisplayOff) arriving during a pending wake coalesce window cancels the wake restore and ends suspended.
         log.Clear();
         coordinator.OnWake("wake");
         coordinator.OnSuspend();

@@ -15,7 +15,7 @@
            Scope="perMachine"
            Compressed="yes">
 
-    <SummaryInformation Description="Tsume — a control panel for the MSI Claw" />
+    <SummaryInformation Description="Tsume — a control panel for handheld gaming PCs" />
 
     <!-- Shown beside Tsume in Windows' list of installed apps. -->
     <Icon Id="TsumeIcon" SourceFile="..\assets\Tsume.ico" />

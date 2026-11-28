@@ -13,9 +13,11 @@ namespace Tsume.Helper;
 ///   <item>Coalesces multi-event wake bursts (e.g. <c>ResumeAutomatic</c> + <c>ResumeSuspend</c> + <c>DisplayOn</c>)
 ///     into a single restore pass, preventing back-to-back unconditional <c>SetPerformance</c> writes on devices
 ///     with <c>ReapplyOnResume = true</c> (Predator Atlas 8).</item>
-///   <item>Ignores <c>DisplayOff</c>, <c>DisplayDimmed</c>, and initial <c>DisplayOn</c>; only real
-///     <c>Off -&gt; On</c> transitions trigger a Modern Standby wake restore, and a <c>DisplayOn</c> shortly after
-///     an already-completed <c>Resume*</c> wake (with no intervening <c>DisplayOff</c>/<c>Suspend</c>) is deduplicated.</item>
+///   <item>Pauses device background loops on both S3/S4 <c>Suspend</c> and Modern Standby <c>DisplayOff</c>
+///     (deduplicated so <c>Suspend</c> + <c>DisplayOff</c> in either order notifies once), and ignores
+///     <c>DisplayDimmed</c> and initial <c>DisplayOn</c>. Only real <c>Off -&gt; On</c> transitions trigger a
+///     Modern Standby wake restore, and a <c>DisplayOn</c> shortly after an already-completed <c>Resume*</c>
+///     wake (with no intervening <c>DisplayOff</c>/<c>Suspend</c>) is deduplicated.</item>
 ///   <item>Coalesces repeated <c>PowerStatusChange</c> broadcasts into a single serialized check.</item>
 /// </list>
 /// </remarks>
@@ -77,13 +79,7 @@ internal sealed class PowerEventCoordinator
         {
             if (_stop.IsCancellationRequested) return;
 
-            _sleepEpoch++;
-            _lastWakeRestoreTicks = 0;
-            _pendingSuspend = true;
-            _pendingRestoreOccasion = null;
-            _restoreReadyAtTicks = 0;
-            CancelDelayLocked();
-            EnsureWorkerLocked();
+            QueueSuspendLocked();
         }
     }
 
@@ -100,7 +96,8 @@ internal sealed class PowerEventCoordinator
 
     /// <summary>
     /// Feeds a <c>GUID_CONSOLE_DISPLAY_STATE</c> value (<c>0</c>=Off, <c>1</c>=On, <c>2</c>=Dimmed).
-    /// Only genuine <c>Off -&gt; On</c> transitions trigger a Modern Standby restore.
+    /// <c>DisplayOff</c> pauses device background loops during Modern Standby (where Windows does not send
+    /// <c>Suspend</c>), and only genuine <c>Off -&gt; On</c> transitions trigger a Modern Standby restore.
     /// </summary>
     public void OnDisplayStateChanged(uint displayState)
     {
@@ -111,8 +108,7 @@ internal sealed class PowerEventCoordinator
             if (displayState == DisplayOff)
             {
                 _displayWasOff = true;
-                _sleepEpoch++;
-                _lastWakeRestoreTicks = 0;
+                QueueSuspendLocked();
                 return;
             }
 
@@ -176,6 +172,24 @@ internal sealed class PowerEventCoordinator
         {
             return _workerTask ?? Task.CompletedTask;
         }
+    }
+
+    private void QueueSuspendLocked()
+    {
+        _sleepEpoch++;
+        _lastWakeRestoreTicks = 0;
+        _pendingRestoreOccasion = null;
+        _restoreReadyAtTicks = 0;
+        CancelDelayLocked();
+
+        if (_isSuspended)
+        {
+            _pendingSuspend = null;
+            return;
+        }
+
+        _pendingSuspend = true;
+        EnsureWorkerLocked();
     }
 
     private void QueueWakeLocked(string occasion)

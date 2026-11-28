@@ -87,8 +87,8 @@ public static class ControllerReport
         report.AppendLine("Writes animation 0 of the lighting block to RAM (0x21), restores it. No SyncToROM (0x22).");
         report.AppendLine();
 
-        using var controller = ClawController.Find();
-        if (controller is null) return report.AppendLine("Controller: NOT FOUND").ToString();
+        using var controller = ClawController.Find(ClawController.MsiVendorId, ClawController.MsiProductIds);
+        if (controller is null) return report.AppendLine("MSI HJC controller: NOT FOUND").ToString();
 
         const int start = ProfileMap.ActiveAnimation;
         const int length = ProfileMap.AnimationLength;

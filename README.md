@@ -23,7 +23,7 @@
 #### Performance & Power
 - Firmware performance modes (`Endurance`, `Balanced`, `Performance`, `Manual`) with customizable presets and CPU Boost toggle
 - Fan control (`Auto`, or three custom fan curves with thermal safety floors)
-- Battery charge limit (`80%`, `90%`, or `100%`), kept across sleep and restarts
+- Battery charge limit (`80%`, `90%`, or `100%`, depending on device), kept across sleep and restarts
 - Live CPU temperature, fan speed, power limits, battery level, and clock
 
 #### Gaming & Overlays
@@ -33,8 +33,8 @@
 
 #### Controls & Lighting
 - Switch the built-in controller between gamepad and cursor (mouse) mode
-- Remap `M1` and `M2` back buttons, and configure the `M` and Quick Settings buttons
-- **RGB lighting:** `Off`, `Steady`, `Breathe`, `Rainbow`, or `Spin` for the stick rings and ABXY buttons with per-stick colors, brightness, and speed
+- Remap `M1` and `M2` back buttons, and configure the OEM (`M` / Predator) and Quick Settings buttons
+- **RGB lighting:** `Off`, `Steady`, `Breathe`, `Rainbow`, or `Spin` for the stick rings and ABXY buttons or rear logo, with brightness and speed controls
 
 #### System & Personalization
 - Display brightness, refresh rate switcher, and speaker volume/mute
@@ -56,8 +56,10 @@
 | 🟠 | MSI Claw 8 AI+ | Intel Core Ultra 7 258V | MS-1T52 |
 | 🟠 | MSI Claw 7 AI+ | Intel Core Ultra 7 258V | MS-1T42 |
 | 🟠 | MSI Claw A1M | Intel Core Ultra 5 135H / Ultra 7 155H | MS-1T41 |
+| 🟠 | Acer Predator Atlas 8 | Intel Arc G3 Extreme | F900_PTG |
+| 🟠 | Acer Predator Atlas 8 | Intel Arc G3 | F900_PTG |
 
-On these, Tsume replaces MSI Center M and its Game Bar Quick Settings widget.
+On MSI Claw devices, Tsume replaces MSI Center M and its Game Bar Quick Settings widget; on the Acer Predator Atlas 8, it replaces PredatorSense and its Quick Menu widget.
 
 Tsume is built so that more devices can be added. On a machine it does not know
 yet, the panel runs but leaves the firmware alone.
@@ -72,14 +74,16 @@ yet, the panel runs but leaves the firmware alone.
 2. Open Tsume from the Start menu.
 3. Open `Settings` (gear icon) and turn on `Start with Windows`.
    - On an MSI Claw, also turn on `Pause MSI Center M` so the `M` button opens Tsume.
+   - On an Acer Predator Atlas 8, turn on `Pause PredatorSense` so the OEM button opens Tsume and Tsume owns modes and lighting.
 
 You can also open or close the panel anytime with `View + Menu` (controller) or `Win + Alt + Q` (keyboard).
 
 ### Uninstall
 
-Remove Tsume from Windows `Installed apps`. If you installed OptiScaler in any games, it will ask whether to remove it. It also restores your previous RTSS overlay settings and re-enables MSI Center M if it was paused.
+Remove Tsume from Windows `Installed apps`. If you installed OptiScaler in any games, it will ask whether to remove it. It also restores your previous RTSS overlay settings and re-enables MSI Center M or PredatorSense if paused.
 
 > If MSI Center M still doesn't run after uninstalling, open `Task Scheduler`, enable `MSI_Center_M_Server` and `MSI_Center_M_Updater` in the library, then right-click `MSI_Center_M_Server` and click `Run`.
+> On an Acer Predator Atlas 8, set `AASHHSvc`, `AcerLightingServiceHH`, and `ALSSvc` back to Automatic in `Services` and enable `PredatorHandheldLauncher` in `Task Scheduler`.
 
 </details>
 
@@ -96,7 +100,7 @@ The panel never runs as administrator. Hardware calls go through the `Tsume.Help
 On an unrecognized board, Tsume will not write anything to firmware.
 
 #### Non-destructive
-No manufacturer software is deleted. Pausing MSI Center M only disables its two scheduled tasks and stops its processes; resuming reverses both.
+No manufacturer software is deleted. Pausing MSI Center M only disables its two scheduled tasks and stops its processes; pausing PredatorSense only switches its three services to manual start, disables its launcher task, and stops its processes. Resuming (or uninstalling Tsume) reverses all of them.
 
 </details>
 
