@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using Tsume.App.Platform;
 using Tsume.App.Platform.Interop;
 using Tsume.Core.Diagnostics;
 
@@ -35,14 +36,67 @@ public sealed class AcerButtons : IDisposable
         GameBarButton,
     }
 
+    /// <summary>
+    /// Tracks press/release state for the PredatorSense key (both keyboard <c>E0 75</c> and page-<c>0x88</c> HID)
+    /// so holding the key does not auto-repeat toggle Tsume. Mirrors <c>AcerHardwareService</c>'s make/break latch.
+    /// </summary>
+    public sealed class PressTracker
+    {
+        private bool _oemKeyboardHeld;
+        private bool _oemHidHeld;
+
+        public void Reset()
+        {
+            _oemKeyboardHeld = false;
+            _oemHidHeld = false;
+        }
+
+        public ButtonKind FeedRawKeyboard(ushort makeCode, ushort flags)
+        {
+            var isExtended = (flags & RiKeyE0) != 0;
+            if (!isExtended || makeCode != PredatorKeyMakeCode)
+                return ButtonKind.None;
+
+            var isBreak = (flags & RiKeyBreak) != 0;
+            if (isBreak)
+            {
+                _oemKeyboardHeld = false;
+                return ButtonKind.None;
+            }
+
+            if (_oemKeyboardHeld) return ButtonKind.None;
+            _oemKeyboardHeld = true;
+            return ButtonKind.OemButton;
+        }
+
+        public ButtonKind FeedHidReport(ReadOnlySpan<byte> report)
+        {
+            if (IsPredatorHidRelease(report))
+            {
+                _oemHidHeld = false;
+                return ButtonKind.None;
+            }
+
+            var kind = ParseHidReport(report);
+            if (kind == ButtonKind.OemButton)
+            {
+                if (_oemHidHeld) return ButtonKind.None;
+                _oemHidHeld = true;
+            }
+
+            return kind;
+        }
+    }
+
     private static readonly TimeSpan DuplicateGuard = TimeSpan.FromMilliseconds(150);
 
     private readonly Dispatcher _dispatcher;
     private readonly Journal _journal = new("buttons");
     private readonly nint _hwndMessage = new(-3);
+    private readonly List<User32.RAWINPUTDEVICE> _registeredDevices = [];
+    private readonly PressTracker _pressTracker = new();
 
     private HwndSource? _source;
-    private bool _registered;
     private bool _suspended;
     private bool _disposed;
     private DateTime _lastOemPress;
@@ -85,16 +139,20 @@ public sealed class AcerButtons : IDisposable
     /// <summary>Parses a raw HID input report payload from usage page <c>0x88</c> or <c>0xFFF1</c>.</summary>
     public static ButtonKind ParseHidReport(ReadOnlySpan<byte> report)
     {
-        // Page 0x88 PredatorSense key report (e.g. EC report 0x04 or gamepad MI_02 report 0x37: [id, 0x81, 0xFF]).
-        if (report.Length >= 3 && report[1] == 0x81 && report[2] == 0xFF)
-            return ButtonKind.OemButton;
-
         // Page 0xFFF1 gamepad-extend report 0x9E: [0x9E, 0x00, 0x00, 0x05, ...] = Widget / Quick Menu key.
         if (report.Length >= 4 && report[0] == 0x9E && report[1] == 0x00 && report[2] == 0x00 && report[3] == 0x05)
             return ButtonKind.GameBarButton;
 
+        // Page 0x88 PredatorSense key report (e.g. EC report 0x04 or gamepad MI_02 report 0x37: [id, 0x81, 0xFF]).
+        // Ignore gamepad-extend report IDs (0x9E / 0x9A) so page 0xFFF1 traffic can never false-match.
+        if (report.Length >= 3 && report[0] is not (0x9E or 0x9A) && report[1] == 0x81 && report[2] == 0xFF)
+            return ButtonKind.OemButton;
+
         return ButtonKind.None;
     }
+
+    private static bool IsPredatorHidRelease(ReadOnlySpan<byte> report) =>
+        report.Length >= 3 && report[0] is not (0x9E or 0x9A) && report[1] == 0x00 && report[2] == 0x00;
 
     private void Start()
     {
@@ -109,13 +167,30 @@ public sealed class AcerButtons : IDisposable
 
         _source = new HwndSource(parameters);
         _source.AddHook(WndProc);
+        ButtonCaptureSession.SessionClosed += OnButtonCaptureSessionClosed;
         RegisterDevices(_source.Handle);
+    }
+
+    private void OnButtonCaptureSessionClosed()
+    {
+        if (_disposed || _suspended) return;
+
+        void Reapply()
+        {
+            if (_disposed || _suspended || _source is null) return;
+            _registeredDevices.Clear();
+            RegisterDevices(_source.Handle);
+        }
+
+        if (_dispatcher.CheckAccess()) Reapply();
+        else _dispatcher.BeginInvoke(Reapply);
     }
 
     private void StopListening()
     {
         if (_disposed || _suspended) return;
         _suspended = true;
+        _pressTracker.Reset();
         UnregisterDevices();
     }
 
@@ -123,13 +198,14 @@ public sealed class AcerButtons : IDisposable
     {
         if (_disposed) return;
         _suspended = false;
+        _pressTracker.Reset();
         if (_source is null) Start();
         else RegisterDevices(_source.Handle);
     }
 
     private void RegisterDevices(nint target)
     {
-        if (_registered || target == 0) return;
+        if (_registeredDevices.Count > 0 || target == 0) return;
 
         User32.RAWINPUTDEVICE[] devices =
         [
@@ -138,24 +214,28 @@ public sealed class AcerButtons : IDisposable
             new() { UsagePage = GamepadExtendUsagePage, Usage = GamepadExtendUsage, Flags = User32.RIDEV_INPUTSINK, Target = target },
         ];
 
-        _registered = User32.RegisterRawInputDevices(devices, (uint)devices.Length, (uint)Marshal.SizeOf<User32.RAWINPUTDEVICE>());
-        if (!_registered)
-            _journal.Write($"AcerButtons RegisterRawInputDevices failed (err={Marshal.GetLastWin32Error()})");
+        // Register one-by-one so an unsupported/unavailable usage page never blocks the others.
+        var size = (uint)Marshal.SizeOf<User32.RAWINPUTDEVICE>();
+        foreach (var dev in devices)
+        {
+            if (User32.RegisterRawInputDevices([dev], 1, size))
+                _registeredDevices.Add(dev);
+            else
+                _journal.Write($"AcerButtons RegisterRawInputDevices failed for 0x{dev.UsagePage:X4}:0x{dev.Usage:X4} (err={Marshal.GetLastWin32Error()})");
+        }
     }
 
     private void UnregisterDevices()
     {
-        if (!_registered) return;
-        _registered = false;
+        if (_registeredDevices.Count == 0) return;
 
-        User32.RAWINPUTDEVICE[] devices =
-        [
-            new() { UsagePage = KeyboardUsagePage, Usage = KeyboardUsage, Flags = User32.RIDEV_REMOVE, Target = 0 },
-            new() { UsagePage = PredatorHidUsagePage, Usage = PredatorHidUsage, Flags = User32.RIDEV_REMOVE, Target = 0 },
-            new() { UsagePage = GamepadExtendUsagePage, Usage = GamepadExtendUsage, Flags = User32.RIDEV_REMOVE, Target = 0 },
-        ];
-
-        User32.RegisterRawInputDevices(devices, (uint)devices.Length, (uint)Marshal.SizeOf<User32.RAWINPUTDEVICE>());
+        var size = (uint)Marshal.SizeOf<User32.RAWINPUTDEVICE>();
+        foreach (var dev in _registeredDevices)
+        {
+            var remove = dev with { Flags = User32.RIDEV_REMOVE, Target = 0 };
+            User32.RegisterRawInputDevices([remove], 1, size);
+        }
+        _registeredDevices.Clear();
     }
 
     private nint WndProc(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
@@ -178,7 +258,7 @@ public sealed class AcerButtons : IDisposable
         {
             var makeCode = BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(0, 2));
             var flags = BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(2, 2));
-            if (ParseRawKeyboard(makeCode, flags) == ButtonKind.OemButton)
+            if (_pressTracker.FeedRawKeyboard(makeCode, flags) == ButtonKind.OemButton)
                 RaiseOem("raw-kbd E0 75");
         }
         else if (rawType == User32.RIM_TYPEHID && payload.Length >= 8)
@@ -191,7 +271,7 @@ public sealed class AcerButtons : IDisposable
             for (var i = 0; i < count; i++)
             {
                 var report = payload.Slice(8 + i * sizeHid, sizeHid);
-                var kind = ParseHidReport(report);
+                var kind = _pressTracker.FeedHidReport(report);
                 if (kind == ButtonKind.OemButton)
                     RaiseOem($"raw-hid {Convert.ToHexString(report[..Math.Min(report.Length, 8)])}");
                 else if (kind == ButtonKind.GameBarButton)
@@ -229,6 +309,7 @@ public sealed class AcerButtons : IDisposable
 
         void Cleanup()
         {
+            ButtonCaptureSession.SessionClosed -= OnButtonCaptureSessionClosed;
             UnregisterDevices();
             if (_source is not null)
             {

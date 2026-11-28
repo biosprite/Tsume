@@ -99,7 +99,7 @@ public sealed unsafe partial class AcerEcHid : IAcerEcHid
     {
         ReadOnlySpan<byte> payload = [BatteryFnBoundary, enabled ? (byte)1 : (byte)0, upperPercent, lowerPercent];
         var reply = Exchange(CmdBatteryFunction, OpSet, payload);
-        return reply is not null && reply.Length > 6 && reply[6] == BatteryFnBoundary;
+        return reply is not null && IsValidBatteryBoundarySetReply(reply);
     }
 
     public (bool Enabled, byte Upper, byte Lower)? GetBatteryBoundary()
@@ -155,6 +155,14 @@ public sealed unsafe partial class AcerEcHid : IAcerEcHid
 
         return BinaryPrimitives.ReadUInt16LittleEndian(reply.Slice(27, 2));
     }
+
+    /// <summary>
+    /// Validates a <c>0x0B03</c> <c>OpSet</c> reply. On Atlas 8 ITE EC firmware (<c>FUN_ram_00018b02</c>), the reply
+    /// buffer is prefilled with <c>0xFF</c> and byte 6 (<c>fn</c>) is only populated on <c>OpGet</c> (<c>0x02</c>),
+    /// so <c>OpSet</c> replies carry <c>0xA0 0x00 0xE0 0x03 0x0B</c> with <c>reply[6] == 0xFF</c>.
+    /// </summary>
+    public static bool IsValidBatteryBoundarySetReply(ReadOnlySpan<byte> reply) =>
+        IsValidReply(reply, CmdBatteryFunction);
 
     public static (bool Enabled, byte Upper, byte Lower)? ParseBatteryBoundaryReply(ReadOnlySpan<byte> reply)
     {

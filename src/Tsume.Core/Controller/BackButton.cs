@@ -9,6 +9,7 @@ namespace Tsume.Core.Controller;
 public sealed record BackButtonKey(byte Code, string Name, string Category)
 {
     public const byte UnboundCode = 0xFF;
+    public const byte F22Code = 157;
 
     public static readonly BackButtonKey Unbound = new(UnboundCode, "None (Unbound)", "");
 
@@ -194,6 +195,10 @@ public sealed record BackButtonKey(byte Code, string Name, string Category)
         new(39, "Right Stick Down-Left", "Gamepad"),
         new(40, "Right Stick Down-Right", "Gamepad"),
     ]);
+
+    /// <summary>HJC key table without MSI-specific <c>F22</c> (<c>157</c>), which is absent from Acer's HJC core.</summary>
+    public static IReadOnlyList<BackButtonKey> AllWithoutF22 { get; } =
+        Array.AsReadOnly(All.Where(key => key.Code != F22Code).ToArray());
 
     private static readonly Dictionary<byte, BackButtonKey> Lookup = All.ToDictionary(key => key.Code);
 

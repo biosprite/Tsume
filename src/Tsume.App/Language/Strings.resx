@@ -259,7 +259,7 @@
   <data name="LightingMsiCenterRuns" xml:space="preserve"><value>MSI Center M is running and may undo these changes</value></data>
   <data name="LightingAcerSenseRuns" xml:space="preserve"><value>PredatorSense lighting is running and may undo these changes</value></data>
   <data name="LightingSaved" xml:space="preserve"><value>Kept on the controller when you leave this screen</value></data>
-  <data name="LightingAcerSaved" xml:space="preserve"><value>Applied directly and restored by Tsume after sleep</value></data>
+  <data name="LightingAcerSaved" xml:space="preserve"><value>Applied directly and restored by Tsume on startup and wake</value></data>
   <data name="LogoHeading" xml:space="preserve"><value>REAR LOGO</value></data>
   <data name="LogoLights" xml:space="preserve"><value>Logo light</value></data>
   <data name="LogoLightsDetail" xml:space="preserve"><value>The Predator logo on the back</value></data>
@@ -964,6 +964,9 @@
   <data name="MButtonDetailDisabled" xml:space="preserve"><value>M button is ignored by Tsume</value></data>
   <data name="MButtonMsiCenterWarning" xml:space="preserve"><value>MSI Center M is running and owns the M button. Pause it in Settings to remap</value></data>
   <data name="MButtonAcerSenseWarning" xml:space="preserve"><value>PredatorSense is running and owns the PredatorSense button. Pause it in Settings to remap</value></data>
+  <data name="PredatorButtonDetailTsume" xml:space="preserve"><value>Short-press the PredatorSense button to toggle Tsume (while PredatorSense is paused)</value></data>
+  <data name="PredatorButtonDetailCustom" xml:space="preserve"><value>Runs this action on short-press (while PredatorSense is paused)</value></data>
+  <data name="PredatorButtonDetailDisabled" xml:space="preserve"><value>PredatorSense button is ignored by Tsume</value></data>
 
   <data name="BackButtonsHeading" xml:space="preserve"><value>BACK BUTTONS</value></data>
   <data name="BackButtonUnbound" xml:space="preserve"><value>Unbound</value></data>

@@ -261,6 +261,20 @@ public sealed class AcerHardwareTests
         limReply[26] = 0x02;
         BinaryPrimitives.WriteUInt16LittleEndian(limReply.AsSpan(27, 2), 40);
         Assert.Equal((ushort)40, AcerEcHid.ParseOcProfileLimitReply(limReply, expectedType: 2));
+
+        // 0x0B03 OpSet reply from real Atlas 8 ITE EC firmware leaves reply[6] == 0xFF (only OpGet writes fn=0x03).
+        var battSetReply = new byte[65];
+        Array.Fill(battSetReply, (byte)0xFF);
+        battSetReply[0] = 0xA0;
+        battSetReply[1] = 0x00;
+        battSetReply[2] = 0xE0;
+        BinaryPrimitives.WriteUInt16LittleEndian(battSetReply.AsSpan(3, 2), AcerEcHid.CmdBatteryFunction);
+        Assert.True(AcerEcHid.IsValidBatteryBoundarySetReply(battSetReply));
+
+        var battSetRejected = (byte[])battSetReply.Clone();
+        battSetRejected[1] = 0xFF;
+        battSetRejected[2] = 0xFF;
+        Assert.False(AcerEcHid.IsValidBatteryBoundarySetReply(battSetRejected));
     }
 
     [Fact]
@@ -295,6 +309,15 @@ public sealed class AcerHardwareTests
             AcerLightingHid.DeviceIdLogo, logoCaps, LightingEffect.Steady, false, 100, 5, new Rgb(0xFF, 0xFF, 0xFF), false);
         Assert.Equal([0xA4, 0x80, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], logoOff);
 
+        // Rear Logo Spin with holdSteady=false falls back to Breathing (0x04); holdSteady=true keeps Static (0x02).
+        var logoSpinBreathe = AcerLightingHid.BuildZoneReport(
+            AcerLightingHid.DeviceIdLogo, logoCaps, LightingEffect.Spin, true, 75, 6, new Rgb(0x00, 0xAA, 0xFF), holdSteady: false);
+        Assert.Equal([0xA4, 0x80, 0x04, 0x4B, 0x03, 0x00, 0x00, 0xAA, 0xFF, 0x00, 0x00], logoSpinBreathe);
+
+        var logoSpinSteady = AcerLightingHid.BuildZoneReport(
+            AcerLightingHid.DeviceIdLogo, logoCaps, LightingEffect.Spin, true, 75, 6, new Rgb(0x00, 0xAA, 0xFF), holdSteady: true);
+        Assert.Equal([0xA4, 0x80, 0x02, 0x4B, 0x00, 0x00, 0x00, 0xAA, 0xFF, 0x00, 0x00], logoSpinSteady);
+
         // ENE 0CF2:5130 verified 0xA3 reply: [A3, 80, 01, 05, 01, 3B, 00, 00, 00]
         var (leds, caps) = AcerLightingHid.ParseDeviceInfo([0xA3, 0x80, 0x01, 0x05, 0x01, 0x3B, 0x00, 0x00, 0x00], null, 0x80);
         Assert.Equal(1, leds);
@@ -315,6 +338,72 @@ public sealed class AcerHardwareTests
         // Page 0xFFF1 report 0x9E event 5 = Widget key; events 1..4 = trigger switches (ignored)
         Assert.Equal(AcerButtons.ButtonKind.GameBarButton, AcerButtons.ParseHidReport([0x9E, 0x00, 0x00, 0x05, 0x00]));
         Assert.Equal(AcerButtons.ButtonKind.None, AcerButtons.ParseHidReport([0x9E, 0x00, 0x00, 0x01, 0x00]));
+        // Page 0xFFF1 reports (0x9E / 0x9A) must never false-match the page 0x88 [id, 0x81, 0xFF] pattern.
+        Assert.Equal(AcerButtons.ButtonKind.None, AcerButtons.ParseHidReport([0x9A, 0x81, 0xFF]));
+        Assert.Equal(AcerButtons.ButtonKind.None, AcerButtons.ParseHidReport([0x9E, 0x81, 0xFF, 0x00]));
+    }
+
+    [Fact]
+    public void AcerButtons_PressTracker_SuppressesKeyHoldAutoRepeatUntilRelease()
+    {
+        var tracker = new AcerButtons.PressTracker();
+
+        // Keyboard E0 75: initial make fires, repeated makes while held are suppressed, break re-arms.
+        Assert.Equal(AcerButtons.ButtonKind.OemButton, tracker.FeedRawKeyboard(0x0075, AcerButtons.RiKeyE0));
+        Assert.Equal(AcerButtons.ButtonKind.None, tracker.FeedRawKeyboard(0x0075, AcerButtons.RiKeyE0));
+        Assert.Equal(AcerButtons.ButtonKind.None, tracker.FeedRawKeyboard(0x0075, AcerButtons.RiKeyE0 | AcerButtons.RiKeyBreak));
+        Assert.Equal(AcerButtons.ButtonKind.OemButton, tracker.FeedRawKeyboard(0x0075, AcerButtons.RiKeyE0));
+
+        // Page 0x88 HID: repeated press reports while held are suppressed until [id, 0x00, 0x00] release.
+        Assert.Equal(AcerButtons.ButtonKind.OemButton, tracker.FeedHidReport([0x37, 0x81, 0xFF]));
+        Assert.Equal(AcerButtons.ButtonKind.None, tracker.FeedHidReport([0x37, 0x81, 0xFF]));
+        Assert.Equal(AcerButtons.ButtonKind.None, tracker.FeedHidReport([0x37, 0x00, 0x00]));
+        Assert.Equal(AcerButtons.ButtonKind.OemButton, tracker.FeedHidReport([0x37, 0x81, 0xFF]));
+    }
+
+    [Fact]
+    public void FanViewModel_Atlas8_ExposesReadOnlyCustomSegmentWhenLeftInCustomExternally()
+    {
+        Assert.Equal(
+            [FanMode.Auto, FanMode.Max],
+            Tsume.App.ViewModels.FanViewModel.LayoutModesFor(AcerBoards.Atlas8.Profile, limits: null, FanMode.Auto));
+        Assert.Equal(
+            [FanMode.Auto, FanMode.Max],
+            Tsume.App.ViewModels.FanViewModel.LayoutModesFor(AcerBoards.Atlas8.Profile, limits: null, FanMode.Max));
+        Assert.Equal(
+            [FanMode.Auto, FanMode.Max, FanMode.Custom],
+            Tsume.App.ViewModels.FanViewModel.LayoutModesFor(AcerBoards.Atlas8.Profile, limits: null, FanMode.Custom));
+    }
+
+    [Fact]
+    public void BackButtonControllers_KeysFor_ExcludesMsiOnlyF22OnAtlas8()
+    {
+        var acerKeys = BackButtonControllers.KeysFor(AcerBoards.Atlas8.Profile.Controls!.BackButtons);
+        var msiKeys = BackButtonControllers.KeysFor(MsiBoards.Claw8.Profile.Controls!.BackButtons);
+
+        Assert.DoesNotContain(acerKeys, k => k.Code == Core.Controller.BackButtonKey.F22Code);
+        Assert.Contains(acerKeys, k => k.Code == 156); // F23 is supported on Acer HJC
+        Assert.Contains(msiKeys, k => k.Code == Core.Controller.BackButtonKey.F22Code);
+    }
+
+    [Fact]
+    public void SystemButtonsViewModel_OemButtonDetail_UsesPredatorSenseWordingOnAtlas8()
+    {
+        var acerControls = AcerBoards.Atlas8.Profile.Controls!;
+        var openTsume = new Tsume.App.ViewModels.HardwareButtonOption(HardwareButtonAction.OpenTsume, "Open Tsume");
+        var screenshot = new Tsume.App.ViewModels.HardwareButtonOption(HardwareButtonAction.Screenshot, "Screenshot");
+        var disabled = new Tsume.App.ViewModels.HardwareButtonOption(HardwareButtonAction.Disabled, "Disabled");
+
+        var detailTsume = Tsume.App.ViewModels.SystemButtonsViewModel.OemButtonDetailFor(acerControls, openTsume, oemRuns: false);
+        var detailCustom = Tsume.App.ViewModels.SystemButtonsViewModel.OemButtonDetailFor(acerControls, screenshot, oemRuns: false);
+        var detailDisabled = Tsume.App.ViewModels.SystemButtonsViewModel.OemButtonDetailFor(acerControls, disabled, oemRuns: false);
+
+        Assert.Contains("PredatorSense", detailTsume);
+        Assert.DoesNotContain("MSI", detailTsume);
+        Assert.Contains("PredatorSense", detailCustom);
+        Assert.DoesNotContain("MSI", detailCustom);
+        Assert.Contains("PredatorSense", detailDisabled);
+        Assert.DoesNotContain("M button", detailDisabled);
     }
 
     [Fact]

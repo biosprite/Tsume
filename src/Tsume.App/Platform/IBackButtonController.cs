@@ -36,7 +36,9 @@ public static class BackButtonControllers
 
     public static IReadOnlyList<BackButtonKey> KeysFor(BackButtonsProfile? profile) => profile?.Protocol switch
     {
-        BackButtonsProfile.MsiHidV1 => BackButtonKey.All,
+        BackButtonsProfile.MsiHidV1 => profile.EffectiveVendorIds.Contains(ClawController.MsiVendorId)
+            ? BackButtonKey.All
+            : BackButtonKey.AllWithoutF22,
         _ => [BackButtonKey.Unbound],
     };
 }
@@ -58,7 +60,7 @@ internal sealed class MsiBackButtonController : IBackButtonController
         _controller = controller;
     }
 
-    public IReadOnlyList<BackButtonKey> SupportedKeys => BackButtonKey.All;
+    public IReadOnlyList<BackButtonKey> SupportedKeys => BackButtonControllers.KeysFor(_profile);
 
     public static BackButtonOpenResult Open(BackButtonsProfile profile)
     {

@@ -686,6 +686,9 @@ public static class Strings
     public static string MButtonDetailDisabled => Find();
     public static string MButtonMsiCenterWarning => Find();
     public static string MButtonAcerSenseWarning => Find();
+    public static string PredatorButtonDetailTsume => Find();
+    public static string PredatorButtonDetailCustom => Find();
+    public static string PredatorButtonDetailDisabled => Find();
     public static string BackButtonsHeading => Find();
     public static string BackButtonUnbound => Find();
     public static string BackButtonMacro => Find();

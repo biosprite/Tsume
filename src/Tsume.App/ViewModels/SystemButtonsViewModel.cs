@@ -173,16 +173,36 @@ public sealed class SystemButtonsViewModel : LayerViewModel, IDisposable
 
     public HardwareButtonAction OemButtonAction => SelectedOemButtonOption.Action;
 
-    public string OemButtonDetail =>
-        SelectedOemButtonOption.CustomAction is not null ? Strings.SystemButtonCustomDetail
-        : _msiCenterRuns && _controls?.EffectiveOemSoftware == OemSoftwareKind.AcerPredatorSense ? Strings.MButtonAcerSenseWarning
-        : _msiCenterRuns && _controls?.EffectiveOemSoftware == OemSoftwareKind.MsiCenter ? Strings.MButtonMsiCenterWarning
-        : OemButtonAction switch
+    public string OemButtonDetail => OemButtonDetailFor(_controls, SelectedOemButtonOption, _msiCenterRuns);
+
+    public static string OemButtonDetailFor(ControlsProfile? controls, HardwareButtonOption option, bool oemRuns)
+    {
+        if (option.CustomAction is not null) return Strings.SystemButtonCustomDetail;
+
+        var isAcer = controls?.EffectiveOemSoftware == OemSoftwareKind.AcerPredatorSense;
+        if (oemRuns)
+        {
+            if (isAcer) return Strings.MButtonAcerSenseWarning;
+            if (controls?.EffectiveOemSoftware == OemSoftwareKind.MsiCenter) return Strings.MButtonMsiCenterWarning;
+        }
+
+        if (isAcer)
+        {
+            return option.Action switch
+            {
+                HardwareButtonAction.OpenTsume => Strings.PredatorButtonDetailTsume,
+                HardwareButtonAction.Disabled  => Strings.PredatorButtonDetailDisabled,
+                _                              => Strings.PredatorButtonDetailCustom,
+            };
+        }
+
+        return option.Action switch
         {
             HardwareButtonAction.OpenTsume => Strings.MButtonDetailTsume,
             HardwareButtonAction.Disabled  => Strings.MButtonDetailDisabled,
             _                              => Strings.MButtonDetailCustom,
         };
+    }
 
     public ObservableCollection<BackButtonEditor> BackButtons { get; } = [];
 

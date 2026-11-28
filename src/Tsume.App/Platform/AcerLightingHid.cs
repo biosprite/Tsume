@@ -72,6 +72,7 @@ public sealed class AcerLightingHid : IDisposable
 
     public bool HasSticks => _endpoints.Any(e => e.Zones.Any(z => z.DeviceId == DeviceIdSticks));
     public bool HasLogo => _endpoints.Any(e => e.Zones.Any(z => IsLogoDevice(z.DeviceId)));
+    public int ZoneCount => _endpoints.Sum(e => e.Zones.Count);
 
     public static bool IsLogoDevice(byte deviceId) =>
         deviceId is DeviceIdLogo or DeviceIdCoverLogo or DeviceIdBaseLogo;
@@ -195,7 +196,7 @@ public sealed class AcerLightingHid : IDisposable
 
         var brightness = (byte)Math.Clamp(brightnessPercent, 1, 100);
         var speed = MapSpeed(tsumeSpeed);
-        var effective = holdSteady && effect is LightingEffect.Breathe or LightingEffect.Rainbow
+        var effective = holdSteady && effect is LightingEffect.Breathe or LightingEffect.Rainbow or LightingEffect.Spin
             ? LightingEffect.Steady
             : effect;
 

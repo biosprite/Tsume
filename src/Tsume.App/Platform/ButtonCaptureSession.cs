@@ -45,6 +45,9 @@ public sealed class ButtonCaptureSession : IDisposable
     private bool _disposed;
     private volatile string _activePromptId = "watch";
 
+    /// <summary>Raised when a capture session finishes disposing and releases its Raw Input registrations.</summary>
+    public static event Action? SessionClosed;
+
     public event Action<CapturedButtonEvent>? EventCaptured;
 
     public ButtonCaptureSession(
@@ -436,7 +439,8 @@ public sealed class ButtonCaptureSession : IDisposable
         var hook = Interlocked.Exchange(ref _kbdHook, 0);
         if (hook != 0) User32.UnhookWindowsHookEx(hook);
 
-        if (_registeredRawDevices.Count > 0)
+        var removedRawDevices = _registeredRawDevices.Count > 0;
+        if (removedRawDevices)
         {
             var size = (uint)Marshal.SizeOf<User32.RAWINPUTDEVICE>();
             foreach (var dev in _registeredRawDevices)
@@ -455,5 +459,8 @@ public sealed class ButtonCaptureSession : IDisposable
             watcher.Dispose();
         }
         _wmiWatchers.Clear();
+
+        if (removedRawDevices)
+            SessionClosed?.Invoke();
     }
 }

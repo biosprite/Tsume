@@ -5,6 +5,7 @@ using System.Windows.Threading;
 using Tsume.App.Language;
 using Tsume.App.Mvvm;
 using Tsume.Core.Cooling;
+using Tsume.Core.Devices;
 
 namespace Tsume.App.ViewModels;
 
@@ -50,8 +51,15 @@ public sealed class FanViewModel : LayerViewModel
         Reset = new Command(BackToStock);
         ReselectMode = new Command(() =>
         {
-            if (Mode == FanMode.Custom) Resend();
-            else if (Mode == FanMode.Max) Choose(FanMode.Auto);
+            if (Mode == FanMode.Custom)
+            {
+                if (Limits is null) Choose(FanMode.Auto);
+                else Resend();
+            }
+            else if (Mode == FanMode.Max)
+            {
+                Choose(FanMode.Auto);
+            }
         });
         ReselectProfile = new Command(Resend);
         StartRename = new Command(BeginRename);
@@ -275,14 +283,20 @@ public sealed class FanViewModel : LayerViewModel
     /// </summary>
     private bool ListsCustom => _performance.FanLimits is not null || _performance.Fan == FanMode.Custom;
 
+    public static IReadOnlyList<FanMode> LayoutModesFor(DeviceProfile device, FanCurveLimits? limits, FanMode currentFan)
+    {
+        var listsCustom = limits is not null || currentFan == FanMode.Custom;
+        FanMode[] order = limits is null && device.Offers(FanMode.Max)
+            ? [FanMode.Auto, FanMode.Max, FanMode.Custom]
+            : [FanMode.Auto, FanMode.Custom];
+
+        return [.. order.Where(mode => mode == FanMode.Custom ? listsCustom : device.Offers(mode))];
+    }
+
     private void LayOut()
     {
         var device = _performance.Device;
-        FanMode[] order = _performance.FanLimits is null && device.Offers(FanMode.Max)
-            ? [FanMode.Auto, FanMode.Max]
-            : [FanMode.Auto, FanMode.Custom];
-
-        _modes = [.. order.Where(mode => mode == FanMode.Custom ? ListsCustom : device.Offers(mode))];
+        _modes = LayoutModesFor(device, _performance.FanLimits, _performance.Fan);
         Modes = [.. _modes.Select(Label)];
 
         Notify(nameof(ShowsModes));
