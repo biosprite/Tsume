@@ -10,7 +10,8 @@ namespace Tsume.Core.Ipc;
 /// </summary>
 public sealed class HelperClient
 {
-    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan StartPanelConnectTimeout = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(4);
 
     /// <summary>
@@ -28,7 +29,8 @@ public sealed class HelperClient
             await using var pipe = new NamedPipeClientStream(
                 ".", HelperPipe.Name, PipeDirection.InOut, PipeOptions.Asynchronous);
 
-            await pipe.ConnectAsync(ConnectTimeout, cancel);
+            var connectTimeout = request is StartPanel ? StartPanelConnectTimeout : ConnectTimeout;
+            await pipe.ConnectAsync(connectTimeout, cancel);
             connected = true;
 
             var effectiveTimeout = replyTimeout ?? request switch

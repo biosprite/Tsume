@@ -20,13 +20,9 @@ public sealed class HelperService : ServiceBase
     private const int BoardAttempts = 30;
     private static readonly TimeSpan BoardPause = TimeSpan.FromSeconds(2);
 
-    private sealed class DeviceSession(IDevice device, ModeKeeper keeper, ChargeKeeper charge, FanCurveKeeper fan)
+    private sealed class DeviceSession(PowerEventCoordinator powerEvents)
     {
-        public IDevice Device { get; } = device;
-        public ModeKeeper Keeper { get; } = keeper;
-        public ChargeKeeper Charge { get; } = charge;
-        public FanCurveKeeper Fan { get; } = fan;
-        public HashSet<Task> Tasks { get; } = [];
+        public PowerEventCoordinator PowerEvents { get; } = powerEvents;
     }
 
     private readonly Lock _taskGate = new();
@@ -36,6 +32,9 @@ public sealed class HelperService : ServiceBase
     private Task? _serving;
     private DeviceSession? _deviceSession;
     private nint _screenWatch;
+    private nint _powerSettingWatch;
+    private DeviceNotifyCallbackRoutine? _displayCallback;
+    private bool _usingPowerSettingCallback;
 
     public HelperService()
     {
@@ -61,9 +60,28 @@ public sealed class HelperService : ServiceBase
         _serving = Task.Run(() => ServeAsync(stop));
 
         // Modern standby: the machine idles with the screen off and Windows sends no wake message,
-        // so the screen coming back on stands in for one.
+        // so the screen coming back on stands in for one. Prefer PowerSettingRegisterNotification with
+        // DEVICE_NOTIFY_CALLBACK so we receive the actual display state (Off/On/Dimmed) instead of
+        // ServiceBase.OnPowerEvent's ambiguous PBT_POWERSETTINGCHANGE notification.
         var screenState = ScreenState;
-        _screenWatch = RegisterPowerSettingNotification(ServiceHandle, ref screenState, ToAService);
+        _displayCallback = OnPowerSettingCallback;
+        var subscribe = new DeviceNotifySubscribeParameters
+        {
+            Callback = Marshal.GetFunctionPointerForDelegate(_displayCallback),
+            Context = 0,
+        };
+        if (PowerSettingRegisterNotification(in screenState, DeviceNotifyCallback, ref subscribe, out _powerSettingWatch) == 0
+            && _powerSettingWatch != 0)
+        {
+            _usingPowerSettingCallback = true;
+        }
+        else
+        {
+            _displayCallback = null;
+            _powerSettingWatch = 0;
+            _usingPowerSettingCallback = false;
+            _screenWatch = RegisterPowerSettingNotification(ServiceHandle, ref screenState, ToAService);
+        }
 
         // Someone may have signed in before the service was listening (a fast boot, or an update of Tsume).
         RunBackground(s => PanelStarter.StartFor(PanelStarter.ScreenSession, "start-up", s));
@@ -90,18 +108,16 @@ public sealed class HelperService : ServiceBase
     protected override void OnShutdown() => StopServing();
 
     /// <summary>
-    /// On waking from hibernation, and whenever the screen goes on or off, re-checks the firmware against
-    /// what was chosen. On wake, also makes sure the panel is still running (handles wake without sign-in). On a
-    /// board whose limits differ on battery, also on a switch between wall power and battery.
+    /// On waking from sleep/hibernation, and on genuine Off -&gt; On display wakes from Modern Standby, re-checks
+    /// the firmware against what was chosen through a serialized, coalescing <see cref="PowerEventCoordinator"/>.
+    /// On wake, also makes sure the panel is still running (handles wake without sign-in). On a board whose limits
+    /// differ on battery (or change at low battery), also acts on <see cref="PowerBroadcastStatus.PowerStatusChange"/>.
     /// </summary>
     protected override bool OnPowerEvent(PowerBroadcastStatus powerStatus)
     {
         if (powerStatus == PowerBroadcastStatus.Suspend)
         {
-            RunDeviceBackground((device, _, _, _, stop) =>
-            {
-                if (!stop.IsCancellationRequested) device.OnSystemPowerState(suspended: true);
-            });
+            WithPowerEvents(events => events.OnSuspend());
             return true;
         }
 
@@ -109,39 +125,63 @@ public sealed class HelperService : ServiceBase
             or PowerBroadcastStatus.ResumeSuspend
             or PowerBroadcastStatus.ResumeCritical;
 
-        var occasion = isWake
-            ? "wake"
-            : powerStatus == (PowerBroadcastStatus)PowerSettingChanged
-                ? "screen on or off"
-                : null;
-
-        // Answer Windows at once; the firmware is talked to on another thread.
-        if (occasion is not null)
-            RunDeviceBackground((device, keeper, charge, fan, stop) =>
-            {
-                if (stop.IsCancellationRequested) return;
-                device.OnSystemPowerState(suspended: false);
-                if (stop.IsCancellationRequested) return;
-                keeper.RestoreIfForgotten(occasion);
-                if (stop.IsCancellationRequested) return;
-                charge.RestoreIfForgotten(occasion);
-                if (stop.IsCancellationRequested) return;
-                fan.RestoreIfForgotten(occasion);
-            });
+        if (isWake)
+        {
+            WithPowerEvents(events => events.OnWake("wake"));
+            RunBackground(s => PanelStarter.EnsureRunningAfterWake(PanelStarter.ScreenSession, s));
+        }
+        else if (!_usingPowerSettingCallback && powerStatus == (PowerBroadcastStatus)PowerSettingChanged)
+        {
+            WithPowerEvents(events => events.OnLegacyScreenStateChanged());
+        }
 
         // A switch between wall power and battery (Windows sends this for battery level changes too). Boards whose
         // limits differ on battery, and devices whose firmware changes its limits at a battery level, act on it.
         if (powerStatus == PowerBroadcastStatus.PowerStatusChange)
-            RunDeviceBackground(
-                (_, keeper, _, _, stop) =>
-                {
-                    if (!stop.IsCancellationRequested) keeper.OnPowerStatusChange();
-                });
-
-        if (isWake)
-            RunBackground(s => PanelStarter.EnsureRunningAfterWake(PanelStarter.ScreenSession, s));
+            WithPowerEvents(events => events.OnPowerStatusChange());
 
         return true;
+    }
+
+    private uint OnPowerSettingCallback(nint context, uint type, nint setting)
+    {
+        try
+        {
+            if (type == PowerSettingChanged && setting != 0)
+            {
+                // POWERBROADCAST_SETTING: Guid PowerSetting (0..15), uint DataLength (16..19), byte Data[1] (20..).
+                var settingGuid = Marshal.PtrToStructure<Guid>(setting);
+                if (settingGuid == ScreenState)
+                {
+                    var dataLength = (uint)Marshal.ReadInt32(setting, 16);
+                    if (dataLength >= sizeof(uint))
+                    {
+                        var state = unchecked((uint)Marshal.ReadInt32(setting, 20));
+                        WithPowerEvents(events => events.OnDisplayStateChanged(state));
+                    }
+                }
+            }
+        }
+        catch (Exception error)
+        {
+            Log.Write($"Display power callback failed: {error.Message}");
+        }
+
+        return 0;
+    }
+
+    private void WithPowerEvents(Action<PowerEventCoordinator> action)
+    {
+        PowerEventCoordinator? coordinator;
+        lock (_taskGate)
+        {
+            if (_stop is null || _deviceSession is not { } session)
+                return;
+
+            coordinator = session.PowerEvents;
+        }
+
+        action(coordinator);
     }
 
     private void RunBackground(Action<CancellationToken> work)
@@ -149,23 +189,11 @@ public sealed class HelperService : ServiceBase
         lock (_taskGate)
         {
             if (_stop is null) return;
-            QueueBackgroundLocked(work, deviceSession: null);
+            QueueBackgroundLocked(work);
         }
     }
 
-    private void RunDeviceBackground(
-        Action<IDevice, ModeKeeper, ChargeKeeper, FanCurveKeeper, CancellationToken> work)
-    {
-        lock (_taskGate)
-        {
-            if (_stop is null || _deviceSession is not { } session)
-                return;
-
-            QueueBackgroundLocked(stop => work(session.Device, session.Keeper, session.Charge, session.Fan, stop), session);
-        }
-    }
-
-    private void QueueBackgroundLocked(Action<CancellationToken> work, DeviceSession? deviceSession)
+    private void QueueBackgroundLocked(Action<CancellationToken> work)
     {
         var stop = _stopToken;
         Task? task = null;
@@ -187,12 +215,10 @@ public sealed class HelperService : ServiceBase
                 lock (_taskGate)
                 {
                     _backgroundTasks.Remove(task!);
-                    deviceSession?.Tasks.Remove(task!);
                 }
             }
         });
         _backgroundTasks.Add(task);
-        deviceSession?.Tasks.Add(task);
     }
 
     /// <summary>Serves until stopped. A failure is logged and serving starts over, so the service is never running yet deaf.</summary>
@@ -269,10 +295,24 @@ public sealed class HelperService : ServiceBase
                 fan?.RestoreIfForgotten("start-up");   // never throws
                 if (found is not null && keeper is not null && charge is not null && fan is not null)
                 {
+                    var powerEvents = new PowerEventCoordinator(
+                        onSystemPowerState: found.OnSystemPowerState,
+                        onRestore: occasion =>
+                        {
+                            keeper.RestoreIfForgotten(occasion);
+                            if (stop.IsCancellationRequested) return;
+                            charge.RestoreIfForgotten(occasion);
+                            if (stop.IsCancellationRequested) return;
+                            fan.RestoreIfForgotten(occasion);
+                        },
+                        onPowerStatusChange: keeper.OnPowerStatusChange,
+                        stop: stop,
+                        onError: error => Log.Write($"Power event handler failed: {error}"));
+
                     lock (_taskGate)
                     {
                         if (!stop.IsCancellationRequested)
-                            _deviceSession = session = new DeviceSession(found, keeper, charge, fan);
+                            _deviceSession = session = new DeviceSession(powerEvents);
                     }
                 }
                 handler.SetHardware(machine, found, keeper, charge, fan);
@@ -306,7 +346,8 @@ public sealed class HelperService : ServiceBase
                 {
                     if (ReferenceEquals(_deviceSession, session))
                         _deviceSession = null;
-                    pendingDeviceTasks = [.. session.Tasks];
+                    var powerTask = session.PowerEvents.WaitForIdleAsync();
+                    if (!powerTask.IsCompleted) pendingDeviceTasks = [powerTask];
                 }
             }
 
@@ -358,6 +399,14 @@ public sealed class HelperService : ServiceBase
 
     private void StopServing()
     {
+        if (_powerSettingWatch != 0)
+        {
+            _ = PowerSettingUnregisterNotification(_powerSettingWatch);
+            _powerSettingWatch = 0;
+        }
+        _usingPowerSettingCallback = false;
+        _displayCallback = null;
+
         if (_screenWatch != 0) UnregisterPowerSettingNotification(_screenWatch);
         _screenWatch = 0;
 
@@ -395,7 +444,28 @@ public sealed class HelperService : ServiceBase
     private static readonly Guid ScreenState = new("6fe69556-704a-47a0-8f24-c28d936fda47");
 
     private const int ToAService = 1;                  // DEVICE_NOTIFY_SERVICE_HANDLE
+    private const uint DeviceNotifyCallback = 2;       // DEVICE_NOTIFY_CALLBACK
     private const int PowerSettingChanged = 0x8013;    // PBT_POWERSETTINGCHANGE
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    private delegate uint DeviceNotifyCallbackRoutine(nint context, uint type, nint setting);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DeviceNotifySubscribeParameters
+    {
+        public nint Callback;
+        public nint Context;
+    }
+
+    [DllImport("powrprof.dll")]
+    private static extern uint PowerSettingRegisterNotification(
+        in Guid settingGuid,
+        uint flags,
+        ref DeviceNotifySubscribeParameters recipient,
+        out nint registrationHandle);
+
+    [DllImport("powrprof.dll")]
+    private static extern uint PowerSettingUnregisterNotification(nint registrationHandle);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern nint RegisterPowerSettingNotification(nint recipient, ref Guid setting, int flags);

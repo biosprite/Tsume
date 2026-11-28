@@ -27,7 +27,8 @@ public sealed class AcerDevice(
     bool enableFanLoop = true,
     TimeSpan? fanLoopInterval = null,
     Func<bool>? isMakerToolRunning = null,
-    Func<(bool OnBattery, int? Percent)>? readPowerState = null) : IDevice
+    Func<(bool OnBattery, int? Percent)>? readPowerState = null,
+    TimeSpan? postModeFanRecheckDelay = null) : IDevice
 {
     /// <summary>PredatorSense processes that fight Tsume for modes and settings while active.</summary>
     private static readonly string[] PredatorSenseProcesses = ["Handheld.Desktop", "AcerAgentService"];
@@ -37,6 +38,12 @@ public sealed class AcerDevice(
     /// PWM by at most 5/255 (~2 %) between refreshes.
     /// </summary>
     public static readonly TimeSpan DefaultFanLoopInterval = TimeSpan.FromMilliseconds(1500);
+
+    /// <summary>
+    /// Short follow-up re-apply delay after <c>SetSystemUsageMode</c>, catching asynchronous ACPI <c>_Q30</c> /
+    /// EC command <c>0x83</c> auto-table reloads that land after the immediate PWM write.
+    /// </summary>
+    public static readonly TimeSpan PostModeFanRecheckDelay = TimeSpan.FromMilliseconds(250);
 
     /// <summary>Cooling hysteresis (°C) before stepping down the target fan speed as CPU temperature falls.</summary>
     public const int CoolingHysteresisC = 2;
@@ -75,6 +82,7 @@ public sealed class AcerDevice(
     public const int MaxPlausibleFanRpm = 15_000;
 
     private readonly TimeSpan _fanLoopInterval = fanLoopInterval ?? DefaultFanLoopInterval;
+    private readonly TimeSpan _postModeFanRecheckDelay = postModeFanRecheckDelay ?? PostModeFanRecheckDelay;
     private readonly Lock _oneIntentionAtATime = new();
     private string? _biosVersion;
     private bool _biosVersionRead;
@@ -87,6 +95,7 @@ public sealed class AcerDevice(
     private int? _lastAppliedPercent;
     private FanMode _lastFanMode = FanMode.Auto;
     private bool _standbyPaused;
+    private bool _forceNextFanTick;
     private Timer? _fanLoopTimer;
 
     // The limits last applied for the user's choice, and whether native Quiet stands in for them (low battery).
@@ -211,44 +220,54 @@ public sealed class AcerDevice(
 
     private void ApplyLimitsLocked(PowerLimits limits, bool quietFallback)
     {
-        var beforeMode = ecHid.GetSystemUsageMode();
-        var beforeProfile = ecHid.GetOcProfile(ManualOcProfile);
-        if (beforeProfile is not { Length: AcerEcHid.OcProfileFieldLength })
-            throw new FirmwareException("The EC did not answer GetOCProfile(3).");
-
-        // After an EC power loss, OC Profile 3 reads back all 0xFF; start from zeros rather than preserving 0xFFFF.
-        var nextProfile = IsAllFf(beforeProfile)
-            ? new byte[AcerEcHid.OcProfileFieldLength]
-            : beforeProfile.ToArray();
-
-        BinaryPrimitives.WriteUInt16LittleEndian(nextProfile.AsSpan(Pl1Offset, 2), (ushort)limits.Sustained);
-        BinaryPrimitives.WriteUInt16LittleEndian(nextProfile.AsSpan(Pl2Offset, 2), (ushort)limits.Boost);
-
-        // Verified Acer write order: SetOCProfile(3) first, then SetSystemUsageMode(3). The profile is written in the
-        // Quiet fallback too, so the switch back to Manual finds the user's limits already in place.
-        if (!ecHid.SetOcProfile(ManualOcProfile, nextProfile))
-            throw new FirmwareException($"The EC refused to write OC Profile 3 ({limits.Sustained}/{limits.Boost} W).");
-
-        var mode = quietFallback ? ModeQuiet : ModeManual;
-        if (!ecHid.SetSystemUsageMode(mode))
+        // Hold the cross-process EC HID mutex across the full read -> OC profile -> mode (+ rollback) transaction
+        // so Acer services or AcerReadProber never interleave between SetOcProfile(3) and SetSystemUsageMode.
+        using (ecHid.BeginTransaction())
         {
-            // Best-effort rollback of profile and mode before surfacing the failure.
-            if (!IsAllFf(beforeProfile))
-                ecHid.SetOcProfile(ManualOcProfile, beforeProfile);
-            if (beforeMode is <= AcerEcHid.MaxUsageMode)
-                ecHid.SetSystemUsageMode(beforeMode.Value);
+            var beforeMode = ecHid.GetSystemUsageMode();
+            var beforeProfile = ecHid.GetOcProfile(ManualOcProfile);
+            if (beforeProfile is not { Length: AcerEcHid.OcProfileFieldLength })
+                throw new FirmwareException("The EC did not answer GetOCProfile(3).");
 
-            throw new FirmwareException(quietFallback
-                ? "The EC refused to switch to Quiet operating mode (mode 2)."
-                : "The EC refused to switch to Manual operating mode (mode 3).");
+            // After an EC power loss, OC Profile 3 reads back all 0xFF; start from zeros rather than preserving 0xFFFF.
+            var nextProfile = IsAllFf(beforeProfile)
+                ? new byte[AcerEcHid.OcProfileFieldLength]
+                : beforeProfile.ToArray();
+
+            BinaryPrimitives.WriteUInt16LittleEndian(nextProfile.AsSpan(Pl1Offset, 2), (ushort)limits.Sustained);
+            BinaryPrimitives.WriteUInt16LittleEndian(nextProfile.AsSpan(Pl2Offset, 2), (ushort)limits.Boost);
+
+            // Verified Acer write order: SetOCProfile(3) first, then SetSystemUsageMode(3). The profile is written in the
+            // Quiet fallback too, so the switch back to Manual finds the user's limits already in place.
+            if (!ecHid.SetOcProfile(ManualOcProfile, nextProfile))
+                throw new FirmwareException($"The EC refused to write OC Profile 3 ({limits.Sustained}/{limits.Boost} W).");
+
+            var mode = quietFallback ? ModeQuiet : ModeManual;
+            if (!ecHid.SetSystemUsageMode(mode))
+            {
+                // Best-effort rollback of profile and mode before surfacing the failure.
+                if (!IsAllFf(beforeProfile))
+                    ecHid.SetOcProfile(ManualOcProfile, beforeProfile);
+                if (beforeMode is <= AcerEcHid.MaxUsageMode)
+                    ecHid.SetSystemUsageMode(beforeMode.Value);
+
+                throw new FirmwareException(quietFallback
+                    ? "The EC refused to switch to Quiet operating mode (mode 2)."
+                    : "The EC refused to switch to Manual operating mode (mode 3).");
+            }
         }
 
         _appliedLimits = limits;
         _quietFallback = quietFallback;
 
-        // EC command 0x83 (from _Q30) reloads the auto fan table and may pulse PWM; immediately re-apply our custom duty.
+        // EC command 0x83 (from async ACPI _Q30) reloads the auto fan table and may pulse PWM; re-apply our custom
+        // duty right away and schedule one short follow-up tick in case _Q30 lands after this write.
         if (_activeCurve is { } active && !_standbyPaused && !MakerToolIsRunning)
+        {
             ApplyFanCurveStepLocked(active, forceWrite: true, resetHysteresis: true);
+            _forceNextFanTick = true;
+            ArmTimerLocked(_postModeFanRecheckDelay);
+        }
     }
 
     public (PerformanceMode Mode, PowerLimits Limits) Performance()
@@ -396,6 +415,7 @@ public sealed class AcerDevice(
             {
                 StopTimerLocked();
                 _effectiveCelsius = null;
+                _forceNextFanTick = false;
                 return;
             }
 
@@ -597,20 +617,23 @@ public sealed class AcerDevice(
             if (_disposed || _standbyPaused || _activeCurve is not { } curve)
                 return;
 
+            var forceWrite = _forceNextFanTick;
+            _forceNextFanTick = false;
+
             if (!MakerToolIsRunning)
-                ApplyFanCurveStepLocked(curve, forceWrite: false, resetHysteresis: false);
+                ApplyFanCurveStepLocked(curve, forceWrite: forceWrite, resetHysteresis: false);
 
             ArmTimerLocked();
         }
     }
 
-    private void ArmTimerLocked()
+    private void ArmTimerLocked(TimeSpan? delay = null)
     {
         if (!enableFanLoop || _disposed || _standbyPaused || _activeCurve is null)
             return;
 
         _fanLoopTimer ??= new Timer(OnFanLoopTick, state: null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-        _fanLoopTimer.Change(_fanLoopInterval, Timeout.InfiniteTimeSpan);
+        _fanLoopTimer.Change(delay ?? _fanLoopInterval, Timeout.InfiniteTimeSpan);
     }
 
     private void StopTimerLocked() =>
@@ -621,6 +644,7 @@ public sealed class AcerDevice(
         _activeCurve = null;
         _effectiveCelsius = null;
         _lastAppliedPercent = null;
+        _forceNextFanTick = false;
         StopTimerLocked();
     }
 
@@ -684,6 +708,7 @@ public sealed class AcerDevice(
             if (_disposed) return;
             _disposed = true;
             _activeCurve = null;
+            _forceNextFanTick = false;
             timer = _fanLoopTimer;
             _fanLoopTimer = null;
         }

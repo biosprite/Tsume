@@ -35,8 +35,16 @@ public sealed unsafe partial class AcerEcHid : IAcerEcHid
     private readonly ushort _productId;
     private readonly ushort _usagePage;
     private readonly string _mutexName;
+    private readonly int _replyDelayMs;
+    private readonly Func<byte[], bool>? _testSetFeature;
+    private readonly Func<byte[], bool>? _testGetFeature;
+    private readonly Func<bool>? _testReopen;
     private SafeFileHandle? _handle;
+    private bool _testOpen;
     private int _reportLength;
+    private Mutex? _transactionMutex;
+    private int _transactionOwnerThreadId;
+    private int _transactionDepth;
     private bool _disposed;
 
     private AcerEcHid(SafeFileHandle handle, int reportLength, ushort vendorId, ushort productId, ushort usagePage)
@@ -47,7 +55,32 @@ public sealed unsafe partial class AcerEcHid : IAcerEcHid
         _productId = productId;
         _usagePage = usagePage;
         _mutexName = $"Global\\ECHIDFeatureVID_{vendorId:X4}&PID_{productId:X4}";
+        _replyDelayMs = ReplyDelayMs;
     }
+
+    private AcerEcHid(
+        string mutexName,
+        int replyDelayMs,
+        Func<byte[], bool> setFeature,
+        Func<byte[], bool> getFeature,
+        Func<bool>? reopen)
+    {
+        _reportLength = DefaultReportLength;
+        _mutexName = mutexName;
+        _replyDelayMs = replyDelayMs;
+        _testSetFeature = setFeature;
+        _testGetFeature = getFeature;
+        _testReopen = reopen;
+        _testOpen = true;
+    }
+
+    internal static AcerEcHid CreateForTesting(
+        Func<byte[], bool> setFeature,
+        Func<byte[], bool> getFeature,
+        Func<bool>? reopen = null,
+        string? mutexName = null,
+        int replyDelayMs = 0) =>
+        new(mutexName ?? $"Local\\TsumeAcerEcHidTest_{Guid.NewGuid():N}", replyDelayMs, setFeature, getFeature, reopen);
 
     /// <summary>Finds and opens the Acer EC HID collection matching <paramref name="vendorId"/>, <paramref name="productId"/>, and <paramref name="usagePage"/>.</summary>
     public static AcerEcHid? TryOpen(ushort vendorId = 0x1025, ushort productId = 0x174B, ushort usagePage = 0xFF05) =>
@@ -173,16 +206,120 @@ public sealed unsafe partial class AcerEcHid : IAcerEcHid
         return (enabled, reply[8], reply[9]);
     }
 
-    private byte[]? Exchange(ushort command, byte operation, ReadOnlySpan<byte> payload)
+    public IDisposable? BeginTransaction()
     {
+        var currentThread = Environment.CurrentManagedThreadId;
         lock (_handleGate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_transactionOwnerThreadId == currentThread)
+            {
+                _transactionDepth++;
+                return new TransactionScope(this, currentThread);
+            }
+        }
 
-            using var mutex = new Mutex(initiallyOwned: false, _mutexName);
-            var acquired = false;
+        // Always acquire the cross-process mutex BEFORE _handleGate so lock ordering never inverts.
+        var mutex = new Mutex(initiallyOwned: false, _mutexName);
+        var acquired = false;
+        try
+        {
             try
             {
+                acquired = mutex.WaitOne(MutexTimeoutMs);
+            }
+            catch (AbandonedMutexException)
+            {
+                acquired = true;
+            }
+
+            if (!acquired)
+            {
+                mutex.Dispose();
+                return null;
+            }
+
+            lock (_handleGate)
+            {
+                if (_disposed)
+                {
+                    try { mutex.ReleaseMutex(); }
+                    catch (ApplicationException) { }
+                    mutex.Dispose();
+                    return null;
+                }
+
+                _transactionMutex = mutex;
+                _transactionOwnerThreadId = currentThread;
+                _transactionDepth = 1;
+            }
+
+            return new TransactionScope(this, currentThread);
+        }
+        catch
+        {
+            if (acquired)
+            {
+                try { mutex.ReleaseMutex(); }
+                catch (ApplicationException) { }
+            }
+            mutex.Dispose();
+            throw;
+        }
+    }
+
+    private void EndTransaction(int ownerThreadId)
+    {
+        Mutex? toRelease = null;
+        lock (_handleGate)
+        {
+            if (_transactionOwnerThreadId != ownerThreadId || _transactionDepth <= 0)
+                return;
+
+            _transactionDepth--;
+            if (_transactionDepth == 0)
+            {
+                toRelease = _transactionMutex;
+                _transactionMutex = null;
+                _transactionOwnerThreadId = 0;
+            }
+        }
+
+        if (toRelease is not null)
+        {
+            try { toRelease.ReleaseMutex(); }
+            catch (ApplicationException) { }
+            finally { toRelease.Dispose(); }
+        }
+    }
+
+    private sealed class TransactionScope(AcerEcHid owner, int ownerThreadId) : IDisposable
+    {
+        private int _disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                owner.EndTransaction(ownerThreadId);
+        }
+    }
+
+    private byte[]? Exchange(ushort command, byte operation, ReadOnlySpan<byte> payload)
+    {
+        bool ownsTransaction;
+        lock (_handleGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            ownsTransaction = _transactionOwnerThreadId == Environment.CurrentManagedThreadId;
+        }
+
+        Mutex? mutex = null;
+        var acquired = false;
+        try
+        {
+            if (!ownsTransaction)
+            {
+                mutex = new Mutex(initiallyOwned: false, _mutexName);
                 try
                 {
                     acquired = mutex.WaitOne(MutexTimeoutMs);
@@ -193,9 +330,14 @@ public sealed unsafe partial class AcerEcHid : IAcerEcHid
                 }
 
                 if (!acquired) return null;
+            }
 
-                // Retry once with a freshly re-opened HID handle if the cached handle went stale (e.g. after sleep or I2C-HID reset),
-                // matching AcerHardwareService's close-and-reopen error recovery.
+            lock (_handleGate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+
+                // Retry once: reopen a stale HID handle on Win32 Set/Get failures (e.g. after sleep or I2C-HID reset),
+                // and pause once without dropping a healthy handle if the EC returned a busy/stale reply.
                 for (var attempt = 0; attempt < 2; attempt++)
                 {
                     if (!EnsureOpenLocked()) return null;
@@ -204,12 +346,19 @@ public sealed unsafe partial class AcerEcHid : IAcerEcHid
                     var reply = new byte[_reportLength];
                     reply[0] = ReportId;
 
-                    if (HidD_SetFeature(_handle!, request, (uint)request.Length))
+                    if (SetFeatureLocked(request))
                     {
-                        Thread.Sleep(ReplyDelayMs);
+                        if (_replyDelayMs > 0) Thread.Sleep(_replyDelayMs);
 
-                        if (HidD_GetFeature(_handle!, reply, (uint)reply.Length))
-                            return IsValidReply(reply, command) ? reply : null;
+                        if (GetFeatureLocked(reply))
+                        {
+                            if (IsValidReply(reply, command))
+                                return reply;
+
+                            if (attempt == 0 && _replyDelayMs > 0)
+                                Thread.Sleep(_replyDelayMs);
+                            continue;
+                        }
                     }
 
                     ResetHandleLocked();
@@ -217,19 +366,37 @@ public sealed unsafe partial class AcerEcHid : IAcerEcHid
 
                 return null;
             }
-            finally
+        }
+        finally
+        {
+            if (acquired && mutex is not null)
             {
-                if (acquired)
-                {
-                    try { mutex.ReleaseMutex(); }
-                    catch (ApplicationException) { }
-                }
+                try { mutex.ReleaseMutex(); }
+                catch (ApplicationException) { }
             }
+            mutex?.Dispose();
         }
     }
 
+    private bool SetFeatureLocked(byte[] request) =>
+        _testSetFeature is not null
+            ? _testSetFeature(request)
+            : HidD_SetFeature(_handle!, request, (uint)request.Length);
+
+    private bool GetFeatureLocked(byte[] reply) =>
+        _testGetFeature is not null
+            ? _testGetFeature(reply)
+            : HidD_GetFeature(_handle!, reply, (uint)reply.Length);
+
     private bool EnsureOpenLocked()
     {
+        if (_testSetFeature is not null)
+        {
+            if (_testOpen) return true;
+            _testOpen = _testReopen?.Invoke() ?? true;
+            return _testOpen;
+        }
+
         if (_handle is { IsInvalid: false, IsClosed: false }) return true;
 
         ResetHandleLocked();
@@ -243,6 +410,12 @@ public sealed unsafe partial class AcerEcHid : IAcerEcHid
 
     private void ResetHandleLocked()
     {
+        if (_testSetFeature is not null)
+        {
+            _testOpen = false;
+            return;
+        }
+
         _handle?.Dispose();
         _handle = null;
     }

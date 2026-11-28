@@ -99,7 +99,7 @@ public sealed class FanCurveKeeper
         if (Recall() is not { } chosen || !_device.Profile.Offers(FanMode.Custom) || _device.MakerToolIsRunning) return;
 
         var found = _device.Fan();
-        if (found == FanMode.Max || _device.HoldsFanCurve(chosen.Speeds)) return;
+        if (found == FanMode.Max || (found == FanMode.Custom && _device.HoldsFanCurve(chosen.Speeds))) return;
 
         IReadOnlyList<int> written;
         try

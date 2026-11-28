@@ -1205,6 +1205,251 @@ public sealed class AcerHardwareTests
         Assert.Equal(Tsume.App.Language.Strings.ControllerNotFound, vm.Status);
     }
 
+    [Fact]
+    public void AcerEcHid_Exchange_RetriesOnceOnInvalidReplyWithoutReopeningAndReopensOnIoError()
+    {
+        // Case 1: EC answers with a busy/stale reply (status != 0xE000) on attempt 0, then valid on attempt 1.
+        // Must retry without dropping the healthy handle.
+        var getCalls = 0;
+        var reopenCalls = 0;
+        using var busyHid = AcerEcHid.CreateForTesting(
+            setFeature: _ => true,
+            getFeature: reply =>
+            {
+                getCalls++;
+                reply[0] = AcerEcHid.ReportId;
+                if (getCalls == 1)
+                {
+                    reply[1] = 0xFF;
+                    reply[2] = 0xFF;   // invalid/busy status
+                    return true;
+                }
+
+                reply[1] = 0x00;
+                reply[2] = 0xE0;
+                BinaryPrimitives.WriteUInt16LittleEndian(reply.AsSpan(3, 2), AcerEcHid.CmdSystemUsageMode);
+                reply[5] = AcerDevice.ModeManual;
+                return true;
+            },
+            reopen: () => { reopenCalls++; return true; });
+
+        Assert.Equal(AcerDevice.ModeManual, busyHid.GetSystemUsageMode());
+        Assert.Equal(2, getCalls);
+        Assert.Equal(0, reopenCalls);
+
+        // Case 2: Win32 SetFeature fails on attempt 0 -> drops handle, reopens once, and succeeds on attempt 1.
+        var setCalls = 0;
+        var ioReopens = 0;
+        using var staleHid = AcerEcHid.CreateForTesting(
+            setFeature: _ => ++setCalls > 1,
+            getFeature: reply =>
+            {
+                reply[0] = AcerEcHid.ReportId;
+                reply[1] = 0x00;
+                reply[2] = 0xE0;
+                BinaryPrimitives.WriteUInt16LittleEndian(reply.AsSpan(3, 2), AcerEcHid.CmdSystemUsageMode);
+                reply[5] = AcerDevice.ModeQuiet;
+                return true;
+            },
+            reopen: () => { ioReopens++; return true; });
+
+        Assert.Equal(AcerDevice.ModeQuiet, staleHid.GetSystemUsageMode());
+        Assert.Equal(2, setCalls);
+        Assert.Equal(1, ioReopens);
+    }
+
+    [Fact]
+    public async Task AcerEcHid_BeginTransaction_BlocksCompetingInstanceAcrossMultiStepSequence()
+    {
+        var sharedMutex = $"Local\\TsumeAcerEcHidTxTest_{Guid.NewGuid():N}";
+        var events = new List<string>();
+        using var primaryStarted = new ManualResetEventSlim(false);
+        using var allowPrimaryFinish = new ManualResetEventSlim(false);
+
+        static void WriteValidReply(byte[] reply, ushort cmd, byte modeValue = AcerDevice.ModeManual)
+        {
+            reply[0] = AcerEcHid.ReportId;
+            reply[1] = 0x00;
+            reply[2] = 0xE0;
+            BinaryPrimitives.WriteUInt16LittleEndian(reply.AsSpan(3, 2), cmd);
+            reply[5] = modeValue;
+        }
+
+        using var primary = AcerEcHid.CreateForTesting(
+            setFeature: _ => true,
+            getFeature: reply => { WriteValidReply(reply, AcerEcHid.CmdSystemUsageMode, AcerDevice.ModeManual); return true; },
+            mutexName: sharedMutex);
+
+        using var prober = AcerEcHid.CreateForTesting(
+            setFeature: _ => { lock (events) events.Add("prober-exchange"); return true; },
+            getFeature: reply => { WriteValidReply(reply, AcerEcHid.CmdSystemUsageMode, AcerDevice.ModeManual); return true; },
+            mutexName: sharedMutex);
+
+        var primaryTask = Task.Run(() =>
+        {
+            using var tx = primary.BeginTransaction();
+            Assert.NotNull(tx);
+            lock (events) events.Add("tx-step-1");
+            Assert.Equal(AcerDevice.ModeManual, primary.GetSystemUsageMode());
+            primaryStarted.Set();
+            Assert.True(allowPrimaryFinish.Wait(TimeSpan.FromSeconds(5)));
+            lock (events) events.Add("tx-step-2");
+            Assert.True(primary.SetSystemUsageMode(AcerDevice.ModeManual));
+        });
+
+        Assert.True(primaryStarted.Wait(TimeSpan.FromSeconds(5)));
+
+        // Start a competing AcerEcHid instance (like AcerReadProber) while the transaction is open.
+        var proberTask = Task.Run(() => prober.GetSystemUsageMode());
+        await Task.Delay(50);
+
+        // The competing instance must NOT have interleaved between tx-step-1 and tx-step-2.
+        lock (events)
+        {
+            Assert.Equal(["tx-step-1"], events);
+        }
+
+        allowPrimaryFinish.Set();
+        await Task.WhenAll(primaryTask, proberTask);
+
+        lock (events)
+        {
+            Assert.Equal(["tx-step-1", "tx-step-2", "prober-exchange"], events);
+        }
+    }
+
+    [Fact]
+    public void AcerDevice_SetPerformance_UsesEcHidTransactionAndSchedulesPostModeFanRecheck()
+    {
+        var ec = new FakeAcerEcHid { UsageMode = AcerDevice.ModeBalanced, LogTransactions = true };
+        var wmi = new FakeAcerWmi { CpuTempC = 65, Fan1Rpm = 0, Fan2Rpm = 0 };
+        using var device = new AcerDevice(
+            ec, wmi, AcerBoards.Atlas8,
+            enableFanLoop: true,
+            fanLoopInterval: TimeSpan.FromSeconds(10),
+            postModeFanRecheckDelay: TimeSpan.FromMilliseconds(30));
+
+        // 0% at 50..60 °C, 30% at 70 °C -> at 65 °C = 15% (non-zero), and also verify forceWrite works even at 0 RPM.
+        device.SetFanCurve([0, 0, 20, 35, 50, 65]);
+        wmi.FanSpeedWrites.Clear();
+        ec.Log.Clear();
+
+        device.SetPerformance(PerformanceMode.Balanced, new PowerLimits(25, 28));
+
+        // Transaction wraps all EC HID calls and closes cleanly before WMI fan re-apply.
+        Assert.Equal(
+            ["BeginTx", "GetMode", "GetOcProfile(3)", "SetOcProfile(3)", "SetMode(3)", "EndTx"],
+            ec.Log);
+
+        // Immediate write (2 fans) plus the short follow-up tick (~30 ms) to override any late async ACPI _Q30 / 0x83.
+        Assert.Equal(2, wmi.FanSpeedWrites.Count);
+        var deadline = DateTime.UtcNow.AddSeconds(2);
+        while (DateTime.UtcNow < deadline)
+        {
+            lock (wmi.FanSpeedWrites)
+            {
+                if (wmi.FanSpeedWrites.Count >= 4) break;
+            }
+            Thread.Sleep(10);
+        }
+
+        lock (wmi.FanSpeedWrites)
+        {
+            Assert.Equal(4, wmi.FanSpeedWrites.Count);
+        }
+    }
+
+    [Fact]
+    public async Task PowerEventCoordinator_SerializesSuspendResumeCoalescesWakeBurstsAndFiltersDisplayStates()
+    {
+        var log = new List<string>();
+        var activeCallbacks = 0;
+        var maxConcurrentCallbacks = 0;
+        var errors = new List<Exception>();
+
+        void EnterCallback(string entry, int sleepMs = 0)
+        {
+            var concurrent = Interlocked.Increment(ref activeCallbacks);
+            int prev;
+            do
+            {
+                prev = maxConcurrentCallbacks;
+                if (concurrent <= prev) break;
+            } while (Interlocked.CompareExchange(ref maxConcurrentCallbacks, concurrent, prev) != prev);
+
+            if (sleepMs > 0) Thread.Sleep(sleepMs);
+            lock (log) log.Add(entry);
+            Interlocked.Decrement(ref activeCallbacks);
+        }
+
+        using var stop = new CancellationTokenSource();
+        var coordinator = new Tsume.Helper.PowerEventCoordinator(
+            onSystemPowerState: suspended => EnterCallback($"power({suspended})", sleepMs: 15),
+            onRestore: occasion => EnterCallback($"restore({occasion})", sleepMs: 15),
+            onPowerStatusChange: () => EnterCallback("power-status", sleepMs: 10),
+            stop: stop.Token,
+            onError: e => { lock (errors) errors.Add(e); },
+            restoreCoalesceDelay: TimeSpan.FromMilliseconds(40),
+            screenOnAfterWakeCooldown: TimeSpan.FromMilliseconds(500));
+
+        // 1. Initial DisplayOn and Dimmed -> On must NOT trigger any restore.
+        coordinator.OnDisplayStateChanged(Tsume.Helper.PowerEventCoordinator.DisplayOn);
+        coordinator.OnDisplayStateChanged(Tsume.Helper.PowerEventCoordinator.DisplayDimmed);
+        coordinator.OnDisplayStateChanged(Tsume.Helper.PowerEventCoordinator.DisplayOn);
+        await coordinator.WaitForIdleAsync();
+        Assert.Empty(log);
+
+        // 2. Suspend + DisplayOff in either order must only pause (no spurious wake/restore!).
+        coordinator.OnSuspend();
+        coordinator.OnDisplayStateChanged(Tsume.Helper.PowerEventCoordinator.DisplayOff);
+        await coordinator.WaitForIdleAsync();
+        Assert.Equal(["power(True)"], log);
+
+        // 3. Multi-event wake burst (ResumeAutomatic + ResumeSuspend + DisplayOn) coalesces into ONE "wake" restore.
+        log.Clear();
+        coordinator.OnWake("wake");
+        coordinator.OnWake("wake");
+        coordinator.OnDisplayStateChanged(Tsume.Helper.PowerEventCoordinator.DisplayOn);
+        await coordinator.WaitForIdleAsync();
+        Assert.Equal(["power(False)", "restore(wake)"], log);
+
+        // 4. A delayed DisplayOn from the same wake (after DisplayOff before Resume, before cooldown expires) is skipped.
+        log.Clear();
+        coordinator.OnDisplayStateChanged(Tsume.Helper.PowerEventCoordinator.DisplayOff);
+        coordinator.OnWake("wake");
+        await coordinator.WaitForIdleAsync();
+        Assert.Equal(["power(False)", "restore(wake)"], log);
+
+        log.Clear();
+        coordinator.OnDisplayStateChanged(Tsume.Helper.PowerEventCoordinator.DisplayOn);
+        await coordinator.WaitForIdleAsync();
+        Assert.Empty(log);
+
+        // 5. A genuine new Modern Standby cycle (DisplayOff -> DisplayOn) clears cooldown and runs "screen on" once.
+        coordinator.OnDisplayStateChanged(Tsume.Helper.PowerEventCoordinator.DisplayOff);
+        coordinator.OnDisplayStateChanged(Tsume.Helper.PowerEventCoordinator.DisplayOn);
+        await coordinator.WaitForIdleAsync();
+        Assert.Equal(["power(False)", "restore(screen on)"], log);
+
+        // 6. Suspend arriving during a pending wake coalesce window cancels the wake restore and ends suspended.
+        log.Clear();
+        coordinator.OnWake("wake");
+        coordinator.OnSuspend();
+        await coordinator.WaitForIdleAsync();
+        Assert.Equal(["power(True)"], log);
+
+        // 7. Rapid PowerStatusChange burst coalesces cleanly.
+        log.Clear();
+        for (var i = 0; i < 6; i++)
+            coordinator.OnPowerStatusChange();
+        await coordinator.WaitForIdleAsync();
+        Assert.Single(log);
+        Assert.Equal("power-status", log[0]);
+
+        Assert.Equal(1, maxConcurrentCallbacks);
+        Assert.Empty(errors);
+    }
+
     private sealed class FakeAcerLightingDevice(
         bool hasSticks,
         bool hasLogo,
@@ -1227,6 +1472,7 @@ public sealed class AcerHardwareTests
         public byte[] OcProfile3 { get; } = new byte[AcerEcHid.OcProfileFieldLength];
         public bool FailGetProfile { get; set; }
         public bool FailSetMode { get; set; }
+        public bool LogTransactions { get; set; }
         public List<string> Log { get; } = [];
 
         public byte? GetSystemUsageMode()
@@ -1273,6 +1519,18 @@ public sealed class AcerHardwareTests
         }
 
         public (bool Enabled, byte Upper, byte Lower)? GetBatteryBoundary() => (false, 80, 50);
+
+        public IDisposable? BeginTransaction()
+        {
+            if (!LogTransactions) return null;
+            Log.Add("BeginTx");
+            return new TxScope(Log);
+        }
+
+        private sealed class TxScope(List<string> log) : IDisposable
+        {
+            public void Dispose() => log.Add("EndTx");
+        }
 
         public void Dispose() { }
     }

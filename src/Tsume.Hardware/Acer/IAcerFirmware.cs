@@ -26,6 +26,13 @@ public interface IAcerEcHid : IDisposable
 
     /// <summary>Reads the EC HID battery charge boundary state, or null if unanswered.</summary>
     (bool Enabled, byte Upper, byte Lower)? GetBatteryBoundary();
+
+    /// <summary>
+    /// Holds the cross-process EC HID mutex across a multi-step read-modify-write sequence (such as
+    /// <c>GetOcProfile</c> -&gt; <c>SetOcProfile</c> -&gt; <c>SetSystemUsageMode</c>) so other processes or
+    /// diagnostics cannot interleave between steps.
+    /// </summary>
+    IDisposable? BeginTransaction() => null;
 }
 
 /// <summary>
