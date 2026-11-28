@@ -482,11 +482,10 @@ public sealed class UpscalingViewModel : LayerViewModel
     /// <summary>Opens a game's page.</summary>
     public void Show(ListedGame listed) => Game.Show(listed);
 
-    /// <summary>Adds a game by its program and opens its page. Subfolder binaries resolve up to the game's root folder.</summary>
+    /// <summary>Adds a game by its program and opens its page. Uses store and folder detection for its root folder and display name.</summary>
     public void AddByProgram(string program)
     {
-        var folder = GameInspector.InferRootFolder(program);
-        var game = Upscaling.Games.Game.At(folder, NameFrom(program), GameStore.Custom, program);
+        var game = GameLibrary.CustomFromProgram(program, List.Folders);
 
         if (List.Find(game.Id) is not { } listed)
         {
@@ -521,17 +520,6 @@ public sealed class UpscalingViewModel : LayerViewModel
         SaveList();
         ShowGames();
         _ = LookForGamesAsync();
-    }
-
-    /// <summary>"Witchfire-Win64-Shipping.exe" → "Witchfire"; "my_game.exe" → "my game".</summary>
-    private static string NameFrom(string program)
-    {
-        var name = System.IO.Path.GetFileNameWithoutExtension(program);
-
-        foreach (var ending in new[] { "-Win64-Shipping", "-WinGDK-Shipping", "_Win64_Shipping" })
-            name = name.Replace(ending, "", StringComparison.OrdinalIgnoreCase);
-
-        return string.Join(' ', name.Split(['_', '-'], StringSplitOptions.RemoveEmptyEntries));
     }
 
     /// <summary>

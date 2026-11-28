@@ -35,6 +35,74 @@ public static partial class GameLibrary
         return [.. games.Values.OrderBy(game => game.Name, StringComparer.CurrentCultureIgnoreCase)];
     }
 
+    /// <summary>
+    /// Builds a hand-added <see cref="Game"/> for <paramref name="program"/> using the same name and root-folder
+    /// detection as store and saved-folder scans: matching an installed store or saved-folder game first, then
+    /// using the inferred root folder's name (or its parent for a GDK <c>Content</c> folder), and falling back to
+    /// the executable's name only at a drive root.
+    /// </summary>
+    public static Game CustomFromProgram(string program, IEnumerable<string>? customFolders = null) =>
+        CustomFromProgram(program, Find(customFolders));
+
+    /// <summary>
+    /// Builds a hand-added <see cref="Game"/> for <paramref name="program"/> against an already-discovered set of
+    /// store and saved-folder games.
+    /// </summary>
+    public static Game CustomFromProgram(string program, IEnumerable<Game> knownGames)
+    {
+        var fullProgram = Path.GetFullPath(program);
+
+        var match = knownGames
+            .Where(game => IsInsideFolder(fullProgram, game.Folder))
+            .OrderByDescending(game => game.Folder.Length)
+            .FirstOrDefault();
+
+        if (match is not null)
+            return Game.At(match.Folder, match.Name, GameStore.Custom, fullProgram);
+
+        var inferredFolder = GameInspector.InferRootFolder(fullProgram);
+        var name = NameFromFolder(inferredFolder) ?? NameFromExecutable(fullProgram);
+        return Game.At(inferredFolder, name, GameStore.Custom, fullProgram);
+    }
+
+    private static bool IsInsideFolder(string fullPath, string folder)
+    {
+        var prefix = folder.EndsWith(Path.DirectorySeparatorChar) ? folder : folder + Path.DirectorySeparatorChar;
+        return fullPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? NameFromFolder(string folder)
+    {
+        var clean = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+        if (string.Equals(clean, Path.GetPathRoot(clean), StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var leaf = Path.GetFileName(clean);
+        if (leaf.Equals("Content", StringComparison.OrdinalIgnoreCase)
+            && IsGdkContentFolder(clean)
+            && Directory.GetParent(clean) is { } parent
+            && !string.Equals(parent.FullName, Path.GetPathRoot(parent.FullName), StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(parent.Name))
+        {
+            return parent.Name;
+        }
+
+        return string.IsNullOrWhiteSpace(leaf) ? null : leaf;
+    }
+
+    /// <summary>"Witchfire-Win64-Shipping.exe" → "Witchfire"; "my_game.exe" → "my game".</summary>
+    private static string NameFromExecutable(string program)
+    {
+        var raw = Path.GetFileNameWithoutExtension(program);
+        var name = raw;
+
+        foreach (var ending in new[] { "-Win64-Shipping", "-WinGDK-Shipping", "_Win64_Shipping" })
+            name = name.Replace(ending, "", StringComparison.OrdinalIgnoreCase);
+
+        var cleaned = string.Join(' ', name.Split(['_', '-'], StringSplitOptions.RemoveEmptyEntries));
+        return cleaned.Length > 0 ? cleaned : raw;
+    }
+
     /// <summary>OS folders at a drive root that never hold games directly and are expensive to walk.</summary>
     private static readonly HashSet<string> SkippedDriveRootFolders = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -107,8 +175,11 @@ public static partial class GameLibrary
         Game.At(HasGdkContent(folder) ? Path.Combine(folder, "Content") : folder, name, GameStore.Folder);
 
     private static bool HasGdkContent(string folder) =>
-        File.Exists(Path.Combine(folder, "Content", "MicrosoftGame.config"))
-        || File.Exists(Path.Combine(folder, "Content", "appxmanifest.xml"));
+        IsGdkContentFolder(Path.Combine(folder, "Content"));
+
+    private static bool IsGdkContentFolder(string folder) =>
+        File.Exists(Path.Combine(folder, "MicrosoftGame.config"))
+        || File.Exists(Path.Combine(folder, "appxmanifest.xml"));
 
     private static bool LooksLikeSingleGame(string folder)
     {

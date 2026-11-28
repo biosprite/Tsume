@@ -153,7 +153,8 @@ public static class GameInspector
             if (IsPlausibleGameRoot(twoUp)) return twoUp!;
         }
 
-        if (leaf.Equals("bin64", StringComparison.OrdinalIgnoreCase)
+        if ((leaf.Equals("bin64", StringComparison.OrdinalIgnoreCase)
+             || leaf.Equals("bin", StringComparison.OrdinalIgnoreCase))
             && parentDir?.FullName is { } oneUp
             && IsPlausibleGameRoot(oneUp))
         {
