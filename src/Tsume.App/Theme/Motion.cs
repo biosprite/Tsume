@@ -16,9 +16,6 @@ public static class Motion
     /// <summary>Arrivals: the panel sliding in.</summary>
     public static readonly Duration Arrive = TimeSpan.FromMilliseconds(420);
 
-    /// <summary>Gap between one section starting to appear and the next.</summary>
-    public static readonly TimeSpan Stagger = TimeSpan.FromMilliseconds(38);
-
     /// <summary>Fast start, long soft landing. For things arriving.</summary>
     public static readonly IEasingFunction Glide = Frozen(new QuinticEase { EasingMode = EasingMode.EaseOut });
 

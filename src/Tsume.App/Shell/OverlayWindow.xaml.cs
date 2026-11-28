@@ -26,9 +26,6 @@ public partial class OverlayWindow
     /// <summary>The window's width on a screen <see cref="DesignHeight"/> tall, Stage's margin included.</summary>
     public const double DesignWidth = 448;
 
-    /// <summary>How far each section rises as it fades in.</summary>
-    private const double SectionRise = 18;
-
     private readonly PanelViewModel _panel;
     private readonly bool _stayOpen;
     private TaskCompletionSource? _closing;
@@ -446,8 +443,6 @@ public partial class OverlayWindow
         // Start off screen and invisible. Slide is inside Fit, so it moves in design units.
         Slide.Snap(TranslateTransform.XProperty, OffscreenX);
         Stage.Snap(OpacityProperty, 0);
-        if (_panel.IsCovered) RestoreSections();
-        else SetSectionsBack();
 
         // Until the panel has settled in front, losing focus does not close it (see HoldTheFront).
         ForegroundWindow.BehindPanel = _wasInFront = ForegroundWindow.Current;
@@ -536,7 +531,6 @@ public partial class OverlayWindow
 
         Slide.Snap(TranslateTransform.XProperty, OffscreenX);
         Stage.Snap(OpacityProperty, 0);
-        SetSectionsBack();
 
         ShowActivated = false;   // whatever is in front keeps the focus
         Show();
@@ -680,7 +674,7 @@ public partial class OverlayWindow
             $"; uiaccess {(Platform.UiAccess.IsGranted ? "yes" : "no")}, band {band}, fse {(Platform.FullScreenExperience.IsActive ? "yes" : "no")}");
     }
 
-    /// <summary>The panel glides in; header, sections and footer fade up one after another.</summary>
+    /// <summary>The panel glides in.</summary>
     private void PlayIn()
     {
         if (!IsOpen) return;   // closed again before it ever appeared
@@ -690,55 +684,8 @@ public partial class OverlayWindow
         MoveIn();
     }
 
-    private void MoveIn()
-    {
+    private void MoveIn() =>
         Slide.Animate(TranslateTransform.XProperty, 0, Motion.Arrive, Motion.Glide);
-
-        if (_panel.IsCovered) return;
-
-        var delay = TimeSpan.FromMilliseconds(70);
-
-        foreach (var section in SectionsInOrder())
-        {
-            var rise = (TranslateTransform)section.RenderTransform;
-
-            rise.Animate(TranslateTransform.YProperty, 0, Motion.Arrive, Motion.Glide, delay);
-            section.Animate(OpacityProperty, 1, Motion.Smooth, Motion.Settle, delay);
-
-            delay += Motion.Stagger;
-        }
-    }
-
-    /// <summary>Puts every section where its entrance starts: a little low, and invisible.</summary>
-    private void SetSectionsBack()
-    {
-        foreach (var section in SectionsInOrder())
-        {
-            if (section.RenderTransform is not TranslateTransform rise)
-                section.RenderTransform = rise = new TranslateTransform();
-
-            rise.Snap(TranslateTransform.YProperty, SectionRise);
-            section.Snap(OpacityProperty, 0);
-        }
-    }
-
-    /// <summary>Ensures main sections sit at resting opacity and position while a remembered page is open.</summary>
-    private void RestoreSections()
-    {
-        foreach (var section in SectionsInOrder())
-        {
-            if (section.RenderTransform is TranslateTransform rise)
-                rise.Snap(TranslateTransform.YProperty, 0);
-            section.Snap(OpacityProperty, 1);
-        }
-    }
-
-    private IEnumerable<UIElement> SectionsInOrder()
-    {
-        yield return Header;
-        foreach (UIElement section in Sections.Children) yield return section;
-        yield return Footer;
-    }
 
     private void FocusFirstControl() => Sections.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
 
