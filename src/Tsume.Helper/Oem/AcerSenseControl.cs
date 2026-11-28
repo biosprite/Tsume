@@ -56,14 +56,34 @@ internal static class AcerSenseControl
         Log.Write("PredatorSense paused.");
     }
 
+    /// <remarks>
+    /// The uninstaller runs this as SYSTEM, which cannot see the user's saved start types. Without one, a service
+    /// that is not installed is skipped and one set to disabled is left alone (pausing never disables anything, so
+    /// that was the user's choice); the rest go back to auto, the start type PredatorSense's INFs install.
+    /// </remarks>
     public static void Resume()
     {
         var saved = LoadStartTypes();
+        var anyInstalled = false;
         foreach (var service in ManagedServices)
         {
-            var startType = saved.TryGetValue(service, out var original) ? original : "auto";
+            var current = QueryStartType(service);
+            if (current is null) continue;   // not installed
+            anyInstalled = true;
+
+            string startType;
+            if (saved.TryGetValue(service, out var original)) startType = original;
+            else if (current == "disabled") continue;
+            else startType = "auto";
+
             RunTool("sc.exe", $"config \"{service}\" start= {startType}");
-            RunTool("sc.exe", $"start \"{service}\"");
+            if (startType != "disabled") RunTool("sc.exe", $"start \"{service}\"");
+        }
+
+        if (!anyInstalled)
+        {
+            Log.Write("PredatorSense is not installed; nothing to resume.");
+            return;
         }
 
         RunTool("schtasks.exe", $"/Change /TN \"{LauncherTask}\" /ENABLE");

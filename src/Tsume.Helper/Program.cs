@@ -82,7 +82,7 @@ switch (args)
         return 0;
 
     default:
-        Console.Error.WriteLine("Usage: Tsume.Helper [--serve-for <seconds> | --probe <file> | --write-check <file> | --mode-check <file> | --hardware-inventory <file> | --hardware-state <file> | --msi-center pause|resume | --rtss-overlay restore]");
+        Console.Error.WriteLine("Usage: Tsume.Helper [--serve-for <seconds> | --probe <file> | --write-check <file> | --mode-check <file> | --hardware-inventory <file> | --hardware-state <file> | --msi-center pause|resume | --acer-sense pause|resume | --rtss-overlay restore]");
         return 64;
 }
 

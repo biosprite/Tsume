@@ -46,6 +46,14 @@
                   Execute="deferred" Impersonate="no" Return="ignore" />
 
     <!--
+      On a real uninstall, PredatorSense is let run again: left paused, its services stay on demand start and its logon
+      task stays disabled, so nothing would keep the mode, answer the OEM button or drive the lighting after a reboot.
+      Runs elevated, while the helper is still on disk; harmless if PredatorSense was never paused or is not installed.
+    -->
+    <CustomAction Id="ResumeAcerSense" FileRef="HelperExe" ExeCommand="--acer-sense resume"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+
+    <!--
       On a real uninstall, RTSS's OverlayEditor gets back the layout and plugin state it had before Tsume's overlay:
       left alone it would stay switched on, pointing at a layout file this uninstall deletes.
       Runs elevated, while the helper is still on disk; harmless if Tsume never changed it or RTSS is not installed.
@@ -59,6 +67,8 @@
       <Custom Action="RestoreRtssOverlay" Before="ResumeMsiCenter"
               Condition='REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE' />
       <Custom Action="ResumeMsiCenter" Before="StopServices"
+              Condition='REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE' />
+      <Custom Action="ResumeAcerSense" After="ResumeMsiCenter"
               Condition='REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE' />
     </InstallExecuteSequence>
 
